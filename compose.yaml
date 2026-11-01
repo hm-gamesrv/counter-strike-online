@@ -1,0 +1,12 @@
+services:
+  cso-server-go:
+    build: .
+    image: cso-server-go:dev
+    ports:
+      - "30002:30002/tcp"
+      - "30002:30002/udp"
+    volumes:
+      - cso-data:/data
+    restart: unless-stopped
+volumes:
+  cso-data:

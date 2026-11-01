@@ -1,159 +1,90 @@
-# Counter-Strike Online Server
+# Counter-Strike Online — Go 迁移版
 
-## 1. 简述
+这是原 C++ 主服务器的 Go 重写工程，目前实现基础服务、账号、大厅、房间、基础商店，以及客户端/专用服务器对局协议和基础结算。**尚未完成全功能重写；真实客户端已跑通登录、建房、机器人对局、正常结算和返回房间。**
 
-反恐精英 Online（官方全球版名 CSN:Z / Counter-Strike Nexon: Studio）的
-**主服务器（master server）**，负责登录、频道、房间、匹配、商店、背包、
-任务、排行榜等，用于自建私服。游戏客户端与游戏资源不包含在本项目中。
+参考仓库已克隆在 `./.ref`，提交 `947fee4966381e05a4051cce8e24f23b351f1aaa`。它是部署封装；实际服务端源码是 `JusicP/CSNZ_Server@12644f2adc0708e2d8b74f7dd6a4c3c29d3e1140`，放在 `./.upstream`。Go 程序独立编译运行，不调用 C++ 程序。客户端与游戏资源不包含在本工程中。
 
-上游：[JusicP/CSNZ_Server](https://github.com/JusicP/CSNZ_Server)，
-固定在提交 `12644f2`（2024-11-29）。该提交的
-`SUPPORTED_CLIENT_BUILD` 是 `30.11.24`，对应客户端包里的
-`30.12.24` 客户端 —— 登录时服务端会打一条版本告警，但不影响使用。
+## 运行
 
-> *Counter-Strike Online / CSN:Z 归 NEXON / Valve 所有，本项目仅用于学习。*
+需要 Go 1.24 或更新版本。
 
-**特点：**
+```powershell
+go run ./cmd/cso-server -data ./.data
+```
 
-- **源码在构建期拉取**：固定 commit + 7 个固定子模块，仓库本身不含 C/C++ 源码
-- **原生 Linux 编译**：二阶段构建，运行镜像只依赖 `libstdc++`
-- **数据目录与二进制分离**：二进制在 `/app/`，挂载 `/data` 不会盖住它
-- **首次启动自动就绪**：空数据目录会写入默认配置、全套元数据表与建库脚本
-- **GitHub Actions 自动构建**：推送镜像到 GHCR + 阿里云 ACR
+默认监听 `0.0.0.0:30002` 的 TCP 和 UDP；`-listen 127.0.0.1:30002` 可覆盖监听地址。启动时逐个补齐缺失的配置与元数据，已有文件不会覆盖。`-init` 仅初始化默认文件，`-debug` 开启调试日志。关闭时使用 Ctrl+C，服务会关闭连接并退出。
 
-### 1.1. 镜像
+构建输入目录为 `assets`、`cmd`、`internal`。参考代码、运行数据和构建产物分别使用 `.ref`、`.upstream`、`.data`、`.dist`，均已加入忽略规则。
 
-| 仓库 | tag |
-| ---- | --- |
-| `ghcr.io/hm-gamesrv/counter-strike-online` | `latest`、`yyyy-MM-dd` |
+```powershell
+go build -o ./.dist/cso-server.exe ./cmd/cso-server
+go fmt ./...
+go test ./...
+go vet ./...
+```
 
-## 2. 资源占用信息
-
-### 2.1. 端口
-
-| 端口号 | 协议 | 说明 |
-| ------ | ---- | ---- |
-| 30002  | TCP  | 游戏主连接（登录、大厅、房间列表） |
-| 30002  | UDP  | 联机通信（登录后的 UDP 打洞） |
-
-### 2.2. 持久卷
-
-| 容器路径 | 说明 |
-| -------- | ---- |
-| `/data` | 服务器工作目录：`ServerConfig.json`、`Data/` 元数据表、`UserDatabase.db3`、`Logs/` |
-
-容器以 **UID/GID 1000** 运行。宿主机目录必须对该用户可写；宿主 uid 不是 1000 时
-需要 `sudo chown 1000:1000 data`。
-
-### 2.3. 环境变量
-
-无。所有配置都在 `ServerConfig.json` 里。
-
-## 3. 数据准备
-
-**镜像开箱即用**。上游仓库 `bin/` 里的默认配置与完整元数据表都被打进镜像：
-
-- 8 个 JSON：`ServerConfig.json`、`Shop.json`、`ItemBox.json`、`ItemRewards.json`、
-  `EventQuests.json`、`RandomWeaponList.json`、`WeaponPaints.json`、`ZombieWarWeaponList.json`
-- `Data/` 下 35 个元数据文件 + `SQL/` 目录：`Item.csv`、`MapList.csv`、`ClientTable.csv`、`Metadata_*.bin` 等
-  元数据表，以及 `Data/SQL/` 建库脚本
-
-空数据目录首次启动时会自动写入。想换成客户端包里的更新版本时，把客户端
-`Server` 目录覆盖到 `data/` 即可（**数据目录优先，已有文件不会被镜像覆盖**）：
+Linux 构建：
 
 ```bash
-cp -a /path/to/CSNZ/Server/. ./data/
+CGO_ENABLED=0 go build -o ./.dist/cso-server ./cmd/cso-server
+docker compose up --build -d
 ```
 
-要点：
+Docker 使用 UID/GID 1000，Compose 默认使用命名卷。绑定宿主目录时需保证 UID 1000 可写。Docker 构建流程尚未在本环境执行验证。
 
-- `Data/` 下的 35 个元数据文件是启动**硬依赖**：代码在 `CPacketManager::Init` 里
-  无条件加载，缺任意一张就 `Failed to load metadata` 退出。
-  `ServerConfig.json` 里的 `Metadata.XXX` 开关只决定“发不发客户端”，**不代表可以删文件**。
-- `Data/SQL/`（6 个 `.sql`）只在建新库 / 升级库时执行；已有 v4 的库可以不要，
-  但**没有库又没有 SQL 就建不起来**。
-- `UserDatabase.db3` 缺失会自动新建空库（并轮转备份为 `UserDatabase_年_月_日.db3`），
-  删掉即清档；升级前请先备份它。
-- 日志写在 `data/Logs/`，每个进程一份。
+## 当前迁移范围
 
-## 4. 快速开始
+| 模块 | 实现情况 |
+| --- | --- |
+| 网络 | 原版 `~SERVERCONNECTED` 欢迎消息、`U` 数据帧、长度限制、拆包/粘包、序号循环、读写超时、有界发送队列、退出清理 |
+| 加密 | 可选原版 HWID/MD5 派生 RC4 双向流与切换时机；不支持 SSL |
+| 账号 | `/register`、`/login`、重复登录保护、注册 IP 限额、账号封禁检查、角色创建 |
+| 数据 | SQLite v4 表结构、PBKDF2 密码摘要、玩家设置、背包读取；账号/背包/封禁日期按客户端的分钟时间戳保存 |
+| 元数据 | CSV/JSON ZIP 与原始 bin、武器皮肤、随机武器、僵尸武器、ItemBox 列表；按配置开关下发 |
+| 大厅 | 单服务器/单频道、玩家进出通知、聊天与私聊、房间列表 |
+| 房间 | 创建、密码验证、人数限制、加入、退出、准备、换队、房主迁移、邀请、房主踢人、设置增量更新；按配套模式表补齐计时、击杀/回合限制，补齐机器人、购买时间等基础默认值 |
+| 对局 | 房主客户端承载、加入主机、主机背包、击杀/死亡/分数与阵营计数、存档、换图、断线主机迁移 |
+| 专用服务器 | IP 白名单注册、空闲池分配、强制/优先专服模式、玩家连接指令、断线强制结束；尚未接真实 HLDS |
+| 结算 | 按模式计算经验/积分、角色加成、经验封顶与升级、部分模式战绩更新；事务内写入去重记录，避免同一对局重复发奖 |
+| UDP | 已登录用户打洞应答与端口登记，校验来源 IP；不转发游戏流量 |
+| 商店 | 商品/推荐/热门下发、当前客户端 32 位商品编号购买、整包发放与扣款原子事务；普通武器发放即可用、计数道具堆叠、密码箱计数；完整延期与装饰自动装备仍未完成 |
+| 背包操作 | 普通武器/角色启用、同款武器选中副本切换、道具锁定/解锁、增量下发；保护默认道具，检查所属玩家和有效期 |
+| 通用发放与奖励 | 商店/礼包共用事务发放，支持来源消耗、物品/积分/经验/荣誉点、选择与随机奖励；领取凭据持久化、失败重试不重抽、领取去重；补给包、金币券和配件武器自选箱已实机验证 |
+| 活动任务事件 | 读取 EventQuests，接入登录、升级、击杀、分钟、胜利及部分主机事件；保存进度、冻结完成奖励并去重领取；当前配套表缺失奖励 1111/1112，保留完成进度等待配置补齐；任务界面和其他任务体系尚未迁移 |
+| 收藏 | 读取配装/购买菜单/书签，保存购买菜单/书签/当前配装编号、武器配装和大厅背景角色；校验物品持有、有效期、类别及当前配装 |
+| 尚未迁移 | 完整任务界面/每日/荣誉/军团任务、公会、排行、抽奖、其他道具使用/强化/装饰装备、Studio、其他活动、管理 GUI、SSL、HWID/IP 封禁及聊天屏蔽规则；地图轮换及部分特殊模式规则也未完成 |
 
-### 4.1. Docker
+以用户提供的 `30.12.24` 客户端为唯一目标，不保留旧客户端协议分支。已跑通圣诞大厦的虚拟个人决战（模式 4、地图 277）：机器人入场、击杀、死亡/复活、达到 20 次击杀后正常结束、结果窗口及返回房间。首局实际发放 230 经验和 200 积分，数据库仅有一条对应结算记录。新角色的初始 MP5 也已在真实地图中验证。其他模式、多人网络环境和真实 HLDS 仍需逐项验收。
 
-```bash
-docker build -t csnz:temp .
-docker run --rm -it \
-    -p 30002:30002/tcp \
-    -p 30002:30002/udp \
-    -v ./data:/data \
-    csnz:temp
+## 客户端基准与默认数据
+
+资源基准原为 `S:\.temp\CSNZ\CSNZ`，当前客户端目录为 `S:\.temp\CSNZ`。工程已内置其 `Server/Data` 中对应的表和二进制数据，以及配套商店、奖励、皮肤和武器列表。新运行目录直接初始化即可，无需再复制客户端目录：
+
+```powershell
+go run ./cmd/cso-server -data ./.data -init
+go run ./cmd/cso-server -data ./.data -listen 127.0.0.1:30012
 ```
 
-> 构建需要访问 GitHub（codeload.github.com）和 Debian 源。国内网络下两者都可能很慢，可以同时换源：
->
-> ```bash
-> docker build --build-arg APT_MIRROR=mirrors.aliyun.com --build-arg CODELOAD_BASE=https://gh-proxy.com/https://codeload.github.com -t csnz:temp .
-> ```
+初始化不会覆盖已有文件；已有运行目录更新资源需自行替换对应数据文件。本次联调数据在 `.dist/client-test-data`，与客户端原服数据分开。
 
-### 4.2. Docker Compose
+`Room.HostConnectingMethod` 为 `0` 时使用房主客户端，`1` 时必须有空闲专用服务器，`2` 时优先专用服务器、无可用专服时回落到房主客户端。专服连接需命中 `DedicatedServerWhitelist`。
 
-```bash
-mkdir -p data        # 必须以当前用户建好，见 2.2
-docker compose up -d
-```
+## 数据目录与存储
 
-### 4.3. 首次启动与维护
+配置采用配套 `ServerConfig.json`，支持注释；`Port` 使用字符串（例如 `"30002"`）。当前只读取已实现模块涉及的配置项，其他选项不会自动获得对应业务能力。`SSL=true` 明确拒绝启动。
 
-- 首次启动：数据目录为空 → 写入默认配置 + `Data/SQL` → 启动
-- 每次启动：检查 `/data` 可写；`Data/ClientTable.csv` 缺失时打印告警
-- 清空玩家数据：`rm -rf data/Logs data/UserDatabase*.db3` 后重启
-- 更新元数据表：用新版客户端包的 `Server/Data` 覆盖 `data/Data`
-- 日志：`data/Logs/`（每个进程一份）或 `docker logs`
+SQLite 使用 `UserDatabase.db3`、v4 表结构、事务、外键与 WAL，不支持其他数据库版本。默认目录为 `./.data`。密码只接受本项目生成的 PBKDF2 摘要；账号、道具和封禁日期直接使用 Unix 分钟，不再自动转换早期 Go 构建的秒时间戳。Go 结算审计表的 `settledAt` 字段使用秒。
 
-## 5. 客户端连接
+领取记录、活动任务进度、事件去重与待投递事件保存在 `GoRewardClaim`、`GoQuestTaskProgress`、`GoQuestEvent`、`GoQuestEventOutbox` 扩展表中。消耗来源道具与发奖同一事务；升级和正常结算产生的任务事件也与角色数值一起提交。任务完成奖励在登录、返回大厅或关闭对局结果后领取，每次恢复最多 8 项；背包不足时保留原奖励。更改任务目标需使用新的任务编号，避免重置旧任务后再次发奖。
 
-客户端启动器（`CSOLauncher.exe`，放在客户端的 `Bin` 目录）支持：
+## 验证与后续工作
 
-```bat
-CSOLauncher.exe -ip <服务器IP> -port 30002
-```
+自动测试包含协议拆包/加密/序号循环/错误帧、配置注释、注册竞争、密码摘要校验、数据库持久化、购买回滚，以及 TCP 注册→登录→角色→大厅→房间→开局→背包→结算和 UDP 打洞。对局链路包含明文、RC4、模拟专服三种场景，覆盖结算重试和客户端主机断线迁移。协议与房间解析还包含模糊测试入口。
 
-自动登录（账号密码以聊天命令 `/login` 发给服务端）：
+最近一轮完整自动链路测试和竞态检查通过，并完成当前客户端自动登录、M24 三天商品购买扣款/发放、仓库锁定/解锁、机器人对局、结果页余额和返回房间复验。界面余额与数据库一致，结算仅一条记录。启动时会检查大厅人数和主机背包能否放入单帧：当前布局人数最多 370；50 个默认物品时，持有背包上限 3226，默认配置无需改动。清理、修复和各轮验证记录见 [STATIC_REVIEW.md](STATIC_REVIEW.md)。
 
-```bat
-CSOLauncher.exe -ip <服务器IP> -port 30002 -login <账号> -password <密码> -disableauthui
-```
+剩余迁移顺序与源码映射见 [MIGRATION.md](MIGRATION.md)。
 
-- `-disableauthui` 跳过登录框；账号密码错误时也看不到提示，建议先手动登录确认
-- 注册：去掉 `-disableauthui`，在登录框里点注册；或加 `-register`
-- 密码是明文参数，且走未加密 TCP，不要复用重要密码
+## 许可证
 
-## 6. 构建补丁
-
-上游是 Windows 优先的工程（README 自称 Linux “requires tests”），源码在
-GCC 下**完全无法直接编译**。`patches/linux-build.patch` 只做可编译性修复，
-不改协议与业务逻辑：
-
-| 类别 | 内容 |
-| ---- | ---- |
-| 平台类型 / 头文件 | `SOCKET`、`WSAPOLLFD` typedef，`<unistd.h>`、`<cstring>`、`<signal.h>` 等 |
-| MSVC 扩展 | 不透明枚举前置声明补 `: int`、临时 `vector` 绑非 const 引用、range-for 变量遮蔽 |
-| Linux 崩溃 | `CCompositeLogger` 传 NULL `va_list` 给 glibc；stdin 是 EOF 时控制台线程死循环 |
-| 构建图 | 关掉 `src/test`；KeyValues 的 `-Werror`（会传染给主目标） |
-
-维护方式：上游升版本时，把 `.ref/CSNZ_Server` 换成新快照，重做补丁后
-用 `docker build` 验证。补丁必须保持 LF 行尾（见 `.gitattributes`）。
-
-## 7. 已知限制
-
-- `GetMemoryInfo` 是 Windows API，Linux 下日志固定 `0.00mb` + `not implemented`
-- 管理 GUI 关闭（CMake 写的是 `GUI/`，实际目录 `gui/`，且需要 Qt6）
-- 单元测试不编译（`src/test` 是 Windows 向的）
-- 私有构建里内嵌的活动任务数据不在公开源码中，活动回落到 `EventQuests.json`
-- SSL 路径未实测（客户端包默认 `SSL=false`）
-
-## 8. 原项目
-
-- 主服务器：[JusicP/CSNZ_Server](https://github.com/JusicP/CSNZ_Server)（GPL-3.0）
-- 专用服务器：[SmilexGamer/HLDS_CSNZ](https://github.com/SmilexGamer/HLDS_CSNZ)
-- 客户端启动器：[JusicP/Launcher_CSNZ](https://github.com/JusicP/Launcher_CSNZ)
+GPL-3.0，见 `LICENSE`。实现参考上述上游固定提交，配置和 SQL 保留上游来源；配套表及资源来自当前客户端目录，来源见 `assets/README.md`。CSO/CSNZ 名称与游戏资源归原权利人所有。
