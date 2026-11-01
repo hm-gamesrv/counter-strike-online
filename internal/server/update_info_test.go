@@ -149,3 +149,34 @@ func TestChatColorRequiresOwnedItem(t *testing.T) {
 		t.Fatalf("unowned chat color changed value to %d", color)
 	}
 }
+func TestLocationUpdatePersistsAndBroadcasts(t *testing.T) {
+	db, err := store.Open(filepath.Join(t.TempDir(), "location.db3"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if err = db.Register("locuser", "secret1", "127.0.0.1", 0); err != nil {
+		t.Fatal(err)
+	}
+	if err = db.CreateCharacter(1, "LocUser", config.DefaultUser{Level: 1}); err != nil {
+		t.Fatal(err)
+	}
+	s := &Server{Store: db, Config: config.Config{InventorySlotMax: 10}}
+	c := &client{user: store.User{ID: 1}, character: store.Character{ID: 1, Name: "LocUser"}, queue: make(chan outbound, 8)}
+	if err = s.dispatch(c, protocol.Packet{ID: 69, Data: []byte{4, 1, 0, 2, 0, 3, 0}}); err != nil {
+		t.Fatal(err)
+	}
+	if msg := <-c.queue; msg.id != 157 {
+		t.Fatalf("missing location user-info update, got %d", msg.id)
+	}
+	if c.character.Nation != 1 || c.character.City != 2 || c.character.Town != 3 {
+		t.Fatalf("cached location %d/%d/%d", c.character.Nation, c.character.City, c.character.Town)
+	}
+	var nation, city, town int
+	if err = db.DB.QueryRow("SELECT nation,city,town FROM UserCharacter WHERE userID=1").Scan(&nation, &city, &town); err != nil {
+		t.Fatal(err)
+	}
+	if nation != 1 || city != 2 || town != 3 {
+		t.Fatalf("stored location %d/%d/%d", nation, city, town)
+	}
+}

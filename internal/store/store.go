@@ -27,9 +27,24 @@ type User struct {
 	Name string
 }
 type Character struct {
-	ID                                                                                                                      int
-	Name                                                                                                                    string
-	Level, Exp, Points, Cash, Battles, Win, Kills, Deaths, PasswordBoxes, MileagePoints, HonorPoints, PrefixID, ChatColorID int
+	ID            int
+	Name          string
+	Level         int
+	Exp           int
+	Points        int
+	Cash          int
+	Battles       int
+	Win           int
+	Kills         int
+	Deaths        int
+	PasswordBoxes int
+	MileagePoints int
+	HonorPoints   int
+	PrefixID      int
+	ChatColorID   int
+	Nation        int
+	City          int
+	Town          int
 }
 type Item struct {
 	Slot, ID, Count, Status, InUse, Obtain, Expiry, Level, Exp, Value, Paint, Part1, Part2, Lock int
@@ -184,7 +199,7 @@ func (s *Store) Login(name, password, ip string, hwid []byte) (User, error) {
 }
 func (s *Store) Character(id int) (Character, error) {
 	c := Character{ID: id}
-	e := s.DB.QueryRow("SELECT gameName,level,exp,points,cash,battles,win,kills,deaths,passwordBoxes,mileagePoints,honorPoints,prefixID,chatColorID FROM UserCharacter WHERE userID=?", id).Scan(&c.Name, &c.Level, &c.Exp, &c.Points, &c.Cash, &c.Battles, &c.Win, &c.Kills, &c.Deaths, &c.PasswordBoxes, &c.MileagePoints, &c.HonorPoints, &c.PrefixID, &c.ChatColorID)
+	e := s.DB.QueryRow("SELECT gameName,level,exp,points,cash,battles,win,kills,deaths,passwordBoxes,mileagePoints,honorPoints,prefixID,chatColorID,nation,city,town FROM UserCharacter WHERE userID=?", id).Scan(&c.Name, &c.Level, &c.Exp, &c.Points, &c.Cash, &c.Battles, &c.Win, &c.Kills, &c.Deaths, &c.PasswordBoxes, &c.MileagePoints, &c.HonorPoints, &c.PrefixID, &c.ChatColorID, &c.Nation, &c.City, &c.Town)
 	return c, e
 }
 func (s *Store) CreateCharacter(id int, name string, d config.DefaultUser) error {

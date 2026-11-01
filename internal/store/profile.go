@@ -1,5 +1,17 @@
 package store
 
+import "errors"
+
+func (s *Store) SetLocation(id, nation, city, town int) error {
+	for _, value := range []int{nation, city, town} {
+		if value < 0 || value > 65535 {
+			return errors.New("location outside uint16 range")
+		}
+	}
+	_, err := s.DB.Exec("UPDATE UserCharacter SET nation=?,city=?,town=? WHERE userID=?", nation, city, town, id)
+	return err
+}
+
 func (s *Store) SetChatColor(id, color int) error {
 	if color != 0 {
 		var owned int

@@ -13,7 +13,7 @@ import (
 func userInfo(w *protocol.Writer, c store.Character) {
 	// Only advertise fields actually serialized below; absent flags preserve
 	// client defaults and avoid fabricating clan, ranking or achievement state.
-	w.U32(1<<1 | 1<<3 | 1<<5 | 1<<6 | 1<<7 | 1<<8 | 1<<16 | 1<<18 | 1<<26 | 1<<27)
+	w.U32(1<<1 | 1<<3 | 1<<5 | 1<<6 | 1<<7 | 1<<8 | 1<<9 | 1<<16 | 1<<18 | 1<<26 | 1<<27)
 	w.U32(1)
 	w.String(c.Name)
 	w.U32(c.Level)
@@ -27,6 +27,11 @@ func userInfo(w *protocol.Writer, c store.Character) {
 	for i := 0; i < 16; i++ {
 		w.U32(0)
 	}
+	w.String("")
+	w.U16(c.Nation)
+	w.U16(c.City)
+	w.U16(c.Town)
+	w.String("")
 	w.U16(c.PasswordBoxes)
 	w.U16(c.PrefixID)
 	w.U8(0)

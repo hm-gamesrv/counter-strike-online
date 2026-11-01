@@ -91,12 +91,19 @@ func (s *Server) updateInfoRequest(c *client, r *protocol.Reader) error {
 	case 2:
 		return s.renameRequest(c, r)
 	case 4:
-		// Location is not serialized in the current user-info flags yet; consume
-		// the request so the client can continue sending other profile updates.
-		r.U16()
-		r.U16()
-		r.U16()
-		return r.Err
+		nation, city, town := r.U16(), r.U16(), r.U16()
+		if r.Err != nil {
+			return r.Err
+		}
+		if r.Pos != len(r.Data) {
+			return errors.New("unexpected location request tail")
+		}
+		if err := s.Store.SetLocation(c.user.ID, nation, city, town); err != nil {
+			return err
+		}
+		c.character.Nation, c.character.City, c.character.Town = nation, city, town
+		s.broadcastUserInfo(c)
+		return nil
 	case 7:
 		r.U8()
 		return r.Err
