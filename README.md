@@ -6,7 +6,7 @@
 
 ## 运行
 
-需要 Go 1.24 或更新版本。
+需要 Go 1.27 或更新版本。
 
 ```powershell
 go run ./cmd/cso-server -data ./.data

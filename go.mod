@@ -1,6 +1,6 @@
 module github.com/hm-gamesrv/cso-server-go
 
-go 1.24.0
+go 1.27.0
 
 require modernc.org/sqlite v1.34.5
 
