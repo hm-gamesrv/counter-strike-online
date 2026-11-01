@@ -23,6 +23,7 @@ type itemDefinition struct {
 	Level     int
 	InGame    bool
 	ClassName string
+	Resource  string
 }
 
 // itemBoxAward is one rolled decoder prize. Duration follows the client
@@ -157,7 +158,7 @@ func loadItems(dir string) (map[int]itemDefinition, error) {
 			for i, name := range row {
 				header[strings.TrimPrefix(name, ";")] = i
 			}
-			for _, name := range []string{"ID", "Category", "UseType", "InGameItem", "ClassName", "rewardID", "Level"} {
+			for _, name := range []string{"ID", "Category", "UseType", "InGameItem", "ClassName", "rewardID", "Level", "recourcename"} {
 				if _, ok := header[name]; !ok {
 					return nil, fmt.Errorf("Item.csv missing column %s", name)
 				}
@@ -176,11 +177,14 @@ func loadItems(dir string) (map[int]itemDefinition, error) {
 		if id <= 0 {
 			continue
 		}
-		class := ""
+		class, resource := "", ""
 		if index := header["ClassName"]; index < len(row) {
 			class = row[index]
 		}
-		result[id] = itemDefinition{Category: value("Category"), UseType: value("UseType"), RewardID: value("rewardID"), Level: value("Level"), InGame: value("InGameItem") != 0, ClassName: class}
+		if index := header["recourcename"]; index < len(row) {
+			resource = row[index]
+		}
+		result[id] = itemDefinition{Category: value("Category"), UseType: value("UseType"), RewardID: value("rewardID"), Level: value("Level"), InGame: value("InGameItem") != 0, ClassName: class, Resource: resource}
 	}
 	if len(result) == 0 {
 		return nil, fmt.Errorf("Item.csv has no items")

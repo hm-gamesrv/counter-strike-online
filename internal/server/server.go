@@ -367,6 +367,8 @@ func (s *Server) dispatch(c *client, p protocol.Packet) error {
 			return s.roomRequest(c, r)
 		case 68:
 			return s.hostRequest(c, r)
+		case 69:
+			return s.updateInfoRequest(c, r)
 		case 76:
 			if r.U8() == 0 {
 				b := append([]byte{}, r.Bytes(r.U16())...)
