@@ -7,7 +7,7 @@
 | `net/{extendedsocket,sendpacket,receivepacket}.cpp` | `internal/protocol` | SSL、实客户端抓包验证 |
 | `serverconfig.cpp` | `internal/config` | 随业务迁移补齐配置项 |
 | `manager/userdatabase_sqlite.cpp` | `internal/store` | 其余角色字段、会话历史、封禁规则、迁移工具 |
-| `manager/usermanager.cpp` | `internal/server/{server,lobby,ban,update_info,messenger,addon}.go` | 完整 UserInfo、装备、调查；改名/位置/聊天色、Messenger、快捷购买与 Addon 已实现，屏蔽名单已实现列表/设置/登录下发及聊天、私聊、房间加入过滤 |
+| `manager/usermanager.cpp` | `internal/server/{server,lobby,ban,update_info,messenger,addon,kick}.go` | 完整 UserInfo、装备、调查；改名/位置/聊天色、Messenger、快捷购买与 Addon、superRoom 踢人已实现，屏蔽名单已实现列表/设置/登录下发及聊天、私聊、房间加入过滤 |
 | `manager/channelmanager.cpp`、`room/roomsettings.cpp` | `internal/server/{rooms,room_defaults,room_social,host}.go` | 已实现邀请、房主踢人及踢出名单；仍缺完整设置校验、投票踢人、特殊模式限制与地图轮换 |
 | `manager/packetmanager.cpp` | `internal/server/{metadata,lobby,rooms,shop}.go` | 随各业务逐项实现出站结构 |
 | `manager/shopmanager.cpp` | `internal/server/shop.go`、`internal/store/purchase.go` | 当前客户端购买、计数堆叠和密码箱计数已实现；完整延期规则、礼包校验仍缺 |
@@ -168,6 +168,13 @@
 - 部件装配消耗部件道具并更新 `partSlot1/partSlot2`；装配和扣减在同一事务内完成。
 - 装配成功后返回背包增量，并按上游发送 `21` 部件检查包。
 - 新增测试覆盖装配、部件消耗和卸下。`go test ./...`、`go vet ./...` 通过；未做实机界面验收。
+
+## 2026-11-02 superRoom 踢人
+
+- 接入 `112` 类型 1：仅允许 superRoom 房主踢同房间成员，校验目标存在、非房主本人。
+- 踢人前向房间广播 `[3, userID, 1]`，随后移除成员、记录禁止重入并送回大厅。
+- 新增测试覆盖房主踢人、广播包、踢出记录和房间成员清理。`go test ./...`、`go vet ./...` 通过；未做实机界面验收。
+
 
 
 

@@ -398,6 +398,8 @@ func (s *Server) dispatch(c *client, p protocol.Packet) error {
 			return s.messengerRequest(c, r)
 		case 115:
 			return s.addonRequest(c)
+		case 112:
+			return s.kickRequest(c, r)
 		case 16:
 			c.send(16, &protocol.Writer{Data: []byte{0, 1}})
 		default:
