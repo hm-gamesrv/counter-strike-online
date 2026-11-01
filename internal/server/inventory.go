@@ -369,6 +369,38 @@ func (s *Server) partRequest(c *client, p *protocol.Reader) error {
 	}
 }
 
+func (s *Server) toggleCostume(c *client, gameSlot int) error {
+	slot := gameSlot - len(s.Config.DefaultUser.DefaultItems)
+	if slot <= 0 {
+		c.notice("Item unavailable.")
+		return nil
+	}
+	items, err := s.Store.Inventory(c.user.ID)
+	if err != nil {
+		return err
+	}
+	var target store.Item
+	for _, item := range items {
+		if item.Slot == slot {
+			target = item
+			break
+		}
+	}
+	if target.ID == 0 {
+		c.notice("Item unavailable.")
+		return nil
+	}
+	changed, err := s.Store.ToggleCostume(c.user.ID, slot, s.items[target.ID].ClassName)
+	if errors.Is(err, store.ErrItemUnavailable) {
+		c.notice("Item unavailable.")
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	return s.sendInventoryItems(c, changed)
+}
+
 func (s *Server) itemRequest(c *client, p *protocol.Reader) error {
 	kind := p.U8()
 	var slot, inventoryType, count int
@@ -437,6 +469,15 @@ func (s *Server) itemRequest(c *client, p *protocol.Reader) error {
 		return s.switchWeaponPaint(c, weapon, paint)
 	case 21:
 		return s.partRequest(c, p)
+	case 9, 15:
+		slot := p.U16()
+		if p.Err != nil {
+			return p.Err
+		}
+		if p.Pos != len(p.Data) {
+			return errors.New("unexpected costume request tail")
+		}
+		return s.toggleCostume(c, slot)
 	case 10, 11, 12: // Background decoder/gift notifications do not open dialogs.
 		return p.Err
 	default:

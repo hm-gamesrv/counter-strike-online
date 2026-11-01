@@ -11,7 +11,7 @@
 | `manager/channelmanager.cpp`、`room/roomsettings.cpp` | `internal/server/{rooms,room_defaults,room_social,host}.go` | 已实现邀请、房主踢人及踢出名单；仍缺完整设置校验、投票踢人、特殊模式限制与地图轮换 |
 | `manager/packetmanager.cpp` | `internal/server/{metadata,lobby,rooms,shop}.go` | 随各业务逐项实现出站结构 |
 | `manager/shopmanager.cpp` | `internal/server/shop.go`、`internal/store/purchase.go` | 当前客户端购买、计数堆叠和密码箱计数已实现；完整延期规则、礼包校验仍缺 |
-| `manager/itemmanager.cpp` | `internal/server/{inventory,rewards,reward_claims,reward_random}.go`、`internal/store/{inventory,purchase,rewards,reward_claims,item_extend,paint,part}.go` | 已实现武器/角色启用、选择副本、锁定/解锁、固定/选择/随机奖励与领取去重、开箱、延期、武器涂装、部件；仍缺完整合并、装饰装备、强化/分解/服装 |
+| `manager/itemmanager.cpp` | `internal/server/{inventory,rewards,reward_claims,reward_random}.go`、`internal/store/{inventory,purchase,rewards,reward_claims,item_extend,paint,part,costume}.go` | 已实现武器/角色启用、选择副本、锁定/解锁、固定/选择/随机奖励与领取去重、开箱、延期、武器涂装、部件、普通服装；仍缺完整合并、强化/分解、ZB 皮肤 |
 | `manager/{host,dedicatedserver}manager.cpp`、`room/gamematch.cpp` | `internal/server/{host,dedicated,catalog}.go`、`internal/store/{match,levels}.go` | 已实现开局、主机背包、计数、存档迁移、专服池与基础结算；尚需真实客户端/HLDS 对局验收、事件奖励及特殊模式规则 |
 | `manager/questmanager.cpp`、`quest/questevent.*` | `internal/server/quests.go`、`internal/store/{quests,quest_events}.go` | 已接活动任务条件与持久化进度、完成奖励；尚缺任务界面、每日/荣誉/军团任务、VIP 事件及完整实机验收 |
 | `manager/{clan,rank,minigame,luckyitem,voxel}manager.cpp` | 未实现（仅部分元数据） | 各业务状态与协议完整迁移 |
@@ -174,6 +174,15 @@
 - 接入 `112` 类型 1：仅允许 superRoom 房主踢同房间成员，校验目标存在、非房主本人。
 - 踢人前向房间广播 `[3, userID, 1]`，随后移除成员、记录禁止重入并送回大厅。
 - 新增测试覆盖房主踢人、广播包、踢出记录和房间成员清理。`go test ./...`、`go vet ./...` 通过；未做实机界面验收。
+
+## 2026-11-02 普通服装
+
+- 接入 `9/15` 的 `HeadCostume`、`BackCostume`、`ArmCostume`、`PelvisCostume`、`FaceCostume`、`Tattoo`、`PetCostume`。
+- 按槽位切换 `inUse`；装备时清除同类别旧服装的 `inUse` 并替换 `UserCostumeLoadout` 字段。
+- 首次装备时自动插入 `UserCostumeLoadout` 行；返回受影响的旧/新道具并同步背包。
+- `ZombieSkinCostume` 需要 `ZombieSkin` 表和槽位映射，暂未接入。
+- 新增测试覆盖首次装备、替换旧服装和卸下。`go test ./...`、`go vet ./...` 通过；未做实机界面验收。
+
 
 
 
