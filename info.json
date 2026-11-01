@@ -1,0 +1,45 @@
+{
+    "schemaVersion": 1,
+    "key": "counter-strike-online",
+    "name": "Counter-Strike Online",
+    "registries": {
+        "ghcr": "ghcr.io/hm-gamesrv/",
+        "aliyun": "crpi-i9e7zrpnu4792a5m.cn-chengdu.personal.cr.aliyuncs.com/hiromuraki/"
+    },
+    "resources": {
+        "ports": [
+            {
+                "host": "30002",
+                "container": "30002",
+                "proto": "tcp",
+                "required": true,
+                "desc": "游戏主连接（登录、大厅、房间）"
+            },
+            {
+                "host": "30002",
+                "container": "30002",
+                "proto": "udp",
+                "required": true,
+                "desc": "联机通信（UDP 打洞应答与端口登记）"
+            }
+        ],
+        "volumes": [
+            {
+                "host": "./data",
+                "container": "/data",
+                "required": true,
+                "desc": "服务器配置、元数据表与玩家数据库（容器以 UID/GID 1000 运行，宿主目录需可写）"
+            }
+        ],
+        "env": [],
+        "extraArgs": ""
+    },
+    "variants": [
+        {
+            "key": "go",
+            "name": "Go 重写版",
+            "tag": "go",
+            "container": "counter-strike-online-go-server"
+        }
+    ]
+}
