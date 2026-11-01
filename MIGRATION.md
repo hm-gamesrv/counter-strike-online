@@ -7,7 +7,7 @@
 | `net/{extendedsocket,sendpacket,receivepacket}.cpp` | `internal/protocol` | SSL、实客户端抓包验证 |
 | `serverconfig.cpp` | `internal/config` | 随业务迁移补齐配置项 |
 | `manager/userdatabase_sqlite.cpp` | `internal/store` | 其余角色字段、会话历史、封禁规则、迁移工具 |
-| `manager/usermanager.cpp` | `internal/server/{server,lobby,ban,update_info,messenger}.go` | 完整 UserInfo、装备、调查；改名/位置/聊天色、Messenger 已实现，屏蔽名单已实现列表/设置/登录下发及聊天、私聊、房间加入过滤 |
+| `manager/usermanager.cpp` | `internal/server/{server,lobby,ban,update_info,messenger,addon}.go` | 完整 UserInfo、装备、调查；改名/位置/聊天色、Messenger、快捷购买与 Addon 已实现，屏蔽名单已实现列表/设置/登录下发及聊天、私聊、房间加入过滤 |
 | `manager/channelmanager.cpp`、`room/roomsettings.cpp` | `internal/server/{rooms,room_defaults,room_social,host}.go` | 已实现邀请、房主踢人及踢出名单；仍缺完整设置校验、投票踢人、特殊模式限制与地图轮换 |
 | `manager/packetmanager.cpp` | `internal/server/{metadata,lobby,rooms,shop}.go` | 随各业务逐项实现出站结构 |
 | `manager/shopmanager.cpp` | `internal/server/shop.go`、`internal/store/purchase.go` | 当前客户端购买、计数堆叠和密码箱计数已实现；完整延期规则、礼包校验仍缺 |
@@ -148,6 +148,13 @@
 - 活跃道具按 `days * 1440` 分钟延长；休眠道具按相对天数延长；达到 999 天规则时转为永久。
 - 目标更新和延长道具扣减在同一 SQLite 事务内完成，失败整体回滚；返回背包增量，延长道具耗尽时发送空槽。
 - 新增测试覆盖正常延期和永久目标不扣道具。`go test ./...`、`go vet ./...` 通过；未做实机界面验收。
+
+## 2026-11-02 快捷购买与 Addon 列表
+
+- 接入 `77/1` 快捷购买：保存槽位 0..4，每组名称最长 32 字节、11 个 uint16 商品编号；已有槽位更新，不存在时插入。
+- 接入 `115 Addon`：按 `UserAddon` 下发 uint16 数量与 itemID 列表，空列表返回 0 项。
+- 新增测试覆盖快捷购买首次写入/同槽更新不重复，以及 Addon 列表包。`go test ./...`、`go vet ./...` 通过；未做实机界面验收。
+
 
 
 

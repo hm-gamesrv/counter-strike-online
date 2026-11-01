@@ -478,6 +478,20 @@ func (s *Server) favorite(c *client, r *protocol.Reader) error {
 	var query string
 	var args []any
 	switch kind {
+	case 1:
+		slot := r.U8()
+		name := r.CString()
+		items := make([]int, 11)
+		for i := range items {
+			items[i] = r.U16()
+		}
+		if r.Err != nil {
+			return r.Err
+		}
+		if r.Pos != len(r.Data) {
+			return errors.New("unexpected fastbuy request tail")
+		}
+		return s.Store.SetFastBuy(c.user.ID, slot, name, items)
 	case 0:
 		menu, slot, item := r.U8(), r.U8(), r.U16()
 		if menu >= 17 || slot >= 9 {
