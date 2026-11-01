@@ -383,6 +383,8 @@ func (s *Server) dispatch(c *client, p protocol.Packet) error {
 			return s.favorite(c, r)
 		case 72:
 			return s.shopRequest(c, r)
+		case 74:
+			return s.banRequest(c, r)
 		case 78:
 			return s.itemRequest(c, r)
 		case 16:

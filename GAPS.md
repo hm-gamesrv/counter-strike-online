@@ -7,9 +7,9 @@
 ## 结论
 
 - Go 版已覆盖"登录 → 大厅 → 建房 → 开局 → 结算 → 返回"完整闭环，并实现商店、背包、道具使用与奖励领取、活动任务事件、专服池、主机迁移、UDP 打洞和元数据下发。
-- 外围系统基本空白：道具养成（开箱/分解/强化/涂装/部件/服装/延期）、军团、小游戏、称号、玩家资料扩展、屏蔽名单、管理能力。
+- 外围系统基本空白：道具养成（分解/强化/涂装/部件/服装/延期）、军团、小游戏、称号、玩家资料扩展、管理能力。
 - 规模对照：C++ 核心源码约 4.6 万行（`src`，不含 GUI/thirdparty/test），Go 非测试代码约 5,700 行、含测试约 8,100 行。
-- 协议入口：上游 33 个包入口（其中 2 个空实现、3 个桩），Go 已接 16 个（含 UDP）。
+- 协议入口：上游 33 个包入口（其中 2 个空实现、3 个桩），Go 已接 17 个（含 UDP）。
 
 ## 一、协议入口层缺口
 
@@ -17,7 +17,7 @@
 | --- | --- | --- | --- | --- |
 | `69 UpdateInfo` | 改昵称、位置、教程标记、聊天颜色 | `usermanager.cpp:862` | 缺失（登录只发 `{11}` 占位） | 改名卡、位置、聊天颜色不可用 |
 | `71 Clan` | 军团 25 个子请求 | `clanmanager.cpp`（1,077 行） | 缺失 | 军团界面全不可用 |
-| `74 Ban` | 屏蔽名单 4 个请求 | `usermanager.cpp:1244` | 缺失 | 屏蔽名单不可用 |
+| `74 Ban` | 屏蔽名单 4 个请求 | `usermanager.cpp:1244` | 已实现：列表/设置/登录下发/过滤 | 屏蔽名单可用 |
 | `84 Title` | 称号设置与列表增删 | `questmanager.cpp:246` | 缺失 | 称号不可用 |
 | `87 UserSurvey` | 登录问卷 11/12 | `usermanager.cpp:1216` | 缺失 | 问卷不弹 |
 | `89 MiniGame` | Bingo、武器解放 | `minigamemanager.cpp`（482 行） | 缺失 | 小游戏不可用 |
@@ -69,7 +69,7 @@
 | 军团 | clanmanager 1,077 行 + 7 张表 | 完全缺失：创建/申请/审批/成员管理/仓库/军团任务/军团聊天 |
 | 小游戏 | minigamemanager 482 行 + 5 张表 | Bingo、武器解放全缺 |
 | 房间设置校验 | roomsettings 2,655 行 | Go 虽读取 `Room.ValidateSettings` 配置项但代码从未使用；上游按模式/地图校验人数、胜负限制、playlist、zbLimit、家族战、superRoom 等 |
-| 玩家资料与外围 | usermanager 1,541 行 | 缺改名/位置/聊天色、屏蔽名单、快捷购买、Addon、Messenger、问卷、公告 notices、到期提醒、离线奖励通知、会话历史、断线重连恢复到原房间 |
+| 玩家资料与外围 | usermanager 1,541 行 | 缺改名/位置/聊天色、快捷购买、Addon、Messenger、问卷、公告 notices、到期提醒、离线奖励通知、会话历史、断线重连恢复到原房间 |
 | 对局结算补全 | gamematch 709 行 | 已有基础结算与等级/职业加成；缺道具加成（`GameMatch.CalcResults.BonusPercentage.Items` 已读未用）、模式统计事件（炸弹/拆弹/人质/怪物/蚊子/风筝）、场景掉落箱奖励（rewardID 3000–3023）、ZBS 名次奖励、第一名计算 |
 | 多频道 | channelmanager | 上游 `channelmanager.cpp:23` 自述 `TODO: Should we implement multi channels?`，不必实现 |
 
@@ -78,7 +78,7 @@
 `internal/store/schema.sql` 已与上游完全一致（45 表），缺的是读写逻辑：
 
 - 军团 7 张：`Clan`、`ClanMember`、`ClanInvite`、`ClanMemberRequest`、`ClanStorageItem`、`ClanStoragePage`、`ClanChronicle`
-- 玩家外围：`UserBanList`、`UserFastBuy`、`UserAddon`、`UserCostumeLoadout`、`UserZBCostumeLoadout`、`UserSurveyAnswer`、`UserExpiryNotice`、`UserRewardNotice`、`UserSession`、`UserSessionHistory`、`UserRestore`、`UserDist`、`TimeConfig`
+- 玩家外围：`UserFastBuy`、`UserAddon`、`UserCostumeLoadout`、`UserZBCostumeLoadout`、`UserSurveyAnswer`、`UserExpiryNotice`、`UserRewardNotice`、`UserSession`、`UserSessionHistory`、`UserRestore`、`UserDist`、`TimeConfig`（`UserBanList` 已接入）
 - 小游戏 5 张：`UserMiniGameBingo`、`UserMiniGameBingoPrizeSlot`、`UserMiniGameBingoSlot`、`UserMiniGameWeaponReleaseCharacters`、`UserMiniGameWeaponReleaseItemProgress`
 - 任务与排行：`UserQuest*`（Go 改用 `GoQuest*` 扩展表）、`UserRank`
 - 管理与风控：`HWIDBanList`、`IPBanList`、`SuspectAction`、`RelationProducts`、`UserDailyReward`、`UserDailyRewardItems`
@@ -103,6 +103,6 @@
 ## 七、建议实施顺序
 
 1. **P0 兜底**：未实现子类型补错误回包。当前对 78/4、78/7、78/14 等只写 debug 日志不回包，客户端开箱/强化界面会等待；上游每种失败都有明确回包（如 `SendItemOpenDecoderErrorReply`），照搬即可。
-2. **P1 低成本高收益**：`69 UpdateInfo`（改名/位置/聊天色）、`74 Ban` 屏蔽名单、`77/1` 快捷购买、`115 Addon`、`93 Messenger`、`84 Title`、`112 Kick` 与 superRoom、房间设置校验（配置项已预留）。
+2. **P1 低成本高收益**：`69 UpdateInfo`（改名/位置/聊天色）、`77/1` 快捷购买、`115 Addon`、`93 Messenger`、`84 Title`、`112 Kick` 与 superRoom、房间设置校验（配置项已预留）。
 3. **P2 道具养成**：开箱（78/4 + luckyitem）→ 分解（78/7）→ 强化（78/14）→ 涂装（17/24）→ 部件（21）→ 服装/纹身（9/15）→ 延期（16）。该链路复用现有 `GrantReward` 事务与背包同步。
 4. **P3 大件与验收**：军团（71 + 7 表）、小游戏（89 + 5 表）、结算补全（道具加成、模式统计、场景奖励），以及真实 HLDS 与多人验收。

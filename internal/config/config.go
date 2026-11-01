@@ -68,28 +68,58 @@ func ReadJSON(path string, v any) error {
 }
 
 type DefaultUser struct {
-	GameMaster                                                                                           bool
-	Level, Exp, Points, HonorPoints, PrefixID, Kills, Deaths, Battles, Win, PasswordBoxes, MileagePoints int
-	DefaultItems, PseudoDefaultItems                                                                     []int
-	Loadouts, BuyMenu                                                                                    map[string]map[string]int
+	GameMaster         bool
+	Level              int
+	Exp                int
+	Points             int
+	HonorPoints        int
+	PrefixID           int
+	Kills              int
+	Deaths             int
+	Battles            int
+	Win                int
+	PasswordBoxes      int
+	MileagePoints      int
+	DefaultItems       []int
+	PseudoDefaultItems []int
+	Loadouts           map[string]map[string]int
+	BuyMenu            map[string]map[string]int
 }
 type Config struct {
-	HostName, Description, WelcomeMessage               string
-	Port                                                string
-	MaxPlayers, MaxRegistrationsPerIP, InventorySlotMax int
-	SSL, Crypt, CheckClientBuild                        bool
-	AllowedClientTimestamp, AllowedLauncherVersion      int
-	Metadata                                            map[string]bool
-	DefaultUser                                         DefaultUser
-	Room                                                struct {
+	HostName               string
+	Description            string
+	WelcomeMessage         string
+	Port                   string
+	MaxPlayers             int
+	MaxRegistrationsPerIP  int
+	InventorySlotMax       int
+	BanListMaxSize         int
+	SSL                    bool
+	Crypt                  bool
+	CheckClientBuild       bool
+	AllowedClientTimestamp int
+	AllowedLauncherVersion int
+	Metadata               map[string]bool
+	DefaultUser            DefaultUser
+	Room                   struct {
 		HostConnectingMethod int
 		ValidateSettings     bool
 	}
 	GameMatch struct {
 		CalcResults struct {
-			GameModeCoefficient map[string]struct{ Exp, Points int }
-			BonusPercentage     struct {
-				Items, Classes map[string]struct{ Exp, Points int }
+			GameModeCoefficient map[string]struct {
+				Exp    int
+				Points int
+			}
+			BonusPercentage struct {
+				Items map[string]struct {
+					Exp    int
+					Points int
+				}
+				Classes map[string]struct {
+					Exp    int
+					Points int
+				}
 			}
 		}
 	}
@@ -98,7 +128,7 @@ type Config struct {
 }
 
 func Load(path string) (Config, error) {
-	c := Config{HostName: "CSO Server", Port: "30002", MaxPlayers: 100, MaxRegistrationsPerIP: 3, InventorySlotMax: 3000, AllowedLauncherVersion: 67}
+	c := Config{HostName: "CSO Server", Port: "30002", MaxPlayers: 100, MaxRegistrationsPerIP: 3, InventorySlotMax: 3000, BanListMaxSize: 300, AllowedLauncherVersion: 67}
 	c.DedicatedServerWhitelist = []string{"127.0.0.1"}
 	if e := ReadJSON(path, &c); e != nil {
 		return c, e
@@ -109,6 +139,9 @@ func Load(path string) (Config, error) {
 	}
 	if c.MaxPlayers < 1 || c.MaxPlayers > 10000 {
 		return c, fmt.Errorf("MaxPlayers must be 1..10000")
+	}
+	if c.BanListMaxSize < 0 || c.BanListMaxSize > 65535 {
+		return c, fmt.Errorf("BanListMaxSize must be 0..65535")
 	}
 	if c.InventorySlotMax < 1 || c.InventorySlotMax > 65535-len(c.DefaultUser.DefaultItems) {
 		return c, fmt.Errorf("InventorySlotMax plus default item slots must fit uint16")

@@ -7,7 +7,7 @@
 | `net/{extendedsocket,sendpacket,receivepacket}.cpp` | `internal/protocol` | SSL、实客户端抓包验证 |
 | `serverconfig.cpp` | `internal/config` | 随业务迁移补齐配置项 |
 | `manager/userdatabase_sqlite.cpp` | `internal/store` | 其余角色字段、会话历史、封禁规则、迁移工具 |
-| `manager/usermanager.cpp` | `internal/server/{server,lobby}.go` | 完整 UserInfo、装备、改名、位置、调查、屏蔽等 |
+| `manager/usermanager.cpp` | `internal/server/{server,lobby,ban}.go` | 完整 UserInfo、装备、改名、位置、调查；屏蔽名单已实现列表/设置/登录下发及聊天、私聊、房间加入过滤 |
 | `manager/channelmanager.cpp`、`room/roomsettings.cpp` | `internal/server/{rooms,room_defaults,room_social,host}.go` | 已实现邀请、房主踢人及踢出名单；仍缺完整设置校验、投票踢人、特殊模式限制与地图轮换 |
 | `manager/packetmanager.cpp` | `internal/server/{metadata,lobby,rooms,shop}.go` | 随各业务逐项实现出站结构 |
 | `manager/shopmanager.cpp` | `internal/server/shop.go`、`internal/store/purchase.go` | 当前客户端购买、计数堆叠和密码箱计数已实现；完整延期规则、礼包校验仍缺 |
@@ -119,4 +119,12 @@
 - 上游 `OpenDecoder(user, ReadUInt16(), ReadUInt16())` 的实参求值顺序未固定，因此同时识别 `slot,count` 与 `count,slot` 两种排列，并以实际持有的 `LotteryKeyItem` 槽位锚定；两者都匹配时取较大的槽位值。
 - 子类型 14（EnhanceReq）暂未迁移，但改为立即返回 `[14, 5]`（`ENHANCE_SYSTEMERROR`），避免强化界面一直等待。
 - 新增测试覆盖正常开箱、未知箱子不扣钥匙、两种字段顺序、背包满回滚和强化错误回包。`go test -race ./...`、`go vet ./...` 和 Windows 构建通过；尚未用真实客户端点击开箱，界面提示与实际包顺序仍待实机复核。
+
+## 2026-11-02 屏蔽名单管理
+
+- 接入 `74 Ban` 的列表、添加、移除、屏蔽设置和列表上限请求；登录时下发 `UserBanList` 与 `banSettings`。
+- 添加时按上游返回 `-1` 目标角色不存在、`-2` 已屏蔽、`-3` 超出 `BanListMaxSize`；移除不存在返回 `-1`，通过 `67` 通知返回对应本地化键。
+- `UserCharacterExtended.banSettings` 持久化；`BanListMaxSize` 加入 `ServerConfig.json` 读取与校验，默认 300。
+- 接入 `banSettings` 的聊天/私聊与房间加入过滤：位 1 阻止被屏蔽者加入房主房间，位 2 过滤大厅/房间聊天，位 4 拒绝全部私聊；私聊同时检查双方设置。
+- 新增测试覆盖添加/重复/不存在、列表上限、设置、上限查询、移除/不存在、登录下发，以及聊天、私聊、房间加入的过滤策略。`go test ./...`、`go vet ./...` 通过；未做实机界面验收。
 

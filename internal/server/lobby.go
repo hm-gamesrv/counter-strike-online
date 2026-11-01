@@ -200,6 +200,12 @@ func (s *Server) message(c *client, r *protocol.Reader) error {
 			c.notice("MSG_TELL_USER_NOT_FOUND")
 			return nil
 		}
+		if reason, denied := s.whisperDenied(c, to); denied {
+			if reason != "" {
+				c.notice(reason)
+			}
+			return nil
+		}
 		w := &protocol.Writer{}
 		w.U8(0)
 		w.U8(0)
@@ -222,7 +228,7 @@ func (s *Server) message(c *client, r *protocol.Reader) error {
 	w.String(c.character.Name)
 	w.String(text)
 	for u := range s.clients {
-		if kind == 1 && c.inLobby && u.inLobby || (kind == 2 || kind == 4) && c.room != 0 && u.room == c.room && (kind != 4 || u.team == c.team) {
+		if (kind == 1 && c.inLobby && u.inLobby || (kind == 2 || kind == 4) && c.room != 0 && u.room == c.room && (kind != 4 || u.team == c.team)) && s.chatAllowed(c, u) {
 			u.send(67, w)
 		}
 	}
@@ -243,6 +249,9 @@ func (s *Server) loginPackets(c *client) error {
 	w.U32(c.user.ID)
 	userInfo(w, c.character)
 	c.send(157, w)
+	if e := s.sendBanLogin(c); e != nil {
+		return e
+	}
 	var cfg []byte
 	if e := s.Store.DB.QueryRow("SELECT config FROM UserCharacterExtended WHERE userID=?", c.user.ID).Scan(&cfg); e != nil {
 		return e

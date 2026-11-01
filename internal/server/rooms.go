@@ -358,6 +358,18 @@ func (s *Server) roomRequest(c *client, r *protocol.Reader) error {
 			c.notice("ROOM_JOIN_FAILED_INVALID_PASSWD")
 			return nil
 		}
+		allowed, err := s.hostAllows(to.host, c)
+		if err != nil {
+			if s.Log != nil {
+				s.Log.Warn("host ban list read failed", "user", to.host.user.ID, "error", err)
+			}
+			c.notice("DB_QUERY_FAILED")
+			return nil
+		}
+		if !allowed {
+			c.notice("ROOM_JOIN_FAILED_BAN")
+			return nil
+		}
 		c.room = id
 		c.team = 2
 		c.ready = 0
