@@ -15,10 +15,19 @@ import (
 )
 
 type questCondition struct {
-	EventType, GoalPoints, PlayerCount                                          int
-	GameModes, Maps                                                             []int
-	KillerTeam, VictimKillType, VictimTeam, Continuous, GunID, Bot, MonsterType int
-	CheckForGun                                                                 bool
+	EventType      int
+	GoalPoints     int
+	PlayerCount    int
+	GameModes      []int
+	Maps           []int
+	KillerTeam     int
+	VictimKillType int
+	VictimTeam     int
+	Continuous     int
+	GunID          int
+	Bot            int
+	MonsterType    int
+	CheckForGun    bool
 }
 type questTask struct {
 	QuestID, TaskID, Goal, RewardID int
@@ -29,10 +38,17 @@ type questTask struct {
 	Conditions []questCondition
 }
 type questEvent struct {
-	Kind, Count, GunID, KillerTeam, VictimTeam, VictimKillType, VictimID, MonsterType int
-	Won                                                                               bool
-	Key                                                                               string
-	MatchContext                                                                      *questMatchContext
+	Kind           int
+	Count          int
+	GunID          int
+	KillerTeam     int
+	VictimTeam     int
+	VictimKillType int
+	VictimID       int
+	MonsterType    int
+	Won            bool
+	Key            string
+	MatchContext   *questMatchContext
 }
 type questMatchContext struct{ Mode, Map, Players int }
 

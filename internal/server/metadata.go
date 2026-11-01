@@ -5,12 +5,13 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"github.com/hm-gamesrv/cso-server-go/internal/config"
-	"github.com/hm-gamesrv/cso-server-go/internal/protocol"
 	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
+
+	"github.com/hm-gamesrv/cso-server-go/internal/config"
+	"github.com/hm-gamesrv/cso-server-go/internal/protocol"
 )
 
 type metadataEntry struct {
@@ -22,22 +23,38 @@ type metadataEntry struct {
 var metadataFiles = []metadataEntry{
 	{"ModeList", "Metadata_ModeList.bin", 2, true},
 	{"Encyclopedia", "Metadata_Encyclopedia.bin", 23, true},
-	{"Maplist", "MapList.csv", 0, false}, {"ClientTable", "ClientTable.csv", 1, false},
-	{"Unk3", "Metadata_Unk3.bin", 3, true}, {"Unk8", "Metadata_Unk8.bin", 8, true},
-	{"MatchOption", "MatchOption.csv", 9, false}, {"WeaponParts", "weaponparts.csv", 17, false},
-	{"MileageShop", "MileageShop.csv", 18, false}, {"Unk20", "Metadata_Unk20.bin", 20, true},
-	{"GameModeList", "GameModeList.csv", 24, false}, {"ProgressUnlock", "progress_unlock.csv", 27, false},
-	{"ReinforceMaxLvl", "ReinforceMaxLv.csv", 28, false}, {"ReinforceMaxEXP", "ReinforceMaxEXP.csv", 29, false},
-	{"ReinforceItemsExp", "Metadata_ReinforceItemsExp.bin", 30, true}, {"Unk31", "Metadata_Unk31.bin", 31, true},
-	{"Item", "Item.csv", 32, false}, {"CodisData", "CodisData.csv", 35, false},
-	{"HonorMoneyShop", "HonorMoneyShop.csv", 36, false}, {"ItemExpireTime", "ItemExpireTime.csv", 37, false},
-	{"ScenarioTX_Common", "scenariotx_common.json", 38, false}, {"ScenarioTX_Dedi", "scenariotx_dedi.json", 39, false},
-	{"ShopItemList_Dedi", "shopitemlist_dedi.json", 40, false}, {"WeaponProp", "WeaponProp.json", 42, false},
-	{"Unk43", "Metadata_Unk43.bin", 43, true}, {"PPSystem", "ppsystem.json", 45, false},
-	{"ZBCompetitive", "ZBCompetitive.json", 48, false}, {"Unk49", "Metadata_Unk49.bin", 49, true},
-	{"ModeEvent", "ModeEvent.csv", 50, false}, {"EventShop", "EventShop.csv", 51, false},
-	{"FamilyTotalWarMap", "FamilyTotalWarMap.csv", 52, false}, {"FamilyTotalWar", "FamilyTotalWar.json", 53, false},
-	{"Unk54", "Metadata_Unk54.bin", 54, true}, {"Unk55", "Metadata_Unk55.bin", 55, true},
+	{"Maplist", "MapList.csv", 0, false},
+	{"ClientTable", "ClientTable.csv", 1, false},
+	{"Unk3", "Metadata_Unk3.bin", 3, true},
+	{"Unk8", "Metadata_Unk8.bin", 8, true},
+	{"MatchOption", "MatchOption.csv", 9, false},
+	{"WeaponParts", "weaponparts.csv", 17, false},
+	{"MileageShop", "MileageShop.csv", 18, false},
+	{"Unk20", "Metadata_Unk20.bin", 20, true},
+	{"GameModeList", "GameModeList.csv", 24, false},
+	{"ProgressUnlock", "progress_unlock.csv", 27, false},
+	{"ReinforceMaxLvl", "ReinforceMaxLv.csv", 28, false},
+	{"ReinforceMaxEXP", "ReinforceMaxEXP.csv", 29, false},
+	{"ReinforceItemsExp", "Metadata_ReinforceItemsExp.bin", 30, true},
+	{"Unk31", "Metadata_Unk31.bin", 31, true},
+	{"Item", "Item.csv", 32, false},
+	{"CodisData", "CodisData.csv", 35, false},
+	{"HonorMoneyShop", "HonorMoneyShop.csv", 36, false},
+	{"ItemExpireTime", "ItemExpireTime.csv", 37, false},
+	{"ScenarioTX_Common", "scenariotx_common.json", 38, false},
+	{"ScenarioTX_Dedi", "scenariotx_dedi.json", 39, false},
+	{"ShopItemList_Dedi", "shopitemlist_dedi.json", 40, false},
+	{"WeaponProp", "WeaponProp.json", 42, false},
+	{"Unk43", "Metadata_Unk43.bin", 43, true},
+	{"PPSystem", "ppsystem.json", 45, false},
+	{"ZBCompetitive", "ZBCompetitive.json", 48, false},
+	{"Unk49", "Metadata_Unk49.bin", 49, true},
+	{"ModeEvent", "ModeEvent.csv", 50, false},
+	{"EventShop", "EventShop.csv", 51, false},
+	{"FamilyTotalWarMap", "FamilyTotalWarMap.csv", 52, false},
+	{"FamilyTotalWar", "FamilyTotalWar.json", 53, false},
+	{"Unk54", "Metadata_Unk54.bin", 54, true},
+	{"Unk55", "Metadata_Unk55.bin", 55, true},
 }
 
 func loadMetadata(dir string, c config.Config) ([][]byte, error) {
