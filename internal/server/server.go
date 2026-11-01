@@ -67,22 +67,23 @@ func (c *client) reply(code int) {
 }
 
 type Server struct {
-	Config    config.Config
-	Store     *store.Store
-	Log       *slog.Logger
-	metadata  [][]byte
-	shop      shop
-	items     map[int]itemDefinition
-	itemBoxes map[int]*itemBox
-	rewards   map[int]itemReward
-	quests    []questTask
-	modes     map[int]modeDefinition
-	dedicated []*dedicatedServer
-	mu        sync.Mutex
-	clients   map[*client]bool
-	users     map[int]*client
-	rooms     map[int]*room
-	nextRoom  int
+	Config       config.Config
+	Store        *store.Store
+	Log          *slog.Logger
+	metadata     [][]byte
+	shop         shop
+	items        map[int]itemDefinition
+	itemBoxes    map[int]*itemBox
+	weaponPaints map[int][]int
+	rewards      map[int]itemReward
+	quests       []questTask
+	modes        map[int]modeDefinition
+	dedicated    []*dedicatedServer
+	mu           sync.Mutex
+	clients      map[*client]bool
+	users        map[int]*client
+	rooms        map[int]*room
+	nextRoom     int
 }
 
 func New(dir string, c config.Config, db *store.Store, log *slog.Logger) (*Server, error) {
@@ -109,6 +110,10 @@ func New(dir string, c config.Config, db *store.Store, log *slog.Logger) (*Serve
 		return nil, e
 	}
 	s.itemBoxes, e = loadItemBoxes(dir)
+	if e != nil {
+		return nil, e
+	}
+	s.weaponPaints, e = loadWeaponPaints(dir)
 	if e != nil {
 		return nil, e
 	}

@@ -128,6 +128,34 @@ func (b *itemBox) roll() (itemBoxAward, error) {
 	return itemBoxAward{}, errors.New("item box rates do not cover the random range")
 }
 
+func loadWeaponPaints(dir string) (map[int][]int, error) {
+	var raw map[string]json.RawMessage
+	if e := config.ReadJSON(filepath.Join(dir, "WeaponPaints.json"), &raw); e != nil {
+		return nil, e
+	}
+	delete(raw, "Version")
+	paints := map[int][]int{}
+	for key, value := range raw {
+		id, e := strconv.Atoi(key)
+		if e != nil || id <= 0 || id > 65535 {
+			return nil, fmt.Errorf("invalid weapon paint id %q", key)
+		}
+		var cfg struct {
+			Paints []int
+		}
+		if e = json.Unmarshal(value, &cfg); e != nil {
+			return nil, fmt.Errorf("weapon paint %d: %w", id, e)
+		}
+		for _, paint := range cfg.Paints {
+			if paint <= 0 || paint > 65535 {
+				return nil, fmt.Errorf("weapon paint %d has invalid paint %d", id, paint)
+			}
+		}
+		paints[id] = cfg.Paints
+	}
+	return paints, nil
+}
+
 func loadItems(dir string) (map[int]itemDefinition, error) {
 	f, e := os.Open(filepath.Join(dir, "Data", "Item.csv"))
 	if e != nil {

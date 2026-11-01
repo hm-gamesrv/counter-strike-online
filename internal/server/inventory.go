@@ -195,6 +195,94 @@ func (s *Server) extendItem(c *client, gameSlot, days int) error {
 	return s.sendInventoryItems(c, changed)
 }
 
+func containsPaint(paints []int, paint int) bool {
+	for _, candidate := range paints {
+		if candidate == paint {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *Server) paintReply(c *client) {
+	c.send(78, &protocol.Writer{Data: []byte{17, 1, 1, 1}})
+}
+
+func (s *Server) applyWeaponPaint(c *client, weaponGameSlot, paintGameSlot int) error {
+	defaults := len(s.Config.DefaultUser.DefaultItems)
+	weaponSlot, paintSlot := weaponGameSlot-defaults, paintGameSlot-defaults
+	if weaponSlot <= 0 || paintSlot <= 0 {
+		c.notice("Item unavailable.")
+		return nil
+	}
+	items, err := s.Store.Inventory(c.user.ID)
+	if err != nil {
+		return err
+	}
+	var weapon, paint store.Item
+	for _, item := range items {
+		if item.Slot == weaponSlot {
+			weapon = item
+		}
+		if item.Slot == paintSlot {
+			paint = item
+		}
+	}
+	if weapon.ID == 0 || paint.ID == 0 || !containsPaint(s.weaponPaints[weapon.ID], paint.ID) {
+		c.notice("Item unavailable.")
+		return nil
+	}
+	changed, err := s.Store.ApplyWeaponPaint(c.user.ID, weaponSlot, paintSlot, paint.ID)
+	if errors.Is(err, store.ErrItemUnavailable) {
+		c.notice("Item unavailable.")
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if err = s.sendInventoryItems(c, changed); err != nil {
+		return err
+	}
+	s.paintReply(c)
+	return nil
+}
+
+func (s *Server) switchWeaponPaint(c *client, weaponGameSlot, paintID int) error {
+	slot := weaponGameSlot - len(s.Config.DefaultUser.DefaultItems)
+	if slot <= 0 {
+		c.notice("Item unavailable.")
+		return nil
+	}
+	items, err := s.Store.Inventory(c.user.ID)
+	if err != nil {
+		return err
+	}
+	var weapon store.Item
+	for _, item := range items {
+		if item.Slot == slot {
+			weapon = item
+			break
+		}
+	}
+	if weapon.ID == 0 || paintID != 0 && !containsPaint(s.weaponPaints[weapon.ID], paintID) {
+		c.notice("Item unavailable.")
+		return nil
+	}
+	changed, err := s.Store.SwitchWeaponPaint(c.user.ID, slot, paintID)
+	if errors.Is(err, store.ErrItemUnavailable) {
+		c.notice("Item unavailable.")
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if err = s.sendInventoryItems(c, changed); err != nil {
+		return err
+	}
+	s.paintReply(c)
+	return nil
+}
+
 func (s *Server) itemRequest(c *client, p *protocol.Reader) error {
 	kind := p.U8()
 	var slot, inventoryType, count int
@@ -243,6 +331,24 @@ func (s *Server) itemRequest(c *client, p *protocol.Reader) error {
 			return errors.New("unexpected item extension tail")
 		}
 		return s.extendItem(c, slot, days)
+	case 17:
+		weapon, paint := p.U16(), p.U16()
+		if p.Err != nil {
+			return p.Err
+		}
+		if p.Pos != len(p.Data) {
+			return errors.New("unexpected weapon paint tail")
+		}
+		return s.applyWeaponPaint(c, weapon, paint)
+	case 24:
+		weapon, paint := p.U16(), p.U16()
+		if p.Err != nil {
+			return p.Err
+		}
+		if p.Pos != len(p.Data) {
+			return errors.New("unexpected weapon paint switch tail")
+		}
+		return s.switchWeaponPaint(c, weapon, paint)
 	case 10, 11, 12: // Background decoder/gift notifications do not open dialogs.
 		return p.Err
 	default:
