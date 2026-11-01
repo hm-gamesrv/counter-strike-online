@@ -11,7 +11,7 @@
 | `manager/channelmanager.cpp`、`room/roomsettings.cpp` | `internal/server/{rooms,room_defaults,room_social,host}.go` | 已实现邀请、房主踢人及踢出名单；仍缺完整设置校验、投票踢人、特殊模式限制与地图轮换 |
 | `manager/packetmanager.cpp` | `internal/server/{metadata,lobby,rooms,shop}.go` | 随各业务逐项实现出站结构 |
 | `manager/shopmanager.cpp` | `internal/server/shop.go`、`internal/store/purchase.go` | 当前客户端购买、计数堆叠和密码箱计数已实现；完整延期规则、礼包校验仍缺 |
-| `manager/itemmanager.cpp` | `internal/server/{inventory,rewards,reward_claims,reward_random}.go`、`internal/store/{inventory,purchase,rewards,reward_claims,item_extend,paint}.go` | 已实现武器/角色启用、选择副本、锁定/解锁、固定/选择/随机奖励与领取去重、开箱、延期、武器涂装；仍缺完整合并、装饰装备、强化/分解/部件/服装 |
+| `manager/itemmanager.cpp` | `internal/server/{inventory,rewards,reward_claims,reward_random}.go`、`internal/store/{inventory,purchase,rewards,reward_claims,item_extend,paint,part}.go` | 已实现武器/角色启用、选择副本、锁定/解锁、固定/选择/随机奖励与领取去重、开箱、延期、武器涂装、部件；仍缺完整合并、装饰装备、强化/分解/服装 |
 | `manager/{host,dedicatedserver}manager.cpp`、`room/gamematch.cpp` | `internal/server/{host,dedicated,catalog}.go`、`internal/store/{match,levels}.go` | 已实现开局、主机背包、计数、存档迁移、专服池与基础结算；尚需真实客户端/HLDS 对局验收、事件奖励及特殊模式规则 |
 | `manager/questmanager.cpp`、`quest/questevent.*` | `internal/server/quests.go`、`internal/store/{quests,quest_events}.go` | 已接活动任务条件与持久化进度、完成奖励；尚缺任务界面、每日/荣誉/军团任务、VIP 事件及完整实机验收 |
 | `manager/{clan,rank,minigame,luckyitem,voxel}manager.cpp` | 未实现（仅部分元数据） | 各业务状态与协议完整迁移 |
@@ -161,6 +161,14 @@
 - 接入 `78/17`：校验武器与涂装道具归属及兼容性，追加 `paintIDList`、设置 `paintID`，并消耗一个涂装道具；全部在同一事务内完成。
 - 接入 `78/24`：切换已拥有的涂装，`paintID=0` 移除涂装；回复 `[17, 1, 1, 1]` 并同步背包。
 - 新增测试覆盖获取涂装、涂装道具消耗、切换和移除。`go test ./...`、`go vet ./...` 通过；未做实机界面验收。
+
+## 2026-11-02 武器部件
+
+- 接入 `78/21`：类型 1 卸下部件，类型 2 校验武器类别（1–6/11）和部件类别 13 后装配。
+- 部件装配消耗部件道具并更新 `partSlot1/partSlot2`；装配和扣减在同一事务内完成。
+- 装配成功后返回背包增量，并按上游发送 `21` 部件检查包。
+- 新增测试覆盖装配、部件消耗和卸下。`go test ./...`、`go vet ./...` 通过；未做实机界面验收。
+
 
 
 

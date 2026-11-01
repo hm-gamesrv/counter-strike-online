@@ -283,6 +283,92 @@ func (s *Server) switchWeaponPaint(c *client, weaponGameSlot, paintID int) error
 	return nil
 }
 
+func (s *Server) partCheck(c *client, weaponGameSlot int) {
+	w := &protocol.Writer{}
+	w.U8(21)
+	w.U8(0)
+	w.U16(weaponGameSlot)
+	w.String("PARTS_SYSTEM_ERROR0")
+	c.send(78, w)
+}
+
+func (s *Server) partRequest(c *client, p *protocol.Reader) error {
+	kind := p.U8()
+	defaults := len(s.Config.DefaultUser.DefaultItems)
+	switch kind {
+	case 1:
+		weaponGameSlot := p.U16()
+		partIndex := p.U8()
+		if p.Err != nil {
+			return p.Err
+		}
+		if p.Pos != len(p.Data) {
+			return errors.New("unexpected part unequip tail")
+		}
+		slot := weaponGameSlot - defaults
+		if slot <= 0 || partIndex > 1 {
+			c.notice("Item unavailable.")
+			return nil
+		}
+		changed, err := s.Store.RemoveWeaponPart(c.user.ID, slot, partIndex)
+		if errors.Is(err, store.ErrItemUnavailable) {
+			c.notice("Item unavailable.")
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		return s.sendInventoryItems(c, changed)
+	case 2:
+		weaponGameSlot, partGameSlot := p.U16(), p.U16()
+		partIndex := p.U8()
+		if p.Err != nil {
+			return p.Err
+		}
+		if p.Pos != len(p.Data) {
+			return errors.New("unexpected part equip tail")
+		}
+		weaponSlot, partSlot := weaponGameSlot-defaults, partGameSlot-defaults
+		if weaponSlot <= 0 || partSlot <= 0 || partIndex > 1 {
+			c.notice("Item unavailable.")
+			return nil
+		}
+		items, err := s.Store.Inventory(c.user.ID)
+		if err != nil {
+			return err
+		}
+		var weapon, part store.Item
+		for _, item := range items {
+			if item.Slot == weaponSlot {
+				weapon = item
+			}
+			if item.Slot == partSlot {
+				part = item
+			}
+		}
+		weaponCategory := s.items[weapon.ID].Category
+		if weapon.ID == 0 || part.ID == 0 || s.items[part.ID].Category != 13 || weaponCategory != 11 && (weaponCategory < 1 || weaponCategory > 6) {
+			c.notice("Item unavailable.")
+			return nil
+		}
+		changed, err := s.Store.ApplyWeaponPart(c.user.ID, weaponSlot, partSlot, partIndex, part.ID)
+		if errors.Is(err, store.ErrItemUnavailable) {
+			c.notice("Item unavailable.")
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if err = s.sendInventoryItems(c, changed); err != nil {
+			return err
+		}
+		s.partCheck(c, weaponGameSlot)
+		return nil
+	default:
+		return nil
+	}
+}
+
 func (s *Server) itemRequest(c *client, p *protocol.Reader) error {
 	kind := p.U8()
 	var slot, inventoryType, count int
@@ -349,6 +435,8 @@ func (s *Server) itemRequest(c *client, p *protocol.Reader) error {
 			return errors.New("unexpected weapon paint switch tail")
 		}
 		return s.switchWeaponPaint(c, weapon, paint)
+	case 21:
+		return s.partRequest(c, p)
 	case 10, 11, 12: // Background decoder/gift notifications do not open dialogs.
 		return p.Err
 	default:
