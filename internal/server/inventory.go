@@ -3,6 +3,7 @@ package server
 import (
 	"encoding/binary"
 	"errors"
+	"strings"
 
 	"github.com/hm-gamesrv/cso-server-go/internal/protocol"
 	"github.com/hm-gamesrv/cso-server-go/internal/store"
@@ -68,6 +69,115 @@ func (s *Server) sendInventoryItems(c *client, items []store.Item) error {
 	return nil
 }
 
+const maxOpenItemBoxes = 100
+
+func (s *Server) itemBoxError(c *client, text string) {
+	w := &protocol.Writer{}
+	w.U8(4)
+	w.U8(0)
+	w.String(text)
+	c.send(78, w)
+}
+
+// openItemBox implements the decoder path (Item subtype 4). The upstream call
+// passes both uint16 values through an unspecified argument-evaluation order,
+// so accept either order and anchor it on an owned LotteryKeyItem. When both
+// readings match, the larger value is the slot, which is the normal inventory
+// layout and also handles the count-first client build.
+func (s *Server) openItemBox(c *client, first, second int) error {
+	if c.playing {
+		s.itemBoxError(c, "LOTTERY_FAIL_NOITEM")
+		return nil
+	}
+	items, err := s.Store.Inventory(c.user.ID)
+	if err != nil {
+		return err
+	}
+	defaultSlots := len(s.Config.DefaultUser.DefaultItems)
+	type candidate struct {
+		slot  int
+		count int
+		item  store.Item
+	}
+	var candidates []candidate
+	for _, reading := range []struct{ slot, count int }{
+		{first - defaultSlots, second},
+		{second - defaultSlots, first},
+	} {
+		if reading.slot <= 0 || reading.count < 1 || reading.count > maxOpenItemBoxes {
+			continue
+		}
+		for _, item := range items {
+			if item.Slot == reading.slot && item.ID != 0 && s.items[item.ID].ClassName == "LotteryKeyItem" && item.Count >= reading.count {
+				candidates = append(candidates, candidate{slot: reading.slot, count: reading.count, item: item})
+				break
+			}
+		}
+	}
+	if len(candidates) == 0 {
+		s.itemBoxError(c, "LOTTERY_FAIL_NOITEM")
+		return nil
+	}
+	chosen := candidates[0]
+	for _, candidate := range candidates[1:] {
+		if candidate.slot > chosen.slot {
+			chosen = candidate
+		}
+	}
+	target, slot, count := chosen.item, chosen.slot, chosen.count
+	box := s.itemBoxes[target.ID]
+	if box == nil {
+		s.itemBoxError(c, "LOTTERY_FAIL_NOITEM")
+		return nil
+	}
+	awards := make([]store.Reward, 0, count)
+	results := make([]itemBoxAward, 0, count)
+	for i := 0; i < count; i++ {
+		award, err := box.roll()
+		if err != nil {
+			s.Log.Warn("item box roll failed", "user", c.user.ID, "box", target.ID, "error", err)
+			s.itemBoxError(c, "LOTTERY_FAIL_NOITEM")
+			return nil
+		}
+		results = append(results, award)
+		awards = append(awards, store.Reward{ID: award.ID, Count: 1, Duration: max(award.Duration, 0)})
+	}
+	changed, err := s.Store.OpenItemBox(c.user.ID, slot, target.ID, count, awards, s.Config.InventorySlotMax, len(s.Config.DefaultUser.DefaultItems))
+	if err != nil {
+		switch {
+		case errors.Is(err, store.ErrItemUnavailable):
+			s.itemBoxError(c, "LOTTERY_FAIL_NOITEM")
+		case strings.Contains(err.Error(), "INVENTORY_FULL"):
+			s.itemBoxError(c, "LOTTERY_FAIL_INVENTORY_FULL")
+		default:
+			s.Log.Warn("item box open failed", "user", c.user.ID, "box", target.ID, "error", err)
+			s.itemBoxError(c, "LOTTERY_FAIL_NOITEM")
+		}
+		return nil
+	}
+	if err = s.sendInventoryItems(c, changed); err != nil {
+		return err
+	}
+	w := &protocol.Writer{}
+	w.U8(4)
+	w.U8(1)
+	w.U32(target.ID)
+	w.U16(0)
+	w.U32(0xFAD)
+	w.U8(len(results))
+	for _, award := range results {
+		w.U32(award.ID)
+		w.U16(award.Duration)
+		w.U16(1)
+		w.U8(award.Grade)
+		w.U8(0)
+		w.U16(0)
+		w.U16(0)
+	}
+	c.send(78, w)
+	return nil
+}
+
 func (s *Server) itemRequest(c *client, p *protocol.Reader) error {
 	kind := p.U8()
 	var slot, inventoryType, count int
@@ -86,6 +196,26 @@ func (s *Server) itemRequest(c *client, p *protocol.Reader) error {
 		if kind == 26 {
 			action = store.ToggleItemLock
 		}
+	case 4:
+		// The two uint16 values are resolved against the owned decoder slot;
+		// upstream does not expose a stable evaluation order.
+		first, second := p.U16(), p.U16()
+		if p.Err != nil {
+			return p.Err
+		}
+		if p.Pos != len(p.Data) {
+			return errors.New("unexpected item request tail")
+		}
+		return s.openItemBox(c, first, second)
+	case 14:
+		// Enhancement is not migrated yet. The client waits for this result
+		// packet; SYSTEMERROR makes the dialog close instead of hanging.
+		p.U8()
+		if p.Err != nil {
+			return p.Err
+		}
+		c.send(78, &protocol.Writer{Data: []byte{14, 5}})
+		return nil
 	case 10, 11, 12: // Background decoder/gift notifications do not open dialogs.
 		return p.Err
 	default:

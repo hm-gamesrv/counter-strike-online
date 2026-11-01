@@ -73,6 +73,7 @@ type Server struct {
 	metadata  [][]byte
 	shop      shop
 	items     map[int]itemDefinition
+	itemBoxes map[int]*itemBox
 	rewards   map[int]itemReward
 	quests    []questTask
 	modes     map[int]modeDefinition
@@ -104,6 +105,10 @@ func New(dir string, c config.Config, db *store.Store, log *slog.Logger) (*Serve
 		return nil, e
 	}
 	s.items, e = loadItems(dir)
+	if e != nil {
+		return nil, e
+	}
+	s.itemBoxes, e = loadItemBoxes(dir)
 	if e != nil {
 		return nil, e
 	}
