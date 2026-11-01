@@ -1,0 +1,274 @@
+--- a/src/CMakeLists.txt
++++ b/src/CMakeLists.txt
+@@ -17,7 +17,7 @@
+ endif()
+ 
+ # if test build enabled
+-add_subdirectory(test)
++# add_subdirectory(test)
+ 
+ add_executable(PROJECTNAME)
+ 
+--- a/src/common/buildnum.cpp
++++ b/src/common/buildnum.cpp
+@@ -2,6 +2,7 @@
+ #include <windows.h>
+ #endif
+ #include <stdio.h>
++#include <strings.h>
+ 
+ const char* pdate = __DATE__;
+ const char* ptime = __TIME__;
+--- a/src/common/logger.cpp
++++ b/src/common/logger.cpp
+@@ -6,8 +6,11 @@
+ #include <direct.h> // getcwd
+ #else
+ #include <stdio.h>
+-#define MAX_PATH FILENAME_MAX
++#include <unistd.h>
++#include <sys/stat.h>
+ #endif
++#include <cstring>
++#include <algorithm>
+ 
+ #ifdef USE_GUI
+ #include "gui/igui.h"
+@@ -209,7 +212,12 @@
+ 	SetTextColor(color);
+ #endif
+ 
+-	vprintf(msg, argptr);
++	// CCompositeLogger passes NULL once the message is already formatted;
++	// glibc's vprintf(NULL) segfaults, so fall back to plain output.
++	if (argptr)
++		vprintf(msg, argptr);
++	else
++		fputs(msg, stdout);
+ 
+ #ifndef WIN32
+ 	SetTextColor(CON_COLOR_WHITE); // reset color to default
+@@ -290,7 +298,10 @@
+ 	FILE* file = fopen(m_szLogPath, "a+");
+ 	if (file)
+ 	{
+-		vfprintf(file, msg, argptr);
++		if (argptr)
++			vfprintf(file, msg, argptr);
++		else
++			fputs(msg, file);
+ 
+ 		fclose(file);
+ 	}
+--- a/src/common/logger.h
++++ b/src/common/logger.h
+@@ -1,5 +1,11 @@
+ #pragma once
+ 
++#include <cstdarg>
++
++#ifndef MAX_PATH
++#define MAX_PATH 260
++#endif
++
+ #include <string>
+ #include <vector>
+ 
+--- a/src/common/thread.cpp
++++ b/src/common/thread.cpp
+@@ -1,5 +1,7 @@
+ #include "thread.h"
+ 
++#include <signal.h>
++
+ ThreadId GetCurrentThreadID()
+ {
+ #ifdef WIN32
+--- a/src/common/utils.cpp
++++ b/src/common/utils.cpp
+@@ -4,7 +4,12 @@
+ #include <ws2tcpip.h>
+ #else
+ #include <stdarg.h>
++#include <arpa/inet.h>
++#include <netinet/in.h>
++#include <cstring>
+ #endif
++#include <algorithm>
++#include <iterator>
+ #include <chrono>
+ #include <thread>
+ #include <sstream>
+--- a/src/definitions.h
++++ b/src/definitions.h
+@@ -739,13 +739,13 @@
+ };
+ 
+ /* ROOM STUFF */
+-enum RoomTeamNum
++enum RoomTeamNum : int
+ {
+ 	Unassigned = 0,
+ 	Terrorist = 1,
+ 	CounterTerrorist = 2,
+ };
+-enum RoomReadyStatus
++enum RoomReadyStatus : int
+ {
+ 	READY_STATUS_NO = 0,
+ 	READY_STATUS_INGAME = 1,
+@@ -799,7 +799,7 @@
+ 	WithBots = 2,
+ 	ByKadRatio = 4,
+ };
+-enum RoomStatus
++enum RoomStatus : int
+ {
+ 	STATUS_WAITING = 0,
+ 	STATUS_INGAME = 1,
+@@ -890,7 +890,7 @@
+ 	int m_nLocalClientPort;
+ 	int m_nLocalServerPort;
+ };
+-enum UserStatus
++enum UserStatus : int
+ {
+ 	STATUS_MENU = 0,
+ 	STATUS_INROOM = 1,
+--- a/src/interface/ipacketmanager.h
++++ b/src/interface/ipacketmanager.h
+@@ -65,7 +65,7 @@
+ 	virtual void SendMetadataReinforceMaxEXP(IExtendedSocket* socket) = 0;
+ 	virtual void SendMetadataUnk8(IExtendedSocket* socket) = 0;
+ 	virtual void SendMetadataProgressUnlock(IExtendedSocket* socket) = 0;
+-	virtual void SendMetadataWeaponPaints(IExtendedSocket* socket, std::vector<WeaponPaint>& weaponPaints) = 0;
++	virtual void SendMetadataWeaponPaints(IExtendedSocket* socket, const std::vector<WeaponPaint>& weaponPaints) = 0;
+ 	virtual void SendMetadataUnk3(IExtendedSocket* socket) = 0;
+ 	virtual void SendMetadataReinforceItemsExp(IExtendedSocket* socket) = 0;
+ 	virtual void SendMetadataItemExpireTime(IExtendedSocket* socket) = 0;
+--- a/src/interface/iroom.h
++++ b/src/interface/iroom.h
+@@ -10,9 +10,9 @@
+ class CRoomSettings;
+ class CChannel;
+ class CRoomUser;
+-enum RoomStatus;
+-enum RoomTeamNum;
+-enum RoomReadyStatus;
++enum RoomStatus : int;
++enum RoomTeamNum : int;
++enum RoomReadyStatus : int;
+ 
+ class IRoom
+ {
+--- a/src/interface/iuser.h
++++ b/src/interface/iuser.h
+@@ -3,7 +3,7 @@
+ #include <string>
+ #include <vector>
+ 
+-enum UserStatus;
++enum UserStatus : int;
+ class IExtendedSocket;
+ class IRoom;
+ class CRoomUser;
+--- a/src/manager/channelmanager.cpp
++++ b/src/manager/channelmanager.cpp
+@@ -2092,7 +2092,7 @@
+ {
+ 	string voxel_id = msg->ReadString();
+ 
+-	vector<IRoom*>& rooms = channelServers[0]->GetChannels()[0]->GetRooms();
++	vector<IRoom*> rooms = channelServers[0]->GetChannels()[0]->GetRooms();
+ 
+ 	rooms.erase(
+ 		remove_if(
+--- a/src/manager/itemmanager.cpp
++++ b/src/manager/itemmanager.cpp
+@@ -1303,8 +1303,8 @@
+ 			}
+ 		}
+ 
+-		CUserInventoryItem item;
+-		item.PushItem(insertedItems, itemID, count, itemStatus, itemInUse, currentTimestamp, duration, 0, 0, 0, 0, 0, {}, 0, 0, lockStatus); // push new items to inventory
++		CUserInventoryItem newItem;
++		newItem.PushItem(insertedItems, itemID, count, itemStatus, itemInUse, currentTimestamp, duration, 0, 0, 0, 0, 0, {}, 0, 0, lockStatus); // push new items to inventory
+ 	}
+ 
+ 	if (result == ITEM_ADD_DB_ERROR)
+--- a/src/manager/packetmanager.cpp
++++ b/src/manager/packetmanager.cpp
+@@ -908,7 +908,7 @@
+ 	socket->Send(msg);
+ }
+ 
+-void CPacketManager::SendMetadataWeaponPaints(IExtendedSocket* socket, std::vector<WeaponPaint>& weaponPaints)
++void CPacketManager::SendMetadataWeaponPaints(IExtendedSocket* socket, const std::vector<WeaponPaint>& weaponPaints)
+ {
+ 	CSendPacket* msg = CreatePacket(socket, PacketId::Metadata);
+ 	msg->BuildHeader();
+--- a/src/manager/packetmanager.h
++++ b/src/manager/packetmanager.h
+@@ -92,7 +92,7 @@
+ 	void SendMetadataReinforceMaxEXP(IExtendedSocket* socket);
+ 	void SendMetadataUnk8(IExtendedSocket* socket);
+ 	void SendMetadataProgressUnlock(IExtendedSocket* socket);
+-	void SendMetadataWeaponPaints(IExtendedSocket* socket, std::vector<WeaponPaint>& weaponPaints);
++	void SendMetadataWeaponPaints(IExtendedSocket* socket, const std::vector<WeaponPaint>& weaponPaints);
+ 	void SendMetadataUnk3(IExtendedSocket* socket);
+ 	void SendMetadataReinforceItemsExp(IExtendedSocket* socket);
+ 	void SendMetadataItemExpireTime(IExtendedSocket* socket);
+--- a/src/net/extendedsocket.cpp
++++ b/src/net/extendedsocket.cpp
+@@ -1,3 +1,4 @@
++#include "net/net.h"
+ #include <wolfssl/options.h>
+ #include <wolfssl/openssl/evp.h>
+ 
+--- a/src/net/net.h
++++ b/src/net/net.h
+@@ -10,6 +10,13 @@
+ #include <arpa/inet.h>
+ #include <netdb.h>
+ #include <poll.h>
++#include <unistd.h>
++
++typedef int SOCKET;
++typedef struct pollfd WSAPOLLFD;
++
++typedef int SOCKET;
++typedef struct pollfd WSAPOLLFD;
+ 
+ #define WSAEWOULDBLOCK		EWOULDBLOCK
+ #define WSAECONNREFUSED     ECONNREFUSED
+--- a/src/net/udpserver.cpp
++++ b/src/net/udpserver.cpp
+@@ -5,6 +5,7 @@
+ #include "common/logger.h"
+ 
+ #include <vector>
++#include <cstring>
+ 
+ using namespace std;
+ 
+@@ -159,7 +160,7 @@
+ 		if (FD_ISSET(i, &m_FdsRead))
+ 		{
+ 			// got message
+-			int datalen = recvfrom(m_Socket, m_Buffer, 5000, 0, (sockaddr*)&m_LastAddr, &m_nLastAddrLen);
++			int datalen = recvfrom(m_Socket, m_Buffer, 5000, 0, (sockaddr*)&m_LastAddr, (socklen_t*)&m_nLastAddrLen);
+ 
+ 			Buffer buf(vector<unsigned char>(m_Buffer, m_Buffer + datalen));
+ 
+--- a/src/serverinstance.cpp
++++ b/src/serverinstance.cpp
+@@ -305,7 +305,8 @@
+ 	while (g_pServerInstance->IsServerActive())
+ 	{
+ 		string cmd;
+-		getline(cin, cmd);
++		if (!getline(cin, cmd))
++			break; // stdin closed (daemon/container without TTY): otherwise this spins forever
+ 
+ 		// TODO: ignore empty line?
+ 

@@ -1,0 +1,26 @@
+# 版本控制与 CI
+.git
+.gitignore
+.gitattributes
+.github
+
+# 文档、部署元数据与开发工具（镜像不需要）
+*.md
+LICENSE
+info.json
+Dockerfile
+.dockerignore
+docker-compose.yml
+.claude
+.agents
+.codex
+.idea
+*.iml
+
+# 上游源码快照与本地构建产物
+.ref/
+.dist/
+
+# 运行期数据（绝不可进镜像）
+/data/
+*.log

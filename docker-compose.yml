@@ -1,0 +1,14 @@
+services:
+    counter-strike-online:
+        container_name: counter-strike-online-server
+        # 就地构建并打上 GHCR 同名 tag；只想拉现成镜像就去掉 build: 这一行。
+        build: .
+        image: ghcr.io/hm-gamesrv/counter-strike-online:latest
+        ports:
+            - 30002:30002/tcp
+            - 30002:30002/udp
+        volumes:
+            # 容器以 UID/GID 1000 运行；目录不存在时 Docker 会以 root 创建，
+            # 容器随后启动失败。首次使用请先 mkdir -p data。
+            - ./data:/data
+        restart: unless-stopped

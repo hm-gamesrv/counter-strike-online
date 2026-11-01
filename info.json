@@ -1,0 +1,45 @@
+{
+    "schemaVersion": 1,
+    "key": "counter-strike-online",
+    "name": "Counter-Strike Online",
+    "registries": {
+        "ghcr": "ghcr.io/hm-gamesrv/",
+        "aliyun": "crpi-i9e7zrpnu4792a5m.cn-chengdu.personal.cr.aliyuncs.com/hiromuraki/"
+    },
+    "resources": {
+        "ports": [
+            {
+                "host": "30002",
+                "container": "30002",
+                "proto": "tcp",
+                "required": true,
+                "desc": "游戏主连接（登录、大厅、房间）"
+            },
+            {
+                "host": "30002",
+                "container": "30002",
+                "proto": "udp",
+                "required": true,
+                "desc": "联机通信（UDP 打洞）"
+            }
+        ],
+        "volumes": [
+            {
+                "host": "./data",
+                "container": "/data",
+                "required": true,
+                "desc": "服务器配置、元数据表与玩家数据库"
+            }
+        ],
+        "env": [],
+        "extraArgs": ""
+    },
+    "variants": [
+        {
+            "key": "latest",
+            "name": "最新构建版",
+            "tag": "latest",
+            "container": "counter-strike-online-server"
+        }
+    ]
+}

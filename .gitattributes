@@ -1,0 +1,6 @@
+# 全仓库统一 LF 行尾。
+#
+# patches/linux-build.patch 必须保持 LF，否则 patch(1) 在容器里
+# 会以行尾不匹配为由拒绝应用；构建脚本一律 LF。
+# text=auto 只作用于 git 判定为文本的文件，二进制资产不受影响。
+* text=auto eol=lf
