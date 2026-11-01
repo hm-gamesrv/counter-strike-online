@@ -41,7 +41,7 @@
 | 17 WeaponPaintReq | `itemmanager.cpp:2533` | 已实现：涂装获取、消耗涂装道具 |
 | 24 WeaponPaintSwitchReq | `itemmanager.cpp:2580` | 已实现：涂装切换/移除 |
 | 21 Part | `itemmanager.cpp:2628` | 已实现：部件装配/卸下、消耗部件 |
-| 9 / 15 Tattoo/Costume | `itemmanager.cpp:2834` | 已实现：头/背/臂/骨盆/脸/纹身/宠物；ZB 皮肤未接 |
+| 9 / 15 Tattoo/Costume | `itemmanager.cpp:2834` | 已实现：头/背/臂/骨盆/脸/纹身/宠物、按 `ZombieSkin` 类型区分的 ZB 皮肤 |
 
 上游为空的子类型（不迁移）：5 WeaponAssem、6 MaterialAssem（空 `break`）、8 DailyRewards（仅日志）。
 
@@ -65,7 +65,7 @@
 
 | 模块 | 规模（上游） | 现状与差距 |
 | --- | --- | --- |
-| 道具养成 | itemmanager 2,986 行 + luckyitem 396 行 | 开箱、延期、涂装、部件与服装已实现；分解、强化、ZB 皮肤仍缺，是当前最大空白 |
+| 道具养成 | itemmanager 2,986 行 + luckyitem 396 行 | 开箱、延期、涂装、部件、普通服装与 ZB 皮肤已实现；分解、强化仍缺，是当前最大空白 |
 | 军团 | clanmanager 1,077 行 + 7 张表 | 完全缺失：创建/申请/审批/成员管理/仓库/军团任务/军团聊天 |
 | 小游戏 | minigamemanager 482 行 + 5 张表 | Bingo、武器解放全缺 |
 | 房间设置校验 | roomsettings 2,655 行 | Go 虽读取 `Room.ValidateSettings` 配置项但代码从未使用；上游按模式/地图校验人数、胜负限制、playlist、zbLimit、家族战、superRoom 等 |
@@ -73,12 +73,12 @@
 | 对局结算补全 | gamematch 709 行 | 已有基础结算与等级/职业加成；缺道具加成（`GameMatch.CalcResults.BonusPercentage.Items` 已读未用）、模式统计事件（炸弹/拆弹/人质/怪物/蚊子/风筝）、场景掉落箱奖励（rewardID 3000–3023）、ZBS 名次奖励、第一名计算 |
 | 多频道 | channelmanager | 上游 `channelmanager.cpp:23` 自述 `TODO: Should we implement multi channels?`，不必实现 |
 
-## 四、数据库：45 张表中 35 张未被任何 Go 代码引用
+## 四、数据库：45 张表中 30 张未被任何 Go 代码引用
 
 `internal/store/schema.sql` 已与上游完全一致（45 表），缺的是读写逻辑：
 
 - 军团 7 张：`Clan`、`ClanMember`、`ClanInvite`、`ClanMemberRequest`、`ClanStorageItem`、`ClanStoragePage`、`ClanChronicle`
-- 玩家外围：`UserCostumeLoadout`、`UserZBCostumeLoadout`、`UserSurveyAnswer`、`UserExpiryNotice`、`UserRewardNotice`、`UserSession`、`UserSessionHistory`、`UserRestore`、`UserDist`、`TimeConfig`（`UserBanList`、`UserFastBuy`、`UserAddon` 已接入）
+- 玩家外围：`UserSurveyAnswer`、`UserExpiryNotice`、`UserRewardNotice`、`UserSession`、`UserSessionHistory`、`UserRestore`、`UserDist`、`TimeConfig`（`UserBanList`、`UserFastBuy`、`UserAddon`、`UserCostumeLoadout`、`UserZBCostumeLoadout` 已接入）
 - 小游戏 5 张：`UserMiniGameBingo`、`UserMiniGameBingoPrizeSlot`、`UserMiniGameBingoSlot`、`UserMiniGameWeaponReleaseCharacters`、`UserMiniGameWeaponReleaseItemProgress`
 - 任务与排行：`UserQuest*`（Go 改用 `GoQuest*` 扩展表）、`UserRank`
 - 管理与风控：`HWIDBanList`、`IPBanList`、`SuspectAction`、`RelationProducts`、`UserDailyReward`、`UserDailyRewardItems`

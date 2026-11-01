@@ -390,7 +390,8 @@ func (s *Server) toggleCostume(c *client, gameSlot int) error {
 		c.notice("Item unavailable.")
 		return nil
 	}
-	changed, err := s.Store.ToggleCostume(c.user.ID, slot, s.items[target.ID].ClassName)
+	definition := s.items[target.ID]
+	changed, err := s.Store.ToggleCostume(c.user.ID, slot, definition.ClassName, definition.ZombieSkin)
 	if errors.Is(err, store.ErrItemUnavailable) {
 		c.notice("Item unavailable.")
 		return nil

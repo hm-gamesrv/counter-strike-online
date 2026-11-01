@@ -17,13 +17,14 @@ import (
 )
 
 type itemDefinition struct {
-	Category  int
-	UseType   int
-	RewardID  int
-	Level     int
-	InGame    bool
-	ClassName string
-	Resource  string
+	Category   int
+	UseType    int
+	RewardID   int
+	Level      int
+	InGame     bool
+	ClassName  string
+	Resource   string
+	ZombieSkin int
 }
 
 // itemBoxAward is one rolled decoder prize. Duration follows the client
@@ -212,7 +213,7 @@ func loadItems(dir string) (map[int]itemDefinition, error) {
 		if index := header["recourcename"]; index < len(row) {
 			resource = row[index]
 		}
-		result[id] = itemDefinition{Category: value("Category"), UseType: value("UseType"), RewardID: value("rewardID"), Level: value("Level"), InGame: value("InGameItem") != 0, ClassName: class, Resource: resource}
+		result[id] = itemDefinition{Category: value("Category"), UseType: value("UseType"), RewardID: value("rewardID"), Level: value("Level"), InGame: value("InGameItem") != 0, ClassName: class, Resource: resource, ZombieSkin: value("ZombieSkin")}
 	}
 	if len(result) == 0 {
 		return nil, fmt.Errorf("Item.csv has no items")
