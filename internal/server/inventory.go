@@ -178,6 +178,23 @@ func (s *Server) openItemBox(c *client, first, second int) error {
 	return nil
 }
 
+func (s *Server) extendItem(c *client, gameSlot, days int) error {
+	slot := gameSlot - len(s.Config.DefaultUser.DefaultItems)
+	if slot <= 0 {
+		c.notice("Item unavailable.")
+		return nil
+	}
+	changed, err := s.Store.ExtendItem(c.user.ID, slot, 676, days)
+	if errors.Is(err, store.ErrItemUnavailable) {
+		c.notice("Item unavailable.")
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	return s.sendInventoryItems(c, changed)
+}
+
 func (s *Server) itemRequest(c *client, p *protocol.Reader) error {
 	kind := p.U8()
 	var slot, inventoryType, count int
@@ -216,6 +233,16 @@ func (s *Server) itemRequest(c *client, p *protocol.Reader) error {
 		}
 		c.send(78, &protocol.Writer{Data: []byte{14, 5}})
 		return nil
+	case 16:
+		p.U8()
+		slot, days := p.U16(), p.U16()
+		if p.Err != nil {
+			return p.Err
+		}
+		if p.Pos != len(p.Data) {
+			return errors.New("unexpected item extension tail")
+		}
+		return s.extendItem(c, slot, days)
 	case 10, 11, 12: // Background decoder/gift notifications do not open dialogs.
 		return p.Err
 	default:

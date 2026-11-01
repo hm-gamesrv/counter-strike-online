@@ -11,7 +11,7 @@
 | `manager/channelmanager.cpp`、`room/roomsettings.cpp` | `internal/server/{rooms,room_defaults,room_social,host}.go` | 已实现邀请、房主踢人及踢出名单；仍缺完整设置校验、投票踢人、特殊模式限制与地图轮换 |
 | `manager/packetmanager.cpp` | `internal/server/{metadata,lobby,rooms,shop}.go` | 随各业务逐项实现出站结构 |
 | `manager/shopmanager.cpp` | `internal/server/shop.go`、`internal/store/purchase.go` | 当前客户端购买、计数堆叠和密码箱计数已实现；完整延期规则、礼包校验仍缺 |
-| `manager/itemmanager.cpp` | `internal/server/{inventory,rewards,reward_claims,reward_random}.go`、`internal/store/{inventory,purchase,rewards,reward_claims}.go` | 已实现武器/角色启用、选择副本、锁定/解锁、固定/选择/随机奖励与领取去重；仍缺完整合并/延期、装饰装备、强化/分解/皮肤/部件 |
+| `manager/itemmanager.cpp` | `internal/server/{inventory,rewards,reward_claims,reward_random}.go`、`internal/store/{inventory,purchase,rewards,reward_claims,item_extend}.go` | 已实现武器/角色启用、选择副本、锁定/解锁、固定/选择/随机奖励与领取去重、开箱、延期；仍缺完整合并、装饰装备、强化/分解/皮肤/部件 |
 | `manager/{host,dedicatedserver}manager.cpp`、`room/gamematch.cpp` | `internal/server/{host,dedicated,catalog}.go`、`internal/store/{match,levels}.go` | 已实现开局、主机背包、计数、存档迁移、专服池与基础结算；尚需真实客户端/HLDS 对局验收、事件奖励及特殊模式规则 |
 | `manager/questmanager.cpp`、`quest/questevent.*` | `internal/server/quests.go`、`internal/store/{quests,quest_events}.go` | 已接活动任务条件与持久化进度、完成奖励；尚缺任务界面、每日/荣誉/军团任务、VIP 事件及完整实机验收 |
 | `manager/{clan,rank,minigame,luckyitem,voxel}manager.cpp` | 未实现（仅部分元数据） | 各业务状态与协议完整迁移 |
@@ -141,6 +141,14 @@
 - 接入 `93 Messenger` 类型 1：按昵称查询目标角色，返回 `[1, userID, "22223123132", FullUserInfo]`。
 - 查询使用 `COLLATE NOCASE`；找不到时返回 `userID=0` 和请求中的昵称，不泄露其他账号信息。
 - 新增测试覆盖命中目标角色和不存在昵称。`go test ./...`、`go vet ./...` 通过；未做实机界面验收。
+
+## 2026-11-02 道具延期
+
+- 接入 `78/16 ItemExtend`：目标槽位按天延长，消耗 `676` 延长道具；目标有效期为 0（永久）时拒绝，避免误扣。
+- 活跃道具按 `days * 1440` 分钟延长；休眠道具按相对天数延长；达到 999 天规则时转为永久。
+- 目标更新和延长道具扣减在同一 SQLite 事务内完成，失败整体回滚；返回背包增量，延长道具耗尽时发送空槽。
+- 新增测试覆盖正常延期和永久目标不扣道具。`go test ./...`、`go vet ./...` 通过；未做实机界面验收。
+
 
 
 
