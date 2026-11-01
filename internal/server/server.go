@@ -394,6 +394,8 @@ func (s *Server) dispatch(c *client, p protocol.Packet) error {
 			return s.banRequest(c, r)
 		case 78:
 			return s.itemRequest(c, r)
+		case 84:
+			return s.titleRequest(c, r)
 		case 93:
 			return s.messengerRequest(c, r)
 		case 115:

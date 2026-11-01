@@ -10,10 +10,23 @@ import (
 	"github.com/hm-gamesrv/cso-server-go/internal/store"
 )
 
+// achievementBitmap packs unlocked title IDs into the fixed 128-byte bitmap
+// the client expects for the achievement list section.
+func achievementBitmap(list []int) []byte {
+	bitmap := make([]byte, 128)
+	for _, id := range list {
+		if id <= 0 || id >= len(bitmap)*8 {
+			continue
+		}
+		bitmap[id/8] |= 1 << (id % 8)
+	}
+	return bitmap
+}
+
 func userInfo(w *protocol.Writer, c store.Character) {
 	// Only advertise fields actually serialized below; absent flags preserve
-	// client defaults and avoid fabricating clan, ranking or achievement state.
-	w.U32(1<<1 | 1<<3 | 1<<5 | 1<<6 | 1<<7 | 1<<8 | 1<<9 | 1<<16 | 1<<18 | 1<<26 | 1<<27)
+	// client defaults and avoid fabricating clan or ranking state.
+	w.U32(1<<1 | 1<<3 | 1<<5 | 1<<6 | 1<<7 | 1<<8 | 1<<9 | 1<<16 | 1<<18 | 1<<19 | 1<<22 | 1<<26 | 1<<27)
 	w.U32(1)
 	w.String(c.Name)
 	w.U32(c.Level)
@@ -37,6 +50,10 @@ func userInfo(w *protocol.Writer, c store.Character) {
 	w.U8(0)
 	w.U8(0)
 	w.U32(c.HonorPoints)
+	w.Bytes(achievementBitmap(c.Achievements))
+	for _, title := range c.Titles {
+		w.U16(title)
+	}
 	w.U32(c.MileagePoints)
 	w.U32(0)
 	w.U32(c.ID)

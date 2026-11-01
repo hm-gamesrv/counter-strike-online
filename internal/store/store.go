@@ -41,6 +41,8 @@ type Character struct {
 	MileagePoints int
 	HonorPoints   int
 	PrefixID      int
+	Titles        [TitleSlots]int
+	Achievements  []int
 	ChatColorID   int
 	Nation        int
 	City          int
@@ -199,8 +201,20 @@ func (s *Store) Login(name, password, ip string, hwid []byte) (User, error) {
 }
 func (s *Store) Character(id int) (Character, error) {
 	c := Character{ID: id}
-	e := s.DB.QueryRow("SELECT gameName,level,exp,points,cash,battles,win,kills,deaths,passwordBoxes,mileagePoints,honorPoints,prefixID,chatColorID,nation,city,town FROM UserCharacter WHERE userID=?", id).Scan(&c.Name, &c.Level, &c.Exp, &c.Points, &c.Cash, &c.Battles, &c.Win, &c.Kills, &c.Deaths, &c.PasswordBoxes, &c.MileagePoints, &c.HonorPoints, &c.PrefixID, &c.ChatColorID, &c.Nation, &c.City, &c.Town)
-	return c, e
+	var achievements, titles string
+	e := s.DB.QueryRow("SELECT gameName,level,exp,points,cash,battles,win,kills,deaths,passwordBoxes,mileagePoints,honorPoints,prefixID,chatColorID,nation,city,town,achievementList,titles FROM UserCharacter WHERE userID=?", id).Scan(&c.Name, &c.Level, &c.Exp, &c.Points, &c.Cash, &c.Battles, &c.Win, &c.Kills, &c.Deaths, &c.PasswordBoxes, &c.MileagePoints, &c.HonorPoints, &c.PrefixID, &c.ChatColorID, &c.Nation, &c.City, &c.Town, &achievements, &titles)
+	if e != nil {
+		return c, e
+	}
+	if c.Achievements, e = parseIntList(achievements); e != nil {
+		return c, e
+	}
+	values, e := parseIntList(titles)
+	if e != nil {
+		return c, e
+	}
+	copy(c.Titles[:], values)
+	return c, nil
 }
 func (s *Store) CharacterByName(name string) (Character, error) {
 	var id int
