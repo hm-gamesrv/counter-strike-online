@@ -45,8 +45,11 @@ func (s *Store) ToggleCostume(id, slot int, className string) ([]Item, error) {
 		return nil, ErrItemUnavailable
 	}
 	loadout := [7]int{}
+	exists := true
 	err = tx.QueryRow("SELECT head,back,arm,pelvis,face,tattoo,pet FROM UserCostumeLoadout WHERE userID=?", id).Scan(&loadout[0], &loadout[1], &loadout[2], &loadout[3], &loadout[4], &loadout[5], &loadout[6])
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+	if errors.Is(err, sql.ErrNoRows) {
+		exists = false
+	} else if err != nil {
 		return nil, err
 	}
 	changed := []Item{}
@@ -74,16 +77,13 @@ func (s *Store) ToggleCostume(id, slot int, className string) ([]Item, error) {
 	}
 	target.InUse = newInUse
 	changed = append(changed, target)
-	result, err := tx.Exec("UPDATE UserCostumeLoadout SET head=?,back=?,arm=?,pelvis=?,face=?,tattoo=?,pet=? WHERE userID=?", loadout[0], loadout[1], loadout[2], loadout[3], loadout[4], loadout[5], loadout[6], id)
+	if exists {
+		_, err = tx.Exec("UPDATE UserCostumeLoadout SET head=?,back=?,arm=?,pelvis=?,face=?,tattoo=?,pet=? WHERE userID=?", loadout[0], loadout[1], loadout[2], loadout[3], loadout[4], loadout[5], loadout[6], id)
+	} else {
+		_, err = tx.Exec("INSERT INTO UserCostumeLoadout(userID,head,back,arm,pelvis,face,tattoo,pet) VALUES(?,?,?,?,?,?,?,?)", id, loadout[0], loadout[1], loadout[2], loadout[3], loadout[4], loadout[5], loadout[6])
+	}
 	if err != nil {
 		return nil, err
-	}
-	if n, err := result.RowsAffected(); err != nil {
-		return nil, err
-	} else if n == 0 {
-		if _, err = tx.Exec("INSERT INTO UserCostumeLoadout(userID,head,back,arm,pelvis,face,tattoo,pet) VALUES(?,?,?,?,?,?,?,?)", id, loadout[0], loadout[1], loadout[2], loadout[3], loadout[4], loadout[5], loadout[6]); err != nil {
-			return nil, err
-		}
 	}
 	if err = tx.Commit(); err != nil {
 		return nil, err

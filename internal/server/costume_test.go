@@ -84,3 +84,35 @@ func TestCostumeToggleAndReplacement(t *testing.T) {
 		t.Fatalf("head after unequip %d", head)
 	}
 }
+func TestCostumeDoesNotDuplicateLoadout(t *testing.T) {
+	db, err := store.Open(filepath.Join(t.TempDir(), "costume.db3"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if err = db.Register("costumeuser", "secret1", "127.0.0.1", 0); err != nil {
+		t.Fatal(err)
+	}
+	if err = db.CreateCharacter(1, "CostumeUser", config.DefaultUser{Level: 1}); err != nil {
+		t.Fatal(err)
+	}
+	now := int(time.Now().Unix() / 60)
+	if _, err = db.DB.Exec("INSERT INTO UserInventory(userID,slot,itemID,count,status,inUse,obtainDate,expiryDate,isClanItem,enhancementLevel,enhancementExp,enhanceValue,paintID,partSlot1,partSlot2,lockStatus) VALUES(1,2,471,1,1,0,?,0,0,0,0,0,0,0,0,0)", now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = db.DB.Exec("INSERT INTO UserCostumeLoadout(userID,head,back,arm,pelvis,face,tattoo,pet) VALUES(1,471,0,0,0,0,0,0)"); err != nil {
+		t.Fatal(err)
+	}
+	s := &Server{Store: db, Config: config.Config{InventorySlotMax: 10}, items: map[int]itemDefinition{471: {ClassName: "HeadCostume"}}}
+	c := &client{user: store.User{ID: 1}, character: store.Character{ID: 1, Name: "CostumeUser"}, queue: make(chan outbound, 8)}
+	if err = s.dispatch(c, protocol.Packet{ID: 78, Data: []byte{9, 2, 0}}); err != nil {
+		t.Fatal(err)
+	}
+	var rows int
+	if err = db.DB.QueryRow("SELECT count(*) FROM UserCostumeLoadout WHERE userID=1").Scan(&rows); err != nil {
+		t.Fatal(err)
+	}
+	if rows != 1 {
+		t.Fatalf("costume loadout rows %d", rows)
+	}
+}
