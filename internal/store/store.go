@@ -202,6 +202,14 @@ func (s *Store) Character(id int) (Character, error) {
 	e := s.DB.QueryRow("SELECT gameName,level,exp,points,cash,battles,win,kills,deaths,passwordBoxes,mileagePoints,honorPoints,prefixID,chatColorID,nation,city,town FROM UserCharacter WHERE userID=?", id).Scan(&c.Name, &c.Level, &c.Exp, &c.Points, &c.Cash, &c.Battles, &c.Win, &c.Kills, &c.Deaths, &c.PasswordBoxes, &c.MileagePoints, &c.HonorPoints, &c.PrefixID, &c.ChatColorID, &c.Nation, &c.City, &c.Town)
 	return c, e
 }
+func (s *Store) CharacterByName(name string) (Character, error) {
+	var id int
+	if err := s.DB.QueryRow("SELECT userID FROM UserCharacter WHERE gameName=? COLLATE NOCASE", name).Scan(&id); err != nil {
+		return Character{}, err
+	}
+	return s.Character(id)
+}
+
 func (s *Store) CreateCharacter(id int, name string, d config.DefaultUser) error {
 	if len(name) < 4 || len(name) > MaxCharacterNameLength || !validName.MatchString(name) {
 		return errors.New("Character name must be 4..16 English letters or digits.")

@@ -7,7 +7,7 @@
 | `net/{extendedsocket,sendpacket,receivepacket}.cpp` | `internal/protocol` | SSL、实客户端抓包验证 |
 | `serverconfig.cpp` | `internal/config` | 随业务迁移补齐配置项 |
 | `manager/userdatabase_sqlite.cpp` | `internal/store` | 其余角色字段、会话历史、封禁规则、迁移工具 |
-| `manager/usermanager.cpp` | `internal/server/{server,lobby,ban,update_info}.go` | 完整 UserInfo、装备、调查；改名/位置/聊天色已实现，屏蔽名单已实现列表/设置/登录下发及聊天、私聊、房间加入过滤 |
+| `manager/usermanager.cpp` | `internal/server/{server,lobby,ban,update_info,messenger}.go` | 完整 UserInfo、装备、调查；改名/位置/聊天色、Messenger 已实现，屏蔽名单已实现列表/设置/登录下发及聊天、私聊、房间加入过滤 |
 | `manager/channelmanager.cpp`、`room/roomsettings.cpp` | `internal/server/{rooms,room_defaults,room_social,host}.go` | 已实现邀请、房主踢人及踢出名单；仍缺完整设置校验、投票踢人、特殊模式限制与地图轮换 |
 | `manager/packetmanager.cpp` | `internal/server/{metadata,lobby,rooms,shop}.go` | 随各业务逐项实现出站结构 |
 | `manager/shopmanager.cpp` | `internal/server/shop.go`、`internal/store/purchase.go` | 当前客户端购买、计数堆叠和密码箱计数已实现；完整延期规则、礼包校验仍缺 |
@@ -135,5 +135,12 @@
 - 接入位置 `69/4`：保存 `nation/city/town` 并在 `157` 用户信息中按 `UFLAG_LOW_LOCATION` 序列化；教程标记按上游只读取、不持久化。
 - 接入聊天颜色 `69/15`：校验物品资源名包含 `chatcolor_` 且玩家实际持有，更新 `UserCharacter.chatColorID` 并广播。
 - 新增测试覆盖改名成功/重复名/缺道具、位置保存/广播及聊天色持有校验。`go test ./...`、`go vet ./...` 通过；未做实机界面验收。
+
+## 2026-11-02 Messenger 资料查询
+
+- 接入 `93 Messenger` 类型 1：按昵称查询目标角色，返回 `[1, userID, "22223123132", FullUserInfo]`。
+- 查询使用 `COLLATE NOCASE`；找不到时返回 `userID=0` 和请求中的昵称，不泄露其他账号信息。
+- 新增测试覆盖命中目标角色和不存在昵称。`go test ./...`、`go vet ./...` 通过；未做实机界面验收。
+
 
 
