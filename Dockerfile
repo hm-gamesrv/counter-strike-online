@@ -1,4 +1,7 @@
 FROM golang:1.27-bookworm AS build
+# 国内网络可 --build-arg GOPROXY=https://goproxy.cn,direct
+ARG GOPROXY=https://proxy.golang.org,direct
+ENV GOPROXY=${GOPROXY}
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
