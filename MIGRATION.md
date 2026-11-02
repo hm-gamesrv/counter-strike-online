@@ -14,7 +14,7 @@
 | `manager/itemmanager.cpp` | `internal/server/{inventory,rewards,reward_claims,reward_random}.go`、`internal/store/{inventory,purchase,rewards,reward_claims,item_extend,paint,part,costume}.go` | 已实现武器/角色启用、选择副本、锁定/解锁、固定/选择/随机奖励与领取去重、开箱、延期、武器涂装、部件、普通服装、ZB 皮肤、强化（含防降级）与删除式分解；仍缺完整合并 |
 | `manager/{host,dedicatedserver}manager.cpp`、`room/gamematch.cpp` | `internal/server/{host,dedicated,catalog}.go`、`internal/store/{match,levels}.go` | 已实现开局、主机背包、计数、存档迁移、专服池、场景道具使用、场景掉落箱奖励、装备加成与基础结算；尚需真实客户端/HLDS 对局验收、ZBS 名次奖励及特殊模式规则 |
 | `manager/questmanager.cpp`、`quest/questevent.*` | `internal/server/{quests,title}.go`、`internal/store/{quests,quest_events,title}.go` | 已接活动任务条件与持久化进度、完成奖励，以及 `84` 称号前缀/槽位；尚缺任务界面、每日/荣誉/军团任务及称号解锁、VIP 事件与完整实机验收 |
-| `manager/{clan,rank,minigame,luckyitem,voxel}manager.cpp` | `internal/store/clan.go`（军团存储层） | 军团 7 张表的创建/申请/审批/邀请/退出/列表已落地；协议入口、仓库、军团任务、排行、小游戏、抽奖与 Voxel 仍缺 |
+| `manager/{clan,rank,minigame,luckyitem,voxel}manager.cpp` | `internal/server/{clan,minigame}.go`、`internal/store/{clan,clan_storage,weapon_release}.go` | 军团 7 张表、协议与仓库已接；武器解放配置/进度/选字/发奖已接；仍缺军团任务、军团战、Bingo、排行、抽奖与 Voxel |
 
 当前已跑通真实客户端机器人对局、正常结算和返回房间。后续优先级按用户要求执行下表；每项应以原版出入站协议样本、当前客户端和数据库前后快照校验。
 
@@ -325,6 +325,14 @@
 - 存入按当前成员等级与页权限校验，整堆移动到第一个空仓库格；取出检查背包容量、永久道具重复、同 ID 军团道具重复，并清空仓库格。
 - 仓库物品保留绝对到期时间与强化值；历史包返回空列表，避免上游 `SendClanStorageHistory` 的客户端崩溃路径。
 - 新增测试覆盖存入扣背包、分页读取、取出入背包、删除权限、页权限、仓库满与永久/军团道具重复。`go test ./...`、`go vet ./...` 通过；未做实机界面验收。
+
+## 2026-11-02 武器解放小游戏
+
+- 读取 `MiniGames.WeaponRelease`：用自定义 JSON 解码保留物品键顺序（该顺序就是客户端的武器槽位），支持 `Name`/`Count`/`Duration` 默认值和 `Characters` 单字节字母列表；启动时校验 uint8/uint16 范围与 8 字节以内的单词长度。
+- 登录事件包 `159/1` 现在按配置发送武器解放事件位 `1<<6`，激活时在登录阶段下发 `89/6/65` 进度。
+- 接入 `89/6/60/61/62`：查询进度、选字、消耗字母；校验行/槽位/字母位置、已开启、重复位、缺字和 `~` 万能字，返回上游 0/2/4/5 状态；集齐后按配置发放武器并发送奖励通知。
+- 新增 `UserMiniGameWeaponReleaseItemProgress` 与 `UserMiniGameWeaponReleaseCharacters` 事务读写；进度和字母扣减同事务提交。
+- Bingo 的上游更新/重置/洗牌主体均被注释，未按“现成功能”搬运。新增测试覆盖配置顺序/校验、进度位、重复位、缺字、登录进度包、完整集齐发奖和 inactive 状态。`go test ./...`、`go vet ./...` 通过；未做实机界面验收。
 
 
 

@@ -83,6 +83,7 @@ type Server struct {
 	enhanceMax   map[int]enhanceLimit
 	modes        map[int]modeDefinition
 	mapMax       map[int]int
+	miniGame     weaponReleaseConfig
 	dedicated    []*dedicatedServer
 	mu           sync.Mutex
 	clients      map[*client]bool
@@ -144,6 +145,10 @@ func New(dir string, c config.Config, db *store.Store, log *slog.Logger) (*Serve
 		return nil, e
 	}
 	s.notices, e = loadNotices(c.Notices)
+	if e != nil {
+		return nil, e
+	}
+	s.miniGame, e = loadWeaponRelease(c.MiniGames.WeaponRelease)
 	if e != nil {
 		return nil, e
 	}
@@ -437,6 +442,8 @@ func (s *Server) dispatch(c *client, p protocol.Packet) error {
 			return s.titleRequest(c, r)
 		case 87:
 			return s.surveyRequest(c, r)
+		case 89:
+			return s.miniGameRequest(c, r)
 		case 93:
 			return s.messengerRequest(c, r)
 		case 115:

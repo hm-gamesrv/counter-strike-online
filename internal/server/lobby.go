@@ -378,8 +378,13 @@ func (s *Server) loginPackets(c *client) error {
 	c.send(159, &protocol.Writer{Data: []byte{0, 0}})
 	w = &protocol.Writer{}
 	w.U8(1)
-	w.U32(0)
+	w.U32(s.eventFlags())
 	c.send(159, w)
+	if s.miniGame.Active {
+		if e := s.sendWeaponReleaseUpdate(c); e != nil {
+			return e
+		}
+	}
 	if e := s.sendInventory(c); e != nil {
 		return e
 	}

@@ -20,7 +20,7 @@
 | `74 Ban` | 屏蔽名单 4 个请求 | `usermanager.cpp:1244` | 已实现：列表/设置/登录下发/过滤 | 屏蔽名单可用 |
 | `84 Title` | 称号设置与列表增删 | `questmanager.cpp:246` | 已实现：前缀、5 槽位设置/移除，按 `achievementList` 校验 | 称号选择可用，解锁仍依赖荣誉任务 |
 | `87 UserSurvey` | 登录问卷 11/12 | `usermanager.cpp:1216` | 已实现：登录下发未答问卷、类型 11 校验并保存；类型 12 忽略 | 问卷可正常弹出与提交 |
-| `89 MiniGame` | Bingo、武器解放 | `minigamemanager.cpp`（482 行） | 缺失 | 小游戏不可用 |
+| `89 MiniGame` | Bingo、武器解放 | `minigamemanager.cpp`（482 行） | 武器解放已实现（配置/进度/选字/集齐发奖）；Bingo 上游基本注释，未接 | 武器解放可用，Bingo 不可用 |
 | `93 Messenger` | 查询玩家公开资料 | `usermanager.cpp:1275` | 已实现：按昵称查询角色资料 | 资料查看可用 |
 | `103 Voxel` | 8 个请求 + 登录下发 Voxel URL | `voxelmanager.cpp:15` | 缺失 | Studio 不可用（上游也仅占位） |
 | `112 Kick` | superRoom 房主踢人 | `usermanager.cpp:1353` | 已实现：校验 superRoom/房主/同房，广播踢人包 | 超级房间踢人可用 |
@@ -67,18 +67,18 @@
 | --- | --- | --- |
 | 道具养成 | itemmanager 2,986 行 + luckyitem 396 行 | 开箱、延期、涂装、部件、普通服装、ZB 皮肤、强化（含防降级）与删除式分解已实现；上游分解本身不发奖励 |
 | 军团 | clanmanager 1,077 行 + 7 张表 | 已实现创建/申请/审批/邀请/退出/成员管理/军团聊天/公告/设置/解散/转让、登录回放与仓库存取/删除/权限；仍缺军团任务、军团战和实机验收 |
-| 小游戏 | minigamemanager 482 行 + 5 张表 | Bingo、武器解放全缺 |
+| 小游戏 | minigamemanager 482 行 + 5 张表 | 武器解放已实现：读取配置行/字母、进度位、消耗字母、集齐发奖和登录事件标志；Bingo 上游更新/重置/洗牌基本被注释，仍缺 |
 | 房间设置校验 | roomsettings 2,655 行 | 已实现 `Room.ValidateSettings` 开关下的基础校验：人数上下限、地图人数上限、胜负/击杀/时间/回合范围与步长；仍缺 playlist、zbLimit、家族战、superRoom 及模式-地图互斥等上游规则 |
 | 玩家资料与外围 | usermanager 1,541 行 | 公告、到期提醒、离线奖励通知与会话历史已接；断线重连已支持关闭旧会话、5 分钟内恢复原房间/对局并保留击杀死亡分数；改名卡、聊天色、Messenger、快捷购买、Addon、问卷与全服喇叭已接 |
 | 对局结算补全 | gamematch 709 行 | 已有基础结算、等级/职业/装备加成、第一名排序与场景掉落箱奖励；仍缺 ZBS 名次奖励和模式专用统计（上游这些分支本身为死代码/注释） |
 | 多频道 | channelmanager | 上游 `channelmanager.cpp:23` 自述 `TODO: Should we implement multi channels?`，不必实现 |
 
-## 四、数据库：45 张表中 18 张未被任何 Go 代码引用
+## 四、数据库：45 张表中 16 张未被任何 Go 代码引用
 
 `internal/store/schema.sql` 已与上游完全一致（45 表），缺的是读写逻辑：
 
 - 玩家外围：`UserRestore`、`UserDist`、`TimeConfig`（`UserBanList`、`UserFastBuy`、`UserAddon`、`UserCostumeLoadout`、`UserZBCostumeLoadout`、`UserSurveyAnswer`、`UserExpiryNotice`、`UserRewardNotice`、`UserSession`、`UserSessionHistory` 已接入）
-- 小游戏 5 张：`UserMiniGameBingo`、`UserMiniGameBingoPrizeSlot`、`UserMiniGameBingoSlot`、`UserMiniGameWeaponReleaseCharacters`、`UserMiniGameWeaponReleaseItemProgress`
+- 小游戏 Bingo 3 张：`UserMiniGameBingo`、`UserMiniGameBingoPrizeSlot`、`UserMiniGameBingoSlot`
 - 任务与排行：`UserQuest*`（Go 改用 `GoQuest*` 扩展表）、`UserRank`
 - 管理与风控：`HWIDBanList`、`IPBanList`、`SuspectAction`、`RelationProducts`、`UserDailyReward`、`UserDailyRewardItems`
 

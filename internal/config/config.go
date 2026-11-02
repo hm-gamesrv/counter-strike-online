@@ -127,6 +127,7 @@ type Config struct {
 	DedicatedServerWhitelist []string
 	Surveys                  map[string]Survey
 	Notices                  map[string]Notice
+	MiniGames                MiniGames
 }
 
 func Load(path string) (Config, error) {
