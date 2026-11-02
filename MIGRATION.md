@@ -11,7 +11,7 @@
 | `manager/channelmanager.cpp`、`room/roomsettings.cpp` | `internal/server/{rooms,room_defaults,room_social,host}.go` | 已实现邀请、房主踢人及踢出名单，以及 `ValidateSettings` 下的人数/时间/胜负/地图上限校验；仍缺 playlist、zbLimit、投票踢人、特殊模式限制与地图轮换 |
 | `manager/packetmanager.cpp` | `internal/server/{metadata,lobby,rooms,shop}.go` | 随各业务逐项实现出站结构 |
 | `manager/shopmanager.cpp` | `internal/server/shop.go`、`internal/store/purchase.go` | 当前客户端购买、计数堆叠和密码箱计数已实现；完整延期规则、礼包校验仍缺 |
-| `manager/itemmanager.cpp` | `internal/server/{inventory,rewards,reward_claims,reward_random}.go`、`internal/store/{inventory,purchase,rewards,reward_claims,item_extend,paint,part,costume}.go` | 已实现武器/角色启用、选择副本、锁定/解锁、固定/选择/随机奖励与领取去重、开箱、延期、武器涂装、部件、普通服装、ZB 皮肤与强化（含防降级）；仍缺完整合并、分解 |
+| `manager/itemmanager.cpp` | `internal/server/{inventory,rewards,reward_claims,reward_random}.go`、`internal/store/{inventory,purchase,rewards,reward_claims,item_extend,paint,part,costume}.go` | 已实现武器/角色启用、选择副本、锁定/解锁、固定/选择/随机奖励与领取去重、开箱、延期、武器涂装、部件、普通服装、ZB 皮肤、强化（含防降级）与删除式分解；仍缺完整合并 |
 | `manager/{host,dedicatedserver}manager.cpp`、`room/gamematch.cpp` | `internal/server/{host,dedicated,catalog}.go`、`internal/store/{match,levels}.go` | 已实现开局、主机背包、计数、存档迁移、专服池、场景道具使用与基础结算；尚需真实客户端/HLDS 对局验收、事件奖励及特殊模式规则 |
 | `manager/questmanager.cpp`、`quest/questevent.*` | `internal/server/{quests,title}.go`、`internal/store/{quests,quest_events,title}.go` | 已接活动任务条件与持久化进度、完成奖励，以及 `84` 称号前缀/槽位；尚缺任务界面、每日/荣誉/军团任务及称号解锁、VIP 事件与完整实机验收 |
 | `manager/{clan,rank,minigame,luckyitem,voxel}manager.cpp` | 未实现（仅部分元数据） | 各业务状态与协议完整迁移 |
@@ -30,7 +30,7 @@
 
 | 范围 | 剩余内容 |
 | --- | --- |
-| 武器养成 | 分解 |
+| 武器养成 | 完整道具合并规则 |
 | 抽奖和小游戏 | 密码箱实际开启、概率抽奖、Bingo、武器集字兑换 |
 | 军团 | 创建/申请/审批、成员管理、仓库及军团任务 |
 | 玩家外围 | 屏蔽名单、问卷、通知/举报、Addon、完整玩家资料、快捷购买配置 |
@@ -225,6 +225,12 @@
 - 商店购买成功后自动装备；奖励领取成功后自动装备，并同步修正背包增量中的 `inUse`/`status`。
 - 只对已知服装类名生效，`LobbyBG` 等其它 category 12 物品不受影响。
 - 新增测试覆盖普通服装、槽位占用、ZB 皮肤和缺失库存行。`go test ./...`、`go vet ./...` 通过；未做实机界面验收。
+
+## 2026-11-02 物品分解
+
+- 接入 `78/7`：读取数量、未知字段和每个物品的槽位，删除选中物品并下发背包增量。
+- 与上游一致，分解本身不发放任何奖励；未知槽位、默认/受保护物品和重复槽位被跳过。
+- 新增测试覆盖多物品删除、保留未选中物品和未知槽位静默。`go test ./...`、`go vet ./...` 通过；未做实机界面验收。
 
 ## 2026-11-02 称号
 

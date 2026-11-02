@@ -58,6 +58,7 @@ Docker 使用 UID/GID 1000，Compose 默认使用命名卷。绑定宿主目录�
 | 武器涂装 | `78/17` 获取并消耗涂装道具，`78/24` 切换或移除涂装；校验 `WeaponPaints.json` 兼容列表，更新 `paintID`/`paintIDList` 并同步背包 |
 | 武器部件 | `78/21` 装配/卸下 category 13 部件，校验武器类型、消耗部件并同步 `partSlot1/2` |
 | 武器强化 | `78/14` 类型 0：按 `ReinforceMaxLv`/`ReinforceMaxEXP` 与 `ItemGrade` 消耗材料注入经验并按概率升级；类型 2：防降级/清除单项或全部强化；更新 `enhancementLevel/Exp/Value` |
+| 分解 | `78/7` 删除选中的背包物品并同步背包；上游同样只删除、不发奖励 |
 | 服装 | `9/15` 头/背/臂/骨盆/脸/纹身/宠物装备与替换，按槽位更新 `UserCostumeLoadout` 和 `inUse`；ZB 皮肤按 `ZombieSkin` 类型独立保存到 `UserZBCostumeLoadout` |
 | 超级房间 | `112` superRoom 房主踢人，校验房主/同房/超级房间标记，广播踢人包并记录禁止重入 |
 | 通用发放与奖励 | 商店/礼包共用事务发放，支持来源消耗、物品/积分/经验/荣誉点、选择与随机奖励；领取凭据持久化、失败重试不重抽、领取去重；补给包、金币券和配件武器自选箱已实机验证 |

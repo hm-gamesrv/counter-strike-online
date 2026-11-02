@@ -431,6 +431,8 @@ func (s *Server) itemRequest(c *client, p *protocol.Reader) error {
 			return errors.New("unexpected item request tail")
 		}
 		return s.openItemBox(c, first, second)
+	case 7:
+		return s.disassembleRequest(c, p)
 	case 14:
 		return s.enhanceRequest(c, p)
 	case 16:
@@ -520,6 +522,45 @@ func (s *Server) itemRequest(c *client, p *protocol.Reader) error {
 	}
 	if err != nil {
 		return err
+	}
+	return s.sendInventoryItems(c, changed)
+}
+func (s *Server) disassembleRequest(c *client, p *protocol.Reader) error {
+	count := p.U8()
+	p.U8()
+	if p.Err != nil {
+		return p.Err
+	}
+	if count == 0 || count > 32 {
+		return errors.New("invalid disassemble item count")
+	}
+	defaults := len(s.Config.DefaultUser.DefaultItems)
+	slots := make([]int, 0, count)
+	for i := 0; i < count; i++ {
+		p.U8()
+		slot := p.U16() - defaults
+		p.U32()
+		if slot > 0 {
+			slots = append(slots, slot)
+		}
+	}
+	if p.Err != nil {
+		return p.Err
+	}
+	if p.Pos != len(p.Data) {
+		return errors.New("unexpected disassemble request tail")
+	}
+	if len(slots) == 0 {
+		return nil
+	}
+	protected := append([]int{}, s.Config.DefaultUser.DefaultItems...)
+	protected = append(protected, s.Config.DefaultUser.PseudoDefaultItems...)
+	changed, err := s.Store.DeleteItems(c.user.ID, slots, protected)
+	if err != nil {
+		return err
+	}
+	if len(changed) == 0 {
+		return nil
 	}
 	return s.sendInventoryItems(c, changed)
 }
