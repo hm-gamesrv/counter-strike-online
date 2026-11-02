@@ -393,7 +393,10 @@ func (s *Server) roomRequest(c *client, r *protocol.Reader) error {
 			return nil
 		}
 		if st.number(7) == 254 {
-			c.notice("Go migration: Studio rooms are not implemented yet.")
+			// Studio creation needs CVoxelManager::GetSlotDetails (an HTTP slot
+			// lookup) to override the room settings; without that service upstream
+			// rejects the request too, so this reports the same failure.
+			c.notice("Unable to create a room due to incorrect settings")
 			return nil
 		}
 		familyBattle := st.number(70) != 0
@@ -557,7 +560,7 @@ func (s *Server) roomRequest(c *client, r *protocol.Reader) error {
 			return errors.New("invalid room settings")
 		}
 		if merged.number(7) == 254 {
-			c.notice("Go migration: Studio rooms are not implemented yet.")
+			c.notice("Unable to create a room due to incorrect settings")
 			return nil
 		}
 		if merged.number(70) != 0 {
@@ -635,7 +638,7 @@ func (s *Server) roomRequest(c *client, r *protocol.Reader) error {
 	case 38:
 		return s.roomNoticeClan(c)
 	default:
-		c.notice("Go migration: this room action is not implemented yet.")
+		s.Log.Debug("unsupported room action", "kind", kind, "user", c.user.ID)
 	}
 	return r.Err
 }

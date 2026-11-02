@@ -32,7 +32,7 @@
 
 上游在登录时下发 Voxel URL（`SendVoxelURLs`），并对 8 个 Voxel 请求返回固定占位包。Go 已接 `103` 的 URL 下发和 `4/8/9/10/38/46/47/58` 占位回包，`65/34` 也已按 `voxel_id` 过滤并回房间列表。
 
-Studio 房间创建（地图 254）仍拒绝：上游 `CRoomSettings::CheckSettings` 会调用 `CVoxelManager::GetSlotDetails` 访问 `Data/VoxelConfigList.json` 里配置的 Voxel HTTP 服务（`GET /v6/slots/detail/<slot>`），用返回的资源标题、人数、模式覆盖房间设置；本仓库的配置只有 `VoxelVxlURL`/`VoxelVmgURL`，没有该 HTTP 服务地址，也没有可用的服务实例，因此尚未实现。现在 `65/34` 会返回空列表而不是“未实现”提示，客户端 Studio 房间浏览器可以正常打开。
+Studio 房间创建（地图 254）按上游限制不实现：上游 `CRoomSettings::CheckSettings` 需要调 `CVoxelManager::GetSlotDetails` 访问 `Voxel.HTTPIP:HTTPPort` 上的 `GET /v6/slots/detail/<slot>`，用返回的资源标题、人数、模式覆盖房间设置；没有该服务时上游同样拒绝建房。本仓库只配置 `VoxelVxlURL`/`VoxelVmgURL`，没有可用的 slot 服务实例，因此建房一律按“设置不合法”拒绝（与上游无服务时的表现一致）。`103` 的 URL 下发、`65/34` 的房间过滤和 8 个 `103` 占位回包都已实现，客户端 Studio 房间浏览器可以正常打开。
 
 ### 1.3 GM 管理命令（公开命令已实现）
 
