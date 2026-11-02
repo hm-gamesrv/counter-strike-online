@@ -427,3 +427,10 @@
 - 新增 `Store.AddWeaponReleaseCharacter`（累加 `UserMiniGameWeaponReleaseCharacters`），接入 GM `/addwpnreleasechar <char> <count>`。
 - 按上游把 `/bingo`、`/weaponrelease` 作为所有玩家可用的刷新命令：对应活动开启时重发 `89/0` 更新或武器解放进度，未开启时静默返回。
 - 测试覆盖字母累加与 GM 命令；`go test ./...`、`go vet ./...` 通过；未做实机界面验收。
+
+## 2026-11-02 房间可选字段清洗
+
+- 新增 `room_sanitize.go`，在 `Room.ValidateSettings` 开启时按上游 `LoadNewSettings` 清除或夹紧与模式不匹配的可选字段。
+- 覆盖 `voxel`（非 254 地图）、`fireBomb`、`mutationRestrict`/`mutationLimit`、`zbLimit`（模式白名单、去重、道具存在性、`zbLimitFlag` 夹紧）、`teamSwitch`、`zbRespawn`/`zbBalance`、`gameRule`、`zbAutoHunting`、`integratedTeam`、`enhanceRestrict`、`floatingDamageSkin`、`playerOneTeam`、`weaponBuyCoolTime`、`zbRebalance`、`changeShot`/`zombieReviveZHC`、`kdRule`/`mannerLimit`、`leagueRule`、`statusSymbol`/`movingShot`/`mapPlaylistIndex`。
+- 清洗是静默的：字段被清除后不再序列化，房间仍然有效；`ValidateSettings` 关闭时保持客户端原值。
+- 新增测试覆盖 voxel 清除、fireBomb、mutationLimit、zbLimit 去重与保留、teamSwitch；`go test ./...`、`go vet ./...` 通过；未做实机界面验收。

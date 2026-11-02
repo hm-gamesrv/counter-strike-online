@@ -407,5 +407,6 @@ func (s *Server) validateRoomSettings(st *settings, members int) error {
 	if st.number(70) != 0 && !familyBattleAllowed(modeID) {
 		return errors.New("family battle is not available for this mode")
 	}
+	s.sanitizeRoomSettings(st, modeID, mapID)
 	return nil
 }

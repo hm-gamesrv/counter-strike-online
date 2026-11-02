@@ -31,6 +31,10 @@ func validateServer() *Server {
 				TimeLimit:        limitRange{Min: 150, Max: 150},
 				RoundTimeLimit:   limitRange{Min: 2, Max: 3, Step: 1},
 			},
+			9: {
+				MaxPlayers:       16,
+				CreateMinPlayers: 1,
+			},
 			15: {
 				MaxPlayers:       8,
 				CreateMinPlayers: 1,
@@ -53,6 +57,10 @@ func validateServer() *Server {
 			4: {
 				MaxPlayer: 16,
 				Values:    map[string]int{"map_id": 4, "map_original": 1},
+			},
+			5: {
+				MaxPlayer: 16,
+				Values:    map[string]int{"map_id": 5, "map_zombi_expand": 1},
 			},
 		},
 	}
@@ -176,3 +184,88 @@ func TestValidateRoomFamilyBattleMode(t *testing.T) {
 }
 
 func ptr(st settings) *settings { return &st }
+
+func TestSanitizeOptionalRoomFields(t *testing.T) {
+	s := validateServer()
+	s.items = map[int]itemDefinition{1: {}, 2: {}}
+
+	st := validRoomSettings()
+	st.fields[50] = []byte{1, 0, 0, 0, 0}
+	st.flags[1] |= 1 << 18
+	if err := s.validateRoomSettings(&st, 1); err != nil {
+		t.Fatal(err)
+	}
+	if st.hasField(50) {
+		t.Fatal("voxel block kept on a non-studio map")
+	}
+
+	st = validRoomSettings()
+	st.setNumber(64, 0, 1)
+	if err := s.validateRoomSettings(&st, 1); err != nil {
+		t.Fatal(err)
+	}
+	if st.hasField(64) {
+		t.Fatal("fireBomb kept for mode 0")
+	}
+
+	st = validRoomSettings()
+	st.setNumber(66, 40, 1)
+	if err := s.validateRoomSettings(&st, 1); err != nil {
+		t.Fatal(err)
+	}
+	if st.hasField(66) {
+		t.Fatal("mutation limit kept outside mode 45")
+	}
+	st = validRoomSettings()
+	st.setNumber(66, 20, 1)
+	if err := s.validateRoomSettings(&st, 1); err != nil {
+		t.Fatal(err)
+	}
+	if !st.hasField(66) {
+		t.Fatal("default mutation limit was cleared")
+	}
+
+	zbLimit := func(values [4]int) []byte {
+		b := []byte{0}
+		for _, value := range values {
+			b = binary.LittleEndian.AppendUint32(b, uint32(value))
+		}
+		return b
+	}
+	st = validRoomSettings()
+	st.setNumber(6, 9, 1)
+	st.setNumber(7, 5, 2)
+	st.fields[49] = zbLimit([4]int{1, 1, 0, 0})
+	st.flags[1] |= 1 << 17
+	if err := s.validateRoomSettings(&st, 1); err != nil {
+		t.Fatal(err)
+	}
+	if st.hasField(49) {
+		t.Fatal("duplicate zbLimit kept")
+	}
+	st = validRoomSettings()
+	st.setNumber(6, 9, 1)
+	st.setNumber(7, 5, 2)
+	st.fields[49] = zbLimit([4]int{1, 2, 0, 0})
+	st.flags[1] |= 1 << 17
+	if err := s.validateRoomSettings(&st, 1); err != nil {
+		t.Fatal(err)
+	}
+	if !st.hasField(49) {
+		t.Fatal("valid zbLimit was dropped")
+	}
+
+	st = validRoomSettings()
+	st.setNumber(6, 15, 1)
+	st.setNumber(7, 3, 2)
+	st.setNumber(54, 1, 1)
+	st.fields[45] = make([]byte, 9)
+	binary.LittleEndian.PutUint16(st.fields[45], 1)
+	st.flags[1] |= 1 << 13
+	if err := s.validateRoomSettings(&st, 1); err != nil {
+		t.Fatal(err)
+	}
+	if st.hasField(54) {
+		t.Fatal("teamSwitch kept for mode 15")
+	}
+}

@@ -9,7 +9,7 @@
 - 入口覆盖：上游 33 个入口中 Go 已接 28 个（含 UDP）；未接的 5 个在上游是空实现或桩（`15`、`83`、`88`、`90`、`164`）；`103 Voxel` 已接登录 URL 与占位回包。
 - 业务覆盖：上一版列出的道具养成、军团、武器解放、房间设置校验、称号、屏蔽名单、问卷、重连恢复、结算加成与排名等均已实现（见附录）。
 - 剩余缺口集中在：Studio 房间创建（依赖 Voxel 槽位 HTTP 服务）、少数 GM 命令、可选房间字段的模式清洗与 SSL。Bingo 与 Voxel `103` 基础通路已接。
-- 规模：C++ 核心约 4.6 万行（不含 GUI/thirdparty/test）；Go 非测试 14,598 行、含测试 22,269 行。
+- 规模：C++ 核心约 4.6 万行（不含 GUI/thirdparty/test）；Go 非测试 14,599 行、含测试 22,363 行。
 
 ## 〇、默认数据与目标客户端
 
@@ -60,7 +60,9 @@ Go 在 `Room.ValidateSettings` 下已校验人数、地图人数上限、胜负/
 - 家族战：仅限上游允许的模式
 - `superRoom`：改由房主持有的道具 8357 决定，不再信任客户端字段
 
-仍缺：上游 `LoadNewSettings` 对 `zbLimit`/`fireBomb`/`mutation`/`teamSwitch` 等可选字段的“按模式静默清除或夹紧”逻辑；Go 目前不校验这些字段，客户端传什么就保留什么（`ValidateSettings` 关闭时更是如此）。
+在 `ValidateSettings` 开启时还按上游 `LoadNewSettings` 做可选字段清洗：`voxel` 块（非地图 254 清除）、`fireBomb`、`mutationRestrict`/`mutationLimit`、`zbLimit`（模式白名单、去重、道具存在性、标志夹紧）、`teamSwitch`、`zbRespawn`/`zbBalance`、`gameRule`、`zbAutoHunting`、`integratedTeam`、`enhanceRestrict`、`floatingDamageSkin`、`playerOneTeam`、`weaponBuyCoolTime`、`zbRebalance`、`changeShot`/`zombieReviveZHC`、`kdRule`/`mannerLimit`、`leagueRule`、`statusSymbol`/`movingShot`/`mapPlaylistIndex`。
+
+仍缺：依赖道具或玩家状态的清洗（`sd` 大头事件、`c4Timer` 音效、`startingCash`/`buyTime` 校验、bot 数量夹紧、`viewFlag`/`teamBalance`/`friendlyFire` 默认值比对），以及地图轮换。`ValidateSettings` 关闭时这些字段仍按客户端原样保留（与上游一致）。
 
 ### 1.6 SSL
 
@@ -92,8 +94,8 @@ Go 在 `Room.ValidateSettings` 下已校验人数、地图人数上限、胜负/
 
 ## 五、建议顺序
 
-1. **可选房间字段清洗**：`zbLimit`/`fireBomb`/`mutation` 等按模式静默清除或夹紧，对齐上游 `LoadNewSettings`。
-2. **Studio 房间创建**：接入 Voxel 槽位 HTTP 服务后放开地图 254。
+1. **Studio 房间创建**：接入 Voxel 槽位 HTTP 服务后放开地图 254。
+2. **剩余字段清洗**：`sd`/`c4Timer`/`startingCash`/bot 数量等依赖道具和模式默认值的夹紧。
 3. **SSL**：按部署需要决定。
 4. **Bingo/Voxel/GM/房间校验实机验收**：开格与发奖、Voxel 列表、GM 封禁与发奖、`Room.ValidateSettings` 开启后的建房流程。
 5. **验证**：真实 HLDS、多人实机与客户端界面回归。
