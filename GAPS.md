@@ -8,8 +8,8 @@
 
 - 入口覆盖：上游 33 个入口中 Go 已接 28 个（含 UDP）；未接的 5 个在上游是空实现或桩（`15`、`83`、`88`、`90`、`164`）；`103 Voxel` 已接登录 URL 与占位回包。
 - 业务覆盖：上一版列出的道具养成、军团、武器解放、房间设置校验、称号、屏蔽名单、问卷、重连恢复、结算加成与排名等均已实现（见附录）。
-- 剩余缺口集中在：Studio 房间创建（依赖 Voxel 槽位 HTTP 服务）、少数 GM 命令、可选房间字段的模式清洗与 SSL。Bingo 与 Voxel `103` 基础通路已接。
-- 规模：C++ 核心约 4.6 万行（不含 GUI/thirdparty/test）；Go 非测试 15,133 行、含测试 23,126 行。
+- 剩余缺口集中在：Studio 房间创建（依赖 Voxel 槽位 HTTP 服务）与名片/复活特效等装饰道具的装备切换。Bingo 与 Voxel `103` 基础通路已接。
+- 规模：C++ 核心约 4.6 万行（不含 GUI/thirdparty/test）；Go 非测试 15,148 行、含测试 23,297 行。
 
 ## 〇、默认数据与目标客户端
 
@@ -68,9 +68,9 @@ Go 在 `Room.ValidateSettings` 下已校验人数、地图人数上限、胜负/
 
 bot 数量/难度夹紧（模式 3/4/5/24 上限、其他模式默认值比对）、`ballNumber` 模式与地图上限校验、`weaponRestrict` 夹紧和地图默认武器限制下发也已接。房间设置校验到这里已基本对齐，剩余只有 Studio 房间（依赖 Voxel 槽位服务）和实机验收。`ValidateSettings` 关闭时这些字段仍按客户端原样保留（与上游一致）。
 
-### 1.6 SSL
+### 1.6 SSL（已实现，待实机验收）
 
-上游支持 `SSL`（wolfSSL）；Go 在配置校验阶段直接拒绝 `SSL=true`。
+上游 `SSL=true` 时用 wolfSSL 做 TLS 1.3，证书固定为 `Data/Certs/server-cert.pem` 和 `Data/Certs/server-key.pem`。Go 现在用 `crypto/tls` 在 `SSL=true` 时把接受的 TCP 连接包成 TLS 1.3，UDP 不受影响；证书缺失时启动直接失败（上游是打日志后回落明文，这里选择显式报错）。尚未用真实客户端验证 TLS 握手及之后的协议流程。
 
 ## 二、与上游一致、无需实现
 
@@ -100,11 +100,10 @@ bot 数量/难度夹紧（模式 3/4/5/24 上限、其他模式默认值比对�
 
 ## 五、建议顺序
 
-1. **Studio 房间创建**：接入 Voxel 槽位 HTTP 服务后放开地图 254。
-2. **剩余字段清洗**：`sd`/`c4Timer`/`startingCash`/bot 数量等依赖道具和模式默认值的夹紧。
-3. **SSL**：按部署需要决定。
-4. **Bingo/Voxel/GM/房间校验实机验收**：开格与发奖、Voxel 列表、GM 封禁与发奖、`Room.ValidateSettings` 开启后的建房流程。
-5. **验证**：真实 HLDS、多人实机与客户端界面回归。
+1. **装饰道具装备切换**：名片（`LobbyBG`）、`zbRespawnEffect`、`CombatInfoItem` 的状态切换；名片会改 `157` 用户信息布局，需要实机确认。
+2. **Studio 房间创建**：接入 Voxel 槽位 HTTP 服务后放开地图 254。
+3. **Bingo/Voxel/GM/房间校验/SSL 实机验收**：开格与发奖、Voxel 列表、GM 封禁与发奖、`Room.ValidateSettings` 开启后的建房流程、TLS 握手。
+4. **验证**：真实 HLDS、多人实机与客户端界面回归。
 
 ## 附：已实现能力（本轮复核）
 

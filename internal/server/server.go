@@ -3,10 +3,13 @@ package server
 import (
 	"context"
 	"crypto/rc4"
+	"crypto/tls"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -98,6 +101,7 @@ type Server struct {
 	restore      map[int]reconnectSlot
 	nextRoom     int
 	started      time.Time
+	tlsConfig    *tls.Config
 }
 
 func New(dir string, c config.Config, db *store.Store, log *slog.Logger) (*Server, error) {
@@ -125,6 +129,17 @@ func New(dir string, c config.Config, db *store.Store, log *slog.Logger) (*Serve
 		restore:  map[int]reconnectSlot{},
 		nextRoom: 1,
 		started:  time.Now(),
+	}
+	if c.SSL {
+		cert, err := tls.LoadX509KeyPair(filepath.Join(dir, "Data", "Certs", "server-cert.pem"), filepath.Join(dir, "Data", "Certs", "server-key.pem"))
+		if err != nil {
+			return nil, fmt.Errorf("SSL certificate: %w", err)
+		}
+		s.tlsConfig = &tls.Config{
+			MinVersion:   tls.VersionTLS13,
+			MaxVersion:   tls.VersionTLS13,
+			Certificates: []tls.Certificate{cert},
+		}
 	}
 	s.shop, e = loadShop(dir)
 	if e != nil {
@@ -241,6 +256,9 @@ func (s *Server) Serve(ctx context.Context, tcp net.Listener, udp *net.UDPConn) 
 				conn.Close()
 				continue
 			}
+		}
+		if s.tlsConfig != nil {
+			conn = tls.Server(conn, s.tlsConfig)
 		}
 		c := &client{conn: conn, codec: protocol.NewCodec(), queue: make(chan outbound, 512)}
 		s.mu.Lock()

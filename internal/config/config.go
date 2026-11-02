@@ -182,8 +182,5 @@ func Load(path string) (Config, error) {
 			return c, fmt.Errorf("item bonus percentages must be 0..65535")
 		}
 	}
-	if c.SSL {
-		return c, fmt.Errorf("SSL=true is not yet supported; use the upstream default SSL=false")
-	}
 	return c, nil
 }

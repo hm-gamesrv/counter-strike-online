@@ -455,3 +455,9 @@
 - `weaponRestrict` 夹紧到 13；地图带 `weapon_restrict_deault` 时按地图默认值覆盖下发。
 - 新增测试覆盖 bot 清除/夹紧、ballNumber 合法与超限、weaponRestrict 夹紧和地图默认限制。
 - 测试基础设施：新增 `listenTestPair` 重试同一端口的 TCP/UDP 绑定，规避 Windows 偶发拒绝 UDP 端口的问题。`go test ./...`、`go vet ./...` 通过；未做实机界面验收。
+
+## 2026-11-02 SSL（TLS 1.3）
+
+- 移除配置层对 `SSL=true` 的拒绝；`New` 在 `SSL=true` 时加载 `Data/Certs/server-cert.pem` 与 `server-key.pem`，构造 TLS 1.3（Min/Max 都锁 1.3，对齐上游 `wolfTLSv1_3_server_method`）。
+- `Serve` 接受的 TCP 连接在 IP 封禁检查后包成 `tls.Server`，UDP 路径不变；证书缺失时启动直接报错，而不是像上游那样回落明文。
+- 新增 `ssl_test.go`：自签证书握手后读取 greeting、完成版本握手；证书缺失时 `New` 返回错误。`go test ./...`、`go vet ./...` 通过；未用真实客户端验证。

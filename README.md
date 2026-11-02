@@ -58,7 +58,7 @@ UPDATE UserCharacterExtended SET gameMaster=1 WHERE userID=1;
 | 模块 | 实现情况 |
 | --- | --- |
 | 网络 | 原版 `~SERVERCONNECTED` 欢迎消息、`U` 数据帧、长度限制、拆包/粘包、序号循环、读写超时、有界发送队列、退出清理 |
-| 加密 | 可选原版 HWID/MD5 派生 RC4 双向流与切换时机；不支持 SSL |
+| 加密 | 可选原版 HWID/MD5 派生 RC4 双向流与切换时机；`SSL=true` 时用 TLS 1.3（`Data/Certs/server-cert.pem`/`server-key.pem`），UDP 不受影响 |
 | 账号 | `/register`、`/login`、重复登录时关闭旧会话，并在 5 分钟内恢复原房间/对局、注册 IP 限额、账号封禁检查、角色创建 |
 | GM 命令 | 按 `UserCharacterExtended.gameMaster` 鉴权；`/help`、`/version`、`/disconnect`、`/status`、`/getfreeslots`、`/getuid`、`/addpoints`、`/givepoints`、`/addexp`、`/sendnotice`、`/sendgmnotice`、`/additem`、`/giveitem`、`/removeitem`、`/addallitems`、`/setitemstatus`、`/setiteminuse`、`/givereward`、`/giverewardtoall`、`/addwpnreleasechar`、`/ban`、`/hban`、`/ipban`、`/unban`；`/bingo`、`/weaponrelease` 对所有玩家开放；IP 封禁在连接入口、HWID 封禁在登录握手处拦截，封禁会断开在线目标 |
 | 数据 | SQLite v4 表结构、PBKDF2 密码摘要、玩家设置、背包读取、登录会话与历史；账号/背包/封禁日期按客户端的分钟时间戳保存 |
@@ -93,7 +93,7 @@ UPDATE UserCharacterExtended SET gameMaster=1 WHERE userID=1;
 | 收藏 | 读取配装/购买菜单/书签，保存购买菜单/书签/当前配装编号、武器配装和大厅背景角色；校验物品持有、有效期、类别及当前配装 |
 | 快捷购买 | `77/1` 保存 5 组、每组 11 个商品的快捷购买预设，按槽位更新或插入 |
 | 附加内容 | `115 Addon` 从 `UserAddon` 下发附加内容列表，空列表也返回计数 0 |
-| 尚未迁移 | Studio 房间创建、名片/复活特效/战斗信息等装饰道具的装备切换、管理 GUI、SSL；任务界面/每日/荣誉/军团任务、排行在上游本身是桩，不计入迁移缺口 |
+| 尚未迁移 | Studio 房间创建、名片/复活特效/战斗信息等装饰道具的装备切换、管理 GUI；任务界面/每日/荣誉/军团任务、排行在上游本身是桩，不计入迁移缺口 |
 
 以用户提供的 `30.12.24` 客户端为唯一目标，不保留旧客户端协议分支。已跑通圣诞大厦的虚拟个人决战（模式 4、地图 277）：机器人入场、击杀、死亡/复活、达到 20 次击杀后正常结束、结果窗口及返回房间。首局实际发放 230 经验和 200 积分，数据库仅有一条对应结算记录。新角色的初始 MP5 也已在真实地图中验证。其他模式、多人网络环境和真实 HLDS 仍需逐项验收。
 
@@ -112,7 +112,7 @@ go run ./cmd/cso-server -data ./.data -listen 127.0.0.1:30012
 
 ## 数据目录与存储
 
-配置采用配套 `ServerConfig.json`，支持注释；`Port` 使用字符串（例如 `"30002"`）。当前只读取已实现模块涉及的配置项，其他选项不会自动获得对应业务能力。`SSL=true` 明确拒绝启动。
+配置采用配套 `ServerConfig.json`，支持注释；`Port` 使用字符串（例如 `"30002"`）。当前只读取已实现模块涉及的配置项，其他选项不会自动获得对应业务能力。`SSL=true` 需要 `Data/Certs/server-cert.pem` 与 `server-key.pem`，缺失时启动失败。
 
 SQLite 使用 `UserDatabase.db3`、v4 表结构、事务、外键与 WAL，不支持其他数据库版本。默认目录为 `./.data`。密码只接受本项目生成的 PBKDF2 摘要；账号、道具和封禁日期直接使用 Unix 分钟，不再自动转换早期 Go 构建的秒时间戳。Go 结算审计表的 `settledAt` 字段使用秒。
 
