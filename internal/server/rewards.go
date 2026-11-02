@@ -145,3 +145,26 @@ func rewardNotice(reward itemReward, items []store.Reward, g store.Grant) *proto
 	w.U8(0)
 	return w
 }
+
+// autoEquipCostumes applies the upstream AddItem rule: a newly granted costume
+// fills an empty loadout slot automatically. Returns the item IDs equipped.
+func (s *Server) autoEquipCostumes(id int, items []store.Reward) map[int]bool {
+	equipped := map[int]bool{}
+	for _, item := range items {
+		definition, ok := s.items[item.ID]
+		if !ok || !store.IsCostumeClass(definition.ClassName) {
+			continue
+		}
+		changed, err := s.Store.AutoEquipCostume(id, item.ID, definition.ClassName, definition.ZombieSkin)
+		if err != nil {
+			if s.Log != nil {
+				s.Log.Warn("costume auto-equip failed", "user", id, "item", item.ID, "error", err)
+			}
+			continue
+		}
+		if changed {
+			equipped[item.ID] = true
+		}
+	}
+	return equipped
+}

@@ -148,3 +148,69 @@ func toggleZombieSkinCostume(tx *sql.Tx, id int, items []Item, target Item, skin
 	target.InUse = newInUse
 	return append(changed, target), nil
 }
+func IsCostumeClass(className string) bool {
+	_, ok := costumeFields[className]
+	return ok || className == "ZombieSkinCostume"
+}
+
+// AutoEquipCostume equips a newly granted costume when its loadout slot is
+// still empty, matching the upstream AddItem behaviour.
+func (s *Store) AutoEquipCostume(id, itemID int, className string, zombieSkin int) (bool, error) {
+	field, regular := costumeFields[className]
+	zombie := className == "ZombieSkinCostume"
+	if !regular && !zombie || zombie && (zombieSkin <= 0 || zombieSkin > 255) {
+		return false, nil
+	}
+	tx, err := s.DB.Begin()
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback()
+	var slot int
+	err = tx.QueryRow("SELECT slot FROM UserInventory WHERE userID=? AND itemID=? AND inUse=0 AND status=0 AND (expiryDate=0 OR expiryDate>?) ORDER BY slot LIMIT 1", id, itemID, nowMinutes()).Scan(&slot)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	if regular {
+		loadout := [7]int{}
+		exists := true
+		err = tx.QueryRow("SELECT head,back,arm,pelvis,face,tattoo,pet FROM UserCostumeLoadout WHERE userID=?", id).Scan(&loadout[0], &loadout[1], &loadout[2], &loadout[3], &loadout[4], &loadout[5], &loadout[6])
+		if errors.Is(err, sql.ErrNoRows) {
+			exists = false
+		} else if err != nil {
+			return false, err
+		}
+		if loadout[field.index] != 0 {
+			return false, nil
+		}
+		loadout[field.index] = itemID
+		if exists {
+			_, err = tx.Exec("UPDATE UserCostumeLoadout SET head=?,back=?,arm=?,pelvis=?,face=?,tattoo=?,pet=? WHERE userID=?", loadout[0], loadout[1], loadout[2], loadout[3], loadout[4], loadout[5], loadout[6], id)
+		} else {
+			_, err = tx.Exec("INSERT INTO UserCostumeLoadout(userID,head,back,arm,pelvis,face,tattoo,pet) VALUES(?,?,?,?,?,?,?,?)", id, loadout[0], loadout[1], loadout[2], loadout[3], loadout[4], loadout[5], loadout[6])
+		}
+	} else {
+		var existing int
+		err = tx.QueryRow("SELECT itemID FROM UserZBCostumeLoadout WHERE userID=? AND slot=?", id, zombieSkin).Scan(&existing)
+		if err == nil {
+			return false, nil
+		}
+		if !errors.Is(err, sql.ErrNoRows) {
+			return false, err
+		}
+		_, err = tx.Exec("INSERT INTO UserZBCostumeLoadout(userID,slot,itemID) VALUES(?,?,?)", id, zombieSkin, itemID)
+	}
+	if err != nil {
+		return false, err
+	}
+	if _, err = tx.Exec("UPDATE UserInventory SET inUse=1,status=1 WHERE userID=? AND slot=?", id, slot); err != nil {
+		return false, err
+	}
+	if err = tx.Commit(); err != nil {
+		return false, err
+	}
+	return true, nil
+}

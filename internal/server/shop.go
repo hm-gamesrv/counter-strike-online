@@ -258,6 +258,7 @@ func (s *Server) shopRequest(c *client, r *protocol.Reader) error {
 				reply = err.Error()
 			} else {
 				reply = "BUY_OK"
+				s.autoEquipCostumes(c.user.ID, items)
 				var e error
 				c.character, e = s.Store.Character(c.user.ID)
 				if e != nil {

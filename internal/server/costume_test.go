@@ -1,6 +1,8 @@
 package server
 
 import (
+	"io"
+	"log/slog"
 	"path/filepath"
 	"testing"
 	"time"
@@ -210,5 +212,33 @@ func TestZombieSkinCostumeToggle(t *testing.T) {
 	}
 	if rows != 0 {
 		t.Fatalf("invalid skin wrote loadout rows %d", rows)
+	}
+}
+func TestAutoEquipCostumesHelper(t *testing.T) {
+	db, err := store.Open(filepath.Join(t.TempDir(), "costume.db3"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if err = db.Register("costumeuser", "secret1", "127.0.0.1", 0); err != nil {
+		t.Fatal(err)
+	}
+	if err = db.CreateCharacter(1, "CostumeUser", config.DefaultUser{Level: 1}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = db.DB.Exec("INSERT INTO UserInventory(userID,slot,itemID,count,status,inUse,obtainDate,expiryDate,isClanItem,enhancementLevel,enhancementExp,enhanceValue,paintID,partSlot1,partSlot2,lockStatus) VALUES(1,2,471,1,0,0,0,0,0,0,0,0,0,0,0,0)"); err != nil {
+		t.Fatal(err)
+	}
+	s := &Server{Store: db, items: map[int]itemDefinition{471: {ClassName: "HeadCostume"}}, Log: slog.New(slog.NewTextHandler(io.Discard, nil))}
+	equipped := s.autoEquipCostumes(1, []store.Reward{{ID: 471}})
+	if !equipped[471] {
+		t.Fatal("costume was not reported as equipped")
+	}
+	var head int
+	if err = db.DB.QueryRow("SELECT head FROM UserCostumeLoadout WHERE userID=1").Scan(&head); err != nil {
+		t.Fatal(err)
+	}
+	if head != 471 {
+		t.Fatalf("auto-equipped head %d", head)
 	}
 }

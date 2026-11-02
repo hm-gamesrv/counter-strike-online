@@ -247,6 +247,13 @@ func (s *Server) finishRewardClaim(c *client, token, selection int) error {
 		s.rewardError(c, err)
 		return nil
 	}
+	equipped := s.autoEquipCostumes(c.user.ID, p.Grant.Items)
+	for i := range changed {
+		if equipped[changed[i].ID] {
+			changed[i].InUse = 1
+			changed[i].Status = 1
+		}
+	}
 	if err = s.sendInventoryItems(c, changed); err != nil {
 		return err
 	}
