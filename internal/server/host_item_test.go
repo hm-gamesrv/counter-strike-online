@@ -73,3 +73,102 @@ func TestHostScenarioItemUse(t *testing.T) {
 		t.Fatalf("unknown item produced packets %d/%d", len(host.queue), len(target.queue))
 	}
 }
+func TestHostDropBoxGrantsReward(t *testing.T) {
+	db, err := store.Open(filepath.Join(t.TempDir(), "dropbox.db3"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if err = db.Register("hostuser", "secret1", "127.0.0.1", 0); err != nil {
+		t.Fatal(err)
+	}
+	if err = db.CreateCharacter(1, "HostUser", config.DefaultUser{Level: 1}); err != nil {
+		t.Fatal(err)
+	}
+	if err = db.Register("targetuser", "secret1", "127.0.0.1", 0); err != nil {
+		t.Fatal(err)
+	}
+	if err = db.CreateCharacter(2, "TargetUser", config.DefaultUser{Level: 1}); err != nil {
+		t.Fatal(err)
+	}
+	host := &client{
+		user: store.User{
+			ID: 1,
+		},
+		character: store.Character{
+			ID:   1,
+			Name: "HostUser",
+		},
+		version: true,
+		room:    1,
+		queue:   make(chan outbound, 16),
+	}
+	target := &client{
+		user: store.User{
+			ID: 2,
+		},
+		character: store.Character{
+			ID:   2,
+			Name: "TargetUser",
+		},
+		version: true,
+		room:    1,
+		queue:   make(chan outbound, 16),
+	}
+	match := &gameMatch{
+		id:    "match",
+		stats: map[int]*matchStat{2: {user: target}},
+	}
+	currentRoom := &room{
+		id:      1,
+		host:    host,
+		members: []*client{host, target},
+		match:   match,
+	}
+	s := &Server{
+		Store: db,
+		Config: config.Config{
+			InventorySlotMax: 10,
+		},
+		Log: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		users: map[int]*client{
+			1: host,
+			2: target,
+		},
+		rooms: map[int]*room{
+			1: currentRoom,
+		},
+		items: map[int]itemDefinition{
+			12: {
+				Category: 2,
+			},
+		},
+		rewards: map[int]itemReward{
+			3000: {
+				Title: "Drop box",
+				Items: map[string]struct{ Count, Duration int }{
+					"12": {
+						Count: 1,
+					},
+				},
+			},
+		},
+	}
+	// Host event 34: drop box pickup with reward 3000.
+	if err = s.dispatch(host, protocol.Packet{ID: 68, Data: []byte{11, 34, 2, 0, 0, 0, 0xB8, 0x0B, 0, 0}}); err != nil {
+		t.Fatal(err)
+	}
+	if msg := <-target.queue; msg.id != 154 {
+		t.Fatalf("missing drop box inventory update, got %d", msg.id)
+	}
+	if msg := <-target.queue; msg.id != 67 {
+		t.Fatalf("missing drop box reward notice, got %d", msg.id)
+	}
+	var count int
+	if err = db.DB.QueryRow("SELECT count FROM UserInventory WHERE userID=2 AND itemID=12").Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 1 {
+		t.Fatalf("drop box item count %d", count)
+	}
+}
