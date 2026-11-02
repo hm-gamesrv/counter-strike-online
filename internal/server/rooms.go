@@ -320,15 +320,15 @@ func networkInfo(w *protocol.Writer, c *client) {
 		ip = net.IPv4zero.To4()
 	}
 	w.Bytes(ip)
-	w.U16(c.externalPorts[0])
 	w.U16(c.externalPorts[1])
+	w.U16(c.externalPorts[0])
 	ip = c.localIP.To4()
 	if ip == nil {
 		ip = net.IPv4zero.To4()
 	}
 	w.Bytes(ip)
-	w.U16(c.localPorts[0])
 	w.U16(c.localPorts[1])
+	w.U16(c.localPorts[0])
 }
 func roomUser(w *protocol.Writer, c *client) {
 	w.U32(c.user.ID)
