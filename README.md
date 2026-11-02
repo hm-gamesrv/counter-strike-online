@@ -2,7 +2,7 @@
 
 这是原 C++ 主服务器的 Go 重写工程，目前实现基础服务、账号、大厅、房间、基础商店，以及客户端/专用服务器对局协议和基础结算。**尚未完成全功能重写；真实客户端已跑通登录、建房、机器人对局、正常结算和返回房间。**
 
-参考仓库已克隆在 `./.ref`，提交 `947fee4966381e05a4051cce8e24f23b351f1aaa`。它是部署封装；实际服务端源码是 `JusicP/CSNZ_Server@12644f2adc0708e2d8b74f7dd6a4c3c29d3e1140`，放在 `./.upstream`。Go 程序独立编译运行，不调用 C++ 程序。客户端与游戏资源不包含在本工程中。
+参考仓库按 `AGENTS.md` 约定放在 `./.ref/<repo>`：`CSNZ_Server` 是服务端源码基线 `JusicP/CSNZ_Server@12644f2adc0708e2d8b74f7dd6a4c3c29d3e1140`，`counter-strike-online` 是部署封装。Go 程序独立编译运行，不调用 C++ 程序。客户端与游戏资源不包含在本工程中。
 
 ## 运行
 
@@ -14,7 +14,7 @@ go run ./cmd/cso-server -data ./.data
 
 默认监听 `0.0.0.0:30002` 的 TCP 和 UDP；`-listen 127.0.0.1:30002` 可覆盖监听地址。启动时逐个补齐缺失的配置与元数据，已有文件不会覆盖。`-init` 仅初始化默认文件，`-debug` 开启调试日志。关闭时使用 Ctrl+C，服务会关闭连接并退出。
 
-构建输入目录为 `assets`、`cmd`、`internal`。参考代码、运行数据和构建产物分别使用 `.ref`、`.upstream`、`.data`、`.dist`，均已加入忽略规则。
+构建输入目录为 `assets`、`cmd`、`internal`。参考代码、运行数据和构建产物分别使用 `.ref`、`.data`、`.dist`，均已加入忽略规则。
 
 ```powershell
 go build -o ./.dist/cso-server.exe ./cmd/cso-server
@@ -31,6 +31,17 @@ docker compose up --build -d
 ```
 
 Docker 使用 UID/GID 1000，Compose 默认使用命名卷。绑定宿主目录时需保证 UID 1000 可写。Docker 构建流程尚未在本环境执行验证。
+
+## 默认数据
+
+嵌入的默认配置和元数据固定取上游基线 `12644f2` 的 `bin/`。重新生成需要参考仓库：
+
+```powershell
+git clone https://github.com/JusicP/CSNZ_Server ./.ref/CSNZ_Server
+./scripts/sync-defaults.ps1
+```
+
+脚本只改写内容不同的文件，并删除基线中不存在的文件；结果提交在 `assets/defaults`，构建时嵌入。
 
 ## 当前迁移范围
 

@@ -1,5 +1,5 @@
 /.ref/
-/.upstream/
+/.tmp/
 /.data/
 /.dist/
 *.exe
