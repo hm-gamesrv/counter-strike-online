@@ -155,3 +155,42 @@ func TestRoomKickClanRequiresFamilyBattleHost(t *testing.T) {
 		t.Fatal("non-host kicked a member")
 	}
 }
+
+func voxelSettings(id string) settings {
+	s := settings{}
+	b := []byte{1, 0, 0, 0}
+	b = append(b, []byte(id)...)
+	b = append(b, 0)
+	s.fields[50] = b
+	return s
+}
+
+func TestRoomVoxelListFiltersBySlotID(t *testing.T) {
+	c := &client{queue: make(chan outbound, 8)}
+	s := &Server{rooms: map[int]*room{
+		1: {
+			id: 1,
+		},
+		3: {
+			id:       3,
+			settings: voxelSettings("slot-a"),
+		},
+		5: {
+			id:       5,
+			settings: voxelSettings("slot-b"),
+		},
+	}}
+	request := append([]byte{34}, []byte("slot-a")...)
+	request = append(request, 0)
+	if err := s.roomRequest(c, &protocol.Reader{Data: request}); err != nil {
+		t.Fatal(err)
+	}
+	message := <-c.queue
+	if message.id != 65 || message.data[0] != 34 || message.data[1] != 1 {
+		t.Fatalf("voxel list %v", message.data)
+	}
+	reader := &protocol.Reader{Data: message.data[2:]}
+	if reader.U8() != 0 || reader.U32() != 3 {
+		t.Fatalf("voxel list entry %v", message.data)
+	}
+}

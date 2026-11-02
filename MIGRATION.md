@@ -393,3 +393,10 @@
 - `65/35` ZB addon：校验 6 个上限、只接受 `zbsaddonitem` 类道具、逐个消耗并替换 `UserAddon`，返回背包更新包；未知/未拥有/受保护道具跳过。
 - `65/37` 军团战踢人：仅家族战房主可用，踢出所有非本方军团成员，记录 kicked 名单、回到大厅，并向被踢玩家发送 `KickClan`（用户 ID 列表）。
 - 新增 `Store.SetAddons` 事务替换 addon 列表；测试覆盖 32/33 回包、addon 消耗与保存、军团战踢人与非家族战/非房主拒绝。`go test ./...`、`go vet ./...` 通过；未做实机界面验收。
+
+## 2026-11-02 `65/34` Voxel 房间列表
+
+- 读取请求里的 `voxel_id`，按房间设置 Voxel 块的 `VOXELFLAG_ID` 过滤后回 `65/34`；房间条目与全量房间列表共用 `writeRoomListEntry`。
+- 新增 `settings.voxelID()` 解析 group1/bit18 的 Voxel 块；无 Voxel 块或未设置 ID 的房间不匹配。
+- Studio 房间创建仍拒绝：上游 `CRoomSettings::CheckSettings` 需要 `CVoxelManager::GetSlotDetails` 访问 `Data/VoxelConfigList.json` 配置的 HTTP 服务，用槽位详情覆盖房间名、人数和模式；仓库默认配置没有该服务地址。
+- 测试覆盖按 `voxel_id` 过滤与房间条目编码。`go test ./...`、`go vet ./...` 通过；未做实机界面验收。

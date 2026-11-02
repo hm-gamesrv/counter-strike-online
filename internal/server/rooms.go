@@ -127,6 +127,21 @@ func parseVoxel(r *protocol.Reader) {
 		}
 	}
 }
+
+// voxelID returns the Studio slot ID from the room settings Voxel block.
+func (s *settings) voxelID() string {
+	b := s.fields[50]
+	if len(b) < 4 {
+		return ""
+	}
+	flag := binary.LittleEndian.Uint32(b)
+	if flag&1 == 0 {
+		return ""
+	}
+	r := &protocol.Reader{Data: b[4:]}
+	return r.CString()
+}
+
 func (s *settings) write(w *protocol.Writer) {
 	for _, v := range s.flags {
 		w.U32(int(v))
@@ -197,26 +212,55 @@ func (s *Server) roomList(c *client) {
 	}
 	sort.Ints(ids)
 	for _, id := range ids {
-		room := s.rooms[id]
-		w.U8(0)
-		w.U32(id)
-		w.U8(4)
-		w.U8(0)
-		w.U16(0x0e3e)
-		w.U32(1 | 4 | 16 | 32 | 64 | 128)
-		w.U32(0)
-		w.String(room.settings.text(0))
-		if room.settings.text(3) != "" {
-			w.U8(1)
-		} else {
-			w.U8(0)
-		}
-		w.U8(room.settings.number(6))
-		w.U16(room.settings.number(7))
-		w.U8(len(room.members))
-		w.U8(room.settings.number(8))
+		writeRoomListEntry(w, s.rooms[id])
 	}
 	c.send(151, w)
+}
+
+// writeRoomListEntry writes the per-room block shared by the full room list
+// and the Voxel room list.
+func writeRoomListEntry(w *protocol.Writer, room *room) {
+	w.U8(0)
+	w.U32(room.id)
+	w.U8(4)
+	w.U8(0)
+	w.U16(0x0e3e)
+	w.U32(1 | 4 | 16 | 32 | 64 | 128)
+	w.U32(0)
+	w.String(room.settings.text(0))
+	if room.settings.text(3) != "" {
+		w.U8(1)
+	} else {
+		w.U8(0)
+	}
+	w.U8(room.settings.number(6))
+	w.U16(room.settings.number(7))
+	w.U8(len(room.members))
+	w.U8(room.settings.number(8))
+}
+
+// voxelRoomList handles room sub-request 65/34: the client asks for rooms
+// bound to one Voxel slot ID.
+func (s *Server) voxelRoomList(c *client, r *protocol.Reader) error {
+	voxelID := r.CString()
+	if r.Err != nil {
+		return r.Err
+	}
+	ids := make([]int, 0, len(s.rooms))
+	for id, room := range s.rooms {
+		if room.settings.voxelID() == voxelID {
+			ids = append(ids, id)
+		}
+	}
+	sort.Ints(ids)
+	w := &protocol.Writer{}
+	w.U8(34)
+	w.U8(len(ids))
+	for _, id := range ids {
+		writeRoomListEntry(w, s.rooms[id])
+	}
+	c.send(65, w)
+	return nil
 }
 func (s *Server) refreshRooms() {
 	for c := range s.clients {
@@ -531,6 +575,8 @@ func (s *Server) roomRequest(c *client, r *protocol.Reader) error {
 			c.notice("ROOM_JOIN_FAILED_INVALID_GAME_IP")
 			s.broadcastReady(currentRoom)
 		}
+	case 34:
+		return s.voxelRoomList(c, r)
 	case 32:
 		c.send(65, &protocol.Writer{Data: []byte{32, 0, 0, 0, 0, 0}})
 	case 33:

@@ -8,8 +8,8 @@
 
 - 入口覆盖：上游 33 个入口中 Go 已接 28 个（含 UDP）；未接的 5 个在上游是空实现或桩（`15`、`83`、`88`、`90`、`164`）；`103 Voxel` 已接登录 URL 与占位回包。
 - 业务覆盖：上一版列出的道具养成、军团、武器解放、房间设置校验、称号、屏蔽名单、问卷、重连恢复、结算加成与排名等均已实现（见附录）。
-- 剩余缺口集中在：Studio 房间与 `65/34` Voxel 房间列表、GM 道具/奖励命令、房间高级设置校验与 SSL。Bingo 与 Voxel `103` 基础通路已接。
-- 规模：C++ 核心约 4.6 万行（不含 GUI/thirdparty/test）；Go 非测试 13,864 行、含测试 21,057 行。
+- 剩余缺口集中在：Studio 房间创建（依赖 Voxel 槽位 HTTP 服务）、GM 道具/奖励命令、房间高级设置校验与 SSL。Bingo 与 Voxel `103` 基础通路已接。
+- 规模：C++ 核心约 4.6 万行（不含 GUI/thirdparty/test）；Go 非测试 13,910 行、含测试 21,299 行。
 
 ## 〇、默认数据与目标客户端
 
@@ -28,7 +28,9 @@
 
 ### 1.2 Studio / Voxel 房间（`103` 已接，`65/34` 未接）
 
-上游在登录时下发 Voxel URL（`SendVoxelURLs`），并对 8 个 Voxel 请求返回固定占位包。Go 已接 `103` 的 URL 下发和 `4/8/9/10/38/46/47/58` 占位回包。Voxel/Studio 房间列表 `65/34` 仍未接，地图 254 的 Studio 房间创建仍拒绝；因此 Studio 实际玩法还不能完整使用。
+上游在登录时下发 Voxel URL（`SendVoxelURLs`），并对 8 个 Voxel 请求返回固定占位包。Go 已接 `103` 的 URL 下发和 `4/8/9/10/38/46/47/58` 占位回包，`65/34` 也已按 `voxel_id` 过滤并回房间列表。
+
+Studio 房间创建（地图 254）仍拒绝：上游 `CRoomSettings::CheckSettings` 会调用 `CVoxelManager::GetSlotDetails` 访问 `Data/VoxelConfigList.json` 里配置的 Voxel HTTP 服务（`GET /v6/slots/detail/<slot>`），用返回的资源标题、人数、模式覆盖房间设置；本仓库的配置只有 `VoxelVxlURL`/`VoxelVmgURL`，没有该 HTTP 服务地址，也没有可用的服务实例，因此尚未实现。现在 `65/34` 会返回空列表而不是“未实现”提示，客户端 Studio 房间浏览器可以正常打开。
 
 ### 1.3 GM 管理命令（命令骨架已实现，道具类未接）
 
@@ -42,7 +44,7 @@ Go 已按 `UserCharacterExtended.gameMaster` 鉴权，实现 `/help`、`/version
 
 | 子类型 | 上游 | Go |
 | --- | --- | --- |
-| 34 Voxel 房间列表 | 按 `voxel_id` 过滤并返回房间 | 未处理，回通用未实现提示 |
+| 34 Voxel 房间列表 | 按 `voxel_id` 过滤并返回房间 | 已实现（房间条目复用全量列表编码） |
 | 35 ZB addon 设置 | 校验 `zbsaddonitem`、消耗道具并保存 addon | 已实现（替换 `UserAddon`，跳过未知/未拥有/受保护道具） |
 | 37 军团战踢人 | 踢出对方军团成员并回 `KickClan` | 已实现（仅家族战房主、非对局中） |
 | 32 / 33 | 固定空包（`SendRoomUnk32/33`） | 已回同结构空包 |
