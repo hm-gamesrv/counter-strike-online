@@ -389,6 +389,7 @@ func (s *Server) loginPackets(c *client) error {
 	if e := s.sendSurveys(c); e != nil {
 		return e
 	}
+	s.sendNotices(c)
 	if !c.questLogin {
 		if err := s.applyQuestEvent(c, nil, nil, questEvent{Kind: 3}); err != nil {
 			return err

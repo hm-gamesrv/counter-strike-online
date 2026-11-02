@@ -78,6 +78,7 @@ type Server struct {
 	rewards      map[int]itemReward
 	quests       []questTask
 	surveys      []surveyDefinition
+	notices      []noticeDefinition
 	enhanceExp   map[int][]int
 	enhanceMax   map[int]enhanceLimit
 	modes        map[int]modeDefinition
@@ -139,6 +140,10 @@ func New(dir string, c config.Config, db *store.Store, log *slog.Logger) (*Serve
 		return nil, e
 	}
 	s.surveys, e = loadSurveys(c.Surveys)
+	if e != nil {
+		return nil, e
+	}
+	s.notices, e = loadNotices(c.Notices)
 	if e != nil {
 		return nil, e
 	}
