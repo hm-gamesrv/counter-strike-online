@@ -128,6 +128,63 @@ func (s *Server) sendClanBattleNotice(userID, kind int, gameName string, mode, r
 	}
 }
 
+// kickClanMembers handles room sub-request 65/37: the family battle host
+// removes every member of the opposing clan, then tells each kicked client
+// which users were removed.
+func (s *Server) kickClanMembers(c *client) error {
+	r := s.rooms[c.room]
+	if r == nil || r.host != c || c.playing {
+		return nil
+	}
+	if r.settings.number(70) == 0 || r.clan2 == 0 {
+		return nil
+	}
+	hostClan, err := s.clanIDFor(c)
+	if err != nil {
+		return err
+	}
+	if hostClan == 0 {
+		return nil
+	}
+	members := append([]*client{}, r.members...)
+	var kicked []*client
+	for _, member := range members {
+		if member == c {
+			continue
+		}
+		clanID, err := s.clanIDFor(member)
+		if err != nil {
+			continue
+		}
+		if clanID == 0 || clanID == hostClan {
+			continue
+		}
+		member.send(65, &protocol.Writer{Data: []byte{10}})
+		if r.kicked == nil {
+			r.kicked = map[int]bool{}
+		}
+		r.kicked[member.user.ID] = true
+		kicked = append(kicked, member)
+	}
+	if len(kicked) == 0 {
+		return nil
+	}
+	for _, member := range kicked {
+		s.leaveRoom(member)
+		s.joinLobby(member)
+	}
+	w := &protocol.Writer{}
+	w.U8(37)
+	w.U8(len(kicked))
+	for _, member := range kicked {
+		w.U32(member.user.ID)
+	}
+	for _, member := range kicked {
+		member.send(65, w)
+	}
+	return nil
+}
+
 func (s *Server) roomNoticeClan(c *client) error {
 	r := s.rooms[c.room]
 	if r == nil || r.settings.number(70) == 0 || c.playing {

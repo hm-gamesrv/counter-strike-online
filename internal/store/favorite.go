@@ -33,6 +33,24 @@ func (s *Store) SetFastBuy(id, slot int, name string, items []int) error {
 	return nil
 }
 
+// SetAddons replaces the character's ZB addon list.
+func (s *Store) SetAddons(id int, addons []int) error {
+	tx, err := s.DB.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err = tx.Exec("DELETE FROM UserAddon WHERE userID=?", id); err != nil {
+		return err
+	}
+	for _, addon := range addons {
+		if _, err = tx.Exec("INSERT INTO UserAddon(userID,itemID) VALUES(?,?)", id, addon); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
 func (s *Store) Addons(id int) ([]int, error) {
 	rows, err := s.DB.Query("SELECT itemID FROM UserAddon WHERE userID=? ORDER BY rowid", id)
 	if err != nil {

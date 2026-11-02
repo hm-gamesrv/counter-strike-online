@@ -531,6 +531,14 @@ func (s *Server) roomRequest(c *client, r *protocol.Reader) error {
 			c.notice("ROOM_JOIN_FAILED_INVALID_GAME_IP")
 			s.broadcastReady(currentRoom)
 		}
+	case 32:
+		c.send(65, &protocol.Writer{Data: []byte{32, 0, 0, 0, 0, 0}})
+	case 33:
+		c.send(65, &protocol.Writer{Data: []byte{33, 0, 0, 0, 0, 0}})
+	case 35:
+		return s.setZBAddons(c, r)
+	case 37:
+		return s.kickClanMembers(c)
 	case 38:
 		return s.roomNoticeClan(c)
 	default:

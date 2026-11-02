@@ -386,3 +386,10 @@
 - `/ban` 写 `UserBan`（term 按天换算为分钟，0 视为 999999 天），`/hban`、`/ipban` 分别写 `HWIDBanList`、`IPBanList`；三者断开在线目标，`type=1` 向全服广播封禁原因。
 - 拦截点与上游一致：TCP accept 处拒绝 `IPBanList` 来源，登录握手（`U` 类型 3）处拒绝 `HWIDBanList` 中的 HWID；`/unban` 同时删除账号、IP、HWID 封禁。
 - 新增测试覆盖 GM 鉴权、封禁/解封、IP/HWID 拦截与积分修改。`go test ./...`、`go vet ./...` 通过；未做实机界面验收。
+
+## 2026-11-02 房间子项 32/33/35/37
+
+- `65/32`、`65/33` 按上游 `SendRoomUnk32/33` 回固定空包。
+- `65/35` ZB addon：校验 6 个上限、只接受 `zbsaddonitem` 类道具、逐个消耗并替换 `UserAddon`，返回背包更新包；未知/未拥有/受保护道具跳过。
+- `65/37` 军团战踢人：仅家族战房主可用，踢出所有非本方军团成员，记录 kicked 名单、回到大厅，并向被踢玩家发送 `KickClan`（用户 ID 列表）。
+- 新增 `Store.SetAddons` 事务替换 addon 列表；测试覆盖 32/33 回包、addon 消耗与保存、军团战踢人与非家族战/非房主拒绝。`go test ./...`、`go vet ./...` 通过；未做实机界面验收。
