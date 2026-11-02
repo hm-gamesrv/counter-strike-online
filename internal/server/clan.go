@@ -44,11 +44,14 @@ func (s *Server) clanRequest(c *client, r *protocol.Reader) error {
 		return s.clanUpdateMarkRequest(c, r)
 	case 16:
 		return s.clanSetNoticeRequest(c, r)
-	case 24, 25, 26, 31:
-		if s.Log != nil {
-			s.Log.Debug("clan storage request not wired", "type", kind, "user", c.user.ID)
-		}
-		return r.Err
+	case 24:
+		return s.clanStorageGive(c, r)
+	case 25:
+		return s.clanStorageGet(c, r)
+	case 26:
+		return s.clanStorageRequest(c, r)
+	case 31:
+		return s.clanStorageDelete(c, r)
 	case 27:
 		return s.clanDissolveRequest(c, r)
 	case 28:
@@ -750,6 +753,180 @@ func (s *Server) clanChatRequest(c *client, r *protocol.Reader) error {
 	return nil
 }
 
+func (s *Server) clanStorageGive(c *client, r *protocol.Reader) error {
+	page := r.U8()
+	r.U8()
+	slot := r.U16()
+	if r.Err != nil {
+		return r.Err
+	}
+	items, code, err := s.Store.GiveClanItem(c.user.ID, page, slot)
+	if err != nil {
+		return err
+	}
+	switch code {
+	case -3:
+		s.clanReply(c, 24, 0, "CSO_CLAN_GIVE_ITEM_EXCEED_LIMIT")
+		return nil
+	case -1, -2, 0:
+		s.clanReply(c, 24, 0, "CSO_CLAN_DB_SYSTEM_ERROR")
+		return nil
+	}
+	if err = s.sendInventoryItems(c, items); err != nil {
+		return err
+	}
+	s.clanReply(c, 24, 1, "")
+	return s.sendClanStoragePage(c, page)
+}
+
+func (s *Server) clanStorageGet(c *client, r *protocol.Reader) error {
+	page := r.U8()
+	slot := r.U16()
+	if r.Err != nil {
+		return r.Err
+	}
+	items, code, err := s.Store.TakeClanItem(c.user.ID, page, slot, s.Config.InventorySlotMax, len(s.Config.DefaultUser.DefaultItems))
+	if err != nil {
+		return err
+	}
+	switch code {
+	case -2:
+		s.clanReply(c, 25, 0, "CSO_CLAN_INVENTORY_FULL")
+		return nil
+	case -3:
+		s.clanReply(c, 25, 0, "CSO_CLAN_GET_ITEM_HAS_INFINITY_ITEM")
+		return nil
+	case -4:
+		s.clanReply(c, 25, 0, "CSO_CLAN_GET_ITEM_EXCEED_LIMIT")
+		return nil
+	case -5:
+		s.clanReply(c, 25, 0, "CSO_CLAN_GET_ITEM_HAS_CLAN_ITEM")
+		return nil
+	case -1, 0:
+		s.clanReply(c, 25, 0, "CSO_CLAN_SYSTEM_ERROR")
+		return nil
+	}
+	if err = s.sendInventoryItems(c, items); err != nil {
+		return err
+	}
+	s.clanReply(c, 25, 1, "")
+	return s.sendClanStoragePage(c, page)
+}
+
+func (s *Server) clanStorageDelete(c *client, r *protocol.Reader) error {
+	page := r.U8()
+	slot := r.U16()
+	if r.Err != nil {
+		return r.Err
+	}
+	code, err := s.Store.DeleteClanItem(c.user.ID, page, slot)
+	if err != nil {
+		return err
+	}
+	if code != 1 {
+		s.clanReply(c, 31, 0, "CSO_CLAN_DB_SYSTEM_ERROR")
+		return nil
+	}
+	s.clanReply(c, 31, 1, "")
+	return s.sendClanStoragePage(c, page)
+}
+
+func (s *Server) clanStorageRequest(c *client, r *protocol.Reader) error {
+	kind := r.U8()
+	switch kind {
+	case 0:
+		page := r.U8()
+		if r.Err != nil {
+			return r.Err
+		}
+		return s.sendClanStoragePage(c, page)
+	case 1:
+		s.sendClanStorageHistory(c)
+	case 2:
+		page := r.U8()
+		grade := r.U8()
+		if r.Err != nil {
+			return r.Err
+		}
+		code, err := s.Store.SetClanStorageAccess(c.user.ID, page, grade)
+		if err != nil {
+			return err
+		}
+		if code != 1 {
+			s.sendClanStorageReply(c, 0, "CSO_CLAN_DB_SYSTEM_ERROR")
+			return nil
+		}
+		s.sendClanStorageReply(c, 1, "")
+		grades, err := s.Store.ClanStorageAccess(c.user.ID)
+		if err != nil {
+			return err
+		}
+		members, err := s.Store.ClanMembers(c.user.ID, false)
+		if err != nil {
+			return err
+		}
+		for _, member := range members {
+			if target := s.users[member.UserID]; target != nil {
+				s.sendClanStorageAccessData(target, grades)
+			}
+		}
+	case 3:
+		grades, err := s.Store.ClanStorageAccess(c.user.ID)
+		if err != nil {
+			return err
+		}
+		s.sendClanStorageAccessData(c, grades)
+	default:
+		if s.Log != nil {
+			s.Log.Debug("unsupported clan storage request", "kind", kind, "user", c.user.ID)
+		}
+	}
+	return r.Err
+}
+
+func (s *Server) sendClanStoragePage(c *client, page int) error {
+	items, err := s.Store.ClanStoragePage(c.user.ID, page)
+	if err != nil {
+		return err
+	}
+	w := &protocol.Writer{}
+	w.U8(26)
+	w.U8(0)
+	w.U8(page)
+	buildClanStorage(w, items)
+	c.send(71, w)
+	return nil
+}
+
+func (s *Server) sendClanStorageHistory(c *client) {
+	w := &protocol.Writer{}
+	w.U8(26)
+	w.U8(1)
+	w.U16(0)
+	c.send(71, w)
+}
+
+func (s *Server) sendClanStorageReply(c *client, code int, text string) {
+	w := &protocol.Writer{}
+	w.U8(26)
+	w.U8(2)
+	w.U8(code)
+	if code == 0 {
+		w.String(text)
+	}
+	c.send(71, w)
+}
+
+func (s *Server) sendClanStorageAccessData(c *client, grades []int) {
+	w := &protocol.Writer{}
+	w.U8(26)
+	w.U8(3)
+	for _, grade := range grades {
+		w.U8(grade)
+	}
+	c.send(71, w)
+}
+
 func (s *Server) sendClanLogin(c *client) error {
 	clan, ok, err := s.Store.ClanForUser(c.user.ID)
 	if err != nil || !ok {
@@ -782,6 +959,13 @@ func (s *Server) sendClanLogin(c *client) error {
 		}
 	}
 	s.sendClanUserListData(c, members)
+	grades, err := s.Store.ClanStorageAccess(c.user.ID)
+	if err != nil {
+		return err
+	}
+	if len(grades) != 0 {
+		s.sendClanStorageAccessData(c, grades)
+	}
 	if grade <= 1 {
 		if err = s.sendClanMemberList(c); err != nil {
 			return err

@@ -3,6 +3,7 @@ package server
 import (
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/hm-gamesrv/cso-server-go/internal/config"
 	"github.com/hm-gamesrv/cso-server-go/internal/protocol"
@@ -206,5 +207,80 @@ func TestClanApprovalChatAndKick(t *testing.T) {
 	}
 	if !kicked {
 		t.Fatal("missing kick notification")
+	}
+}
+func TestClanStorageMoveAndDelete(t *testing.T) {
+	db, err := store.Open(filepath.Join(t.TempDir(), "clan.db3"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	masterID := clanTestUser(t, db, "master", 40000)
+	targetID := clanTestUser(t, db, "target", 0)
+	master := clanTestClient(t, db, masterID, "master")
+	target := clanTestClient(t, db, targetID, "target")
+	s := &Server{
+		Store: db,
+		Config: config.Config{
+			InventorySlotMax: 3000,
+		},
+		clients: map[*client]bool{},
+		users:   map[int]*client{masterID: master, targetID: target},
+	}
+	s.clients[master] = true
+	s.clients[target] = true
+	clanDispatch(t, s, master, append([]byte{2}, append([]byte("Alpha"), 0)...))
+	clanDispatch(t, s, target, []byte{3, 1, 0, 0, 0})
+	for len(master.queue) != 0 {
+		<-master.queue
+	}
+	for len(target.queue) != 0 {
+		<-target.queue
+	}
+	if _, err = db.DB.Exec("INSERT INTO UserInventory(userID,slot,itemID,count,status,inUse,obtainDate,expiryDate,isClanItem,enhancementLevel,enhancementExp,enhanceValue,paintID,partSlot1,partSlot2,lockStatus) VALUES(?,40,270,1,1,0,?,0,0,0,0,0,0,0,0,0)", masterID, int(time.Now().Unix()/60)); err != nil {
+		t.Fatal(err)
+	}
+	messages := clanDispatch(t, s, master, []byte{24, 0, 0, 40, 0})
+	reply, ok := clanFind(messages, 24)
+	if !ok {
+		t.Fatal("missing give reply")
+	}
+	r := &protocol.Reader{Data: reply.data}
+	if reply.id != 71 || r.U8() != 24 || r.U8() != 1 {
+		t.Fatalf("give reply %v", reply.data)
+	}
+	if _, ok := clanFind(messages, 26); !ok {
+		t.Fatal("missing storage page after give")
+	}
+	var count int
+	if err = db.DB.QueryRow("SELECT count(*) FROM UserInventory WHERE userID=? AND slot=40", masterID).Scan(&count); err != nil || count != 0 {
+		t.Fatalf("inventory after give %d, %v", count, err)
+	}
+	messages = clanDispatch(t, s, target, []byte{25, 0, 0, 0, 0})
+	reply, ok = clanFind(messages, 25)
+	if !ok {
+		t.Fatal("missing take reply")
+	}
+	r = &protocol.Reader{Data: reply.data}
+	if reply.id != 71 || r.U8() != 25 || r.U8() != 1 {
+		t.Fatalf("take reply %v", reply.data)
+	}
+	if err = db.DB.QueryRow("SELECT count(*) FROM UserInventory WHERE userID=? AND itemID=270 AND isClanItem=1", targetID).Scan(&count); err != nil || count != 1 {
+		t.Fatalf("target inventory after take %d, %v", count, err)
+	}
+	if err = db.DB.QueryRow("SELECT count(*) FROM ClanStorageItem WHERE clanID=1 AND pageID=0 AND itemID<>0").Scan(&count); err != nil || count != 0 {
+		t.Fatalf("storage after take %d, %v", count, err)
+	}
+	for len(master.queue) != 0 {
+		<-master.queue
+	}
+	messages = clanDispatch(t, s, master, []byte{31, 0, 0, 0, 0})
+	reply, ok = clanFind(messages, 31)
+	if !ok {
+		t.Fatal("missing delete reply")
+	}
+	r = &protocol.Reader{Data: reply.data}
+	if reply.id != 71 || r.U8() != 31 || r.U8() != 0 {
+		t.Fatalf("delete empty storage reply %v", reply.data)
 	}
 }
