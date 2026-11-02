@@ -1,6 +1,6 @@
 # 默认数据来源
 
-嵌入数据固定取上游 `JusicP/CSNZ_Server@e5721ed9bbd6bd16abdd7133f412316bc14d3cf0` 的 `bin/`，不使用 `S:\.temp\CSNZ` 客户端目录中的定制配置和数据。
+嵌入数据固定取上游 `JusicP/CSNZ_Server@4859a6e73451ccbfce167b1d28deeb0457468ac3` 的 `bin/`，不使用 `S:\.temp\CSNZ` 客户端目录中的定制配置和数据。
 
 - 参考仓库按 `AGENTS.md` 约定克隆在 `./.ref/CSNZ_Server`；执行 `scripts/sync-defaults.ps1` 会从基线提交重新生成 `defaults/`。
 - `ServerConfig.json`、`Shop.json`、`ItemBox.json`、`ItemRewards.json`、`EventQuests.json`、`RandomWeaponList.json`、`WeaponPaints.json`、`ZombieWarWeaponList.json` 复制自上游 `bin/`。

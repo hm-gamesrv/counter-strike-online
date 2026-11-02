@@ -1,6 +1,6 @@
 # 差距分析：Go 重写版与上游 C++ 实现
 
-基准：本分支 `go-rewrite`（2026-11-03）对照上游 `JusicP/CSNZ_Server@e5721ed9bbd6bd16abdd7133f412316bc14d3cf0`（2025-03-20）。默认嵌入数据也使用该提交的 `bin/` 快照。`12644f2` → `e5721ed` 只改 `bin/Data/*` 与 `bin/*.json`，协议形状相同；再往后的提交才改协议，按提交历史逐步过渡。
+基准：本分支 `go-rewrite`（2026-11-03）对照上游 `JusicP/CSNZ_Server@4859a6e73451ccbfce167b1d28deeb0457468ac3`（2025-03-20，PR #45 合并点，内容同其分支头 `e5721ed`）。默认嵌入数据也使用该提交的 `bin/` 快照。`12644f2` 至该点只改 `bin/Data/*` 与 `bin/*.json`，协议形状相同；再往后的提交才改协议，按提交历史逐步过渡。
 
 方法：以 `CServerInstance::OnPackets`（`src/serverinstance.cpp:352`）的入口分发表为准，逐项对照 Go `internal/server/server.go` 的 `dispatch`，再下钻到各 manager 的子类型处理；只统计上游实际实现的功能，上游为桩的模块单独列出（第二节）。
 
@@ -15,7 +15,7 @@
 
 ## 〇、默认数据与目标客户端
 
-- 默认嵌入数据取自上游 `e5721ed` 的 `bin/`（地图 322、模式 51、道具 3020），不是 `S:\.temp\CSNZ` 的私服定制数据。
+- 默认嵌入数据取自上游 `4859a6e` 的 `bin/`（地图 322、模式 51、道具 3020），不是 `S:\.temp\CSNZ` 的私服定制数据。
 - 与私服侧 `S:\.temp\CSNZ\Server\Data` 相比：地图 341 vs 322、模式 59 vs 51、道具 2987 vs 3020；私服数据含自加地图/模式，道具表则少了一批上游新增项。UI 与活动相关表（EventShop、ItemExpireTime、progress_unlock、RandomWeaponList、WeaponPaints 等）也随基线版本不同。
 - 当前默认配置的 `Bingo.Active`、`WeaponRelease.Active` 均为 `false`，`MainMenuSkinEvent` 为 0；因此现成默认数据不会暴露这些活动。
 - 目标客户端仍是 `30.12.24`；如果要用它的活动/商店/道具，必须在运行目录替换 `ServerConfig.json` 和 `Data`，或重新制作嵌入数据。默认上游数据与目标客户端存在内容差异，这是部署缺口，不是协议入口缺口。

@@ -1,6 +1,6 @@
 # 校验 .ref 参照仓库是否停在 AGENTS.md 指定的基线提交。
 # 用法：pwsh scripts/check-ref.ps1
-$baseline = "e5721ed9bbd6bd16abdd7133f412316bc14d3cf0"
+$baseline = "4859a6e73451ccbfce167b1d28deeb0457468ac3"
 $dir = Join-Path (Split-Path -Parent $PSScriptRoot) ".ref/CSNZ_Server"
 if (-not (Test-Path $dir)) {
     Write-Error "缺少参照仓库: $dir"
