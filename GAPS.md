@@ -26,13 +26,13 @@
 
 限制：上游 open-random 本身被注释，Go 采用“从未打开的桌面数字中随机选一个”的简化规则；客户端是否按这个流程刷新、发奖提示和开格动画是否完整，尚未实机验收。
 
-### 1.2 Studio / Voxel 房间（`103` 已接，`65/34` 未接）
+### 1.2 Studio / Voxel 房间（`103` 与 `65/34` 已接，建房未接）
 
 上游在登录时下发 Voxel URL（`SendVoxelURLs`），并对 8 个 Voxel 请求返回固定占位包。Go 已接 `103` 的 URL 下发和 `4/8/9/10/38/46/47/58` 占位回包，`65/34` 也已按 `voxel_id` 过滤并回房间列表。
 
 Studio 房间创建（地图 254）仍拒绝：上游 `CRoomSettings::CheckSettings` 会调用 `CVoxelManager::GetSlotDetails` 访问 `Data/VoxelConfigList.json` 里配置的 Voxel HTTP 服务（`GET /v6/slots/detail/<slot>`），用返回的资源标题、人数、模式覆盖房间设置；本仓库的配置只有 `VoxelVxlURL`/`VoxelVmgURL`，没有该 HTTP 服务地址，也没有可用的服务实例，因此尚未实现。现在 `65/34` 会返回空列表而不是“未实现”提示，客户端 Studio 房间浏览器可以正常打开。
 
-### 1.3 GM 管理命令（命令骨架已实现，道具类未接）
+### 1.3 GM 管理命令（公开命令已实现）
 
 上游 `channelmanager.cpp:372` 起实现 31 个聊天命令：`/ban`、`/ipban`、`/hban`、`/unban`、`/additem`、`/giveitem`、`/removeitem`、`/addpoints`、`/givepoints`、`/addexp`、`/addallitems`、`/givereward`、`/giverewardtoall`、`/addgroom`、`/addwpnreleasechar`、`/sendnotice`、`/sendgmnotice`、`/bingo`、`/weaponrelease`、`/setiteminuse`、`/setitemstatus`、`/status`、`/getuid`、`/getfreeslots`、`/disconnect`、`/reqsnapshot`、`/tournament`、`/help` 等。
 
@@ -76,6 +76,8 @@ bot 数量/难度夹紧（模式 3/4/5/24 上限、其他模式默认值比对�
 
 - `73 Rank`：上游在 PUBLIC_RELEASE 下直接回"未实现"，Go 行为一致
 - `88 Quest` 界面与领取：上游 `SendQuests` 为 `TODO: reverse`，领取分支被注释
+- 军团任务：上游 `CQuestManager::LoadClanQuests` 是空函数
+- 每日/荣誉任务：没有独立的任务表或处理器，相关入口在上游为空
 - `65/8,9` 投票踢人：`CRoom::VoteKick` 未实现
 - `67/5` 队伍聊天：上游声明 party 未实现
 - `67/3` 军团聊天：上游仅打印警告（军团聊天走 `71/113`）
