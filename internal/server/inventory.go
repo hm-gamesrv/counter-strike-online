@@ -502,6 +502,14 @@ func (s *Server) itemRequest(c *client, p *protocol.Reader) error {
 		c.notice("Item unavailable.")
 		return nil
 	}
+	if kind == 0 {
+		switch s.items[target.ID].ClassName {
+		case "zbRespawnEffect":
+			return s.toggleEffectItem(c, target, "zbRespawnEffect")
+		case "CombatInfoItem":
+			return s.toggleEffectItem(c, target, "killerMarkEffect")
+		}
+	}
 	if kind == 0 && inventoryType != 1 && s.items[target.ID].RewardID != 0 {
 		return s.useRewardItem(c, target, count)
 	}

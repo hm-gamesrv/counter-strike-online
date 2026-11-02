@@ -461,3 +461,10 @@
 - 移除配置层对 `SSL=true` 的拒绝；`New` 在 `SSL=true` 时加载 `Data/Certs/server-cert.pem` 与 `server-key.pem`，构造 TLS 1.3（Min/Max 都锁 1.3，对齐上游 `wolfTLSv1_3_server_method`）。
 - `Serve` 接受的 TCP 连接在 IP 封禁检查后包成 `tls.Server`，UDP 路径不变；证书缺失时启动直接报错，而不是像上游那样回落明文。
 - 新增 `ssl_test.go`：自签证书握手后读取 greeting、完成版本握手；证书缺失时 `New` 返回错误。`go test ./...`、`go vet ./...` 通过；未用真实客户端验证。
+
+## 2026-11-02 装饰道具状态切换
+
+- `zbRespawnEffect`（复活特效）与 `CombatInfoItem`（击杀标记）按上游 `CItemManager::OnItemPacket` 的 switch-status 分支实现：激活时清掉同 ID 其他副本的 `status` 与上一个生效道具的 `inUse`，把所选道具置为 `status=1,inUse=1`，并写 `UserCharacterExtended.zbRespawnEffect`/`killerMarkEffect`。
+- 新增 `Store.ToggleEffectItem`（列名白名单、槽位校验、`ErrItemUnavailable`）与 `Server.toggleEffectItem`；`itemRequest` 的 UseItem 分支按 `ClassName` 分发。
+- 与上游一致，这两类装饰不发 `157` 用户信息包，只回背包更新；`LobbyBG` 名片需要 `UFLAG_LOW_NAMEPLATE`，等实机确认后再接。
+- 测试覆盖激活/切换/取消、无效槽位、非法列名，以及 `itemRequest` 端到端切换。`go test ./...`、`go vet ./...` 通过；未做实机界面验收。
