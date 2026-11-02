@@ -35,7 +35,7 @@ func (s *Server) kickRequest(c *client, r *protocol.Reader) error {
 	w.U32(id)
 	w.U8(1)
 	room.broadcast(112, w)
-	s.leaveRoomRequest(target)
+	s.leaveRoom(target)
 	s.joinLobby(target)
 	return nil
 }

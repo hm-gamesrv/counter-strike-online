@@ -10,10 +10,10 @@ import (
 	"github.com/hm-gamesrv/cso-server-go/internal/store"
 )
 
-// TestHostLeaveSettlesMatch covers the scenario room path: the client closes
-// its own result window and asks to leave the room instead of sending the host
-// game-end message, so the reward has to be paid while leaving.
-func TestHostLeaveSettlesMatch(t *testing.T) {
+// TestHostLeaveForfeitsReward mirrors the reference: leaving a room mid-match
+// drops that player's match stat and promotes a new host, so the leaver is not
+// paid and the remaining players continue the match.
+func TestHostLeaveForfeitsReward(t *testing.T) {
 	db, err := store.Open(filepath.Join(t.TempDir(), "leave.db3"))
 	if err != nil {
 		t.Fatal(err)
@@ -58,19 +58,28 @@ func TestHostLeaveSettlesMatch(t *testing.T) {
 	r.match.stats[2] = &matchStat{user: guest}
 	s.rooms[1] = r
 
-	s.leaveRoomRequest(host)
+	s.leaveRoom(host)
 
-	if r.match != nil {
-		t.Fatal("match survived the host leaving")
+	if r.match == nil {
+		t.Fatal("match ended when the host left")
 	}
-	if host.room != 0 {
-		t.Fatal("host did not leave the room")
+	if _, ok := r.match.stats[1]; ok {
+		t.Fatal("the leaver kept its match stat")
 	}
-	var rows int
-	if err = db.DB.QueryRow("SELECT count(*) FROM GoMatchSettlement WHERE matchID='leave-match'").Scan(&rows); err != nil {
+	if r.host != guest {
+		t.Fatal("host was not migrated to the remaining player")
+	}
+	// SettleMatch creates its table on first use; the leaver must not reach it.
+	var tables, rows int
+	if err = db.DB.QueryRow("SELECT count(*) FROM sqlite_master WHERE type='table' AND name='GoMatchSettlement'").Scan(&tables); err != nil {
 		t.Fatal(err)
 	}
-	if rows != 2 {
+	if tables != 0 {
+		if err = db.DB.QueryRow("SELECT count(*) FROM GoMatchSettlement WHERE matchID='leave-match'").Scan(&rows); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if rows != 0 {
 		t.Fatalf("settlement rows = %d", rows)
 	}
 }
