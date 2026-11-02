@@ -102,6 +102,60 @@ func (s *Store) HWIDBanned(hwid []byte) (bool, error) {
 	return banned, err
 }
 
+// SetItemStatus overwrites one inventory row's status byte for GM tooling.
+func (s *Store) SetItemStatus(id, slot, status int) ([]Item, error) {
+	if status < 0 || status > 255 {
+		return nil, errors.New("status outside uint8 range")
+	}
+	return s.setItemColumn(id, slot, "status", status)
+}
+
+// SetItemInUse overwrites one inventory row's inUse byte for GM tooling.
+func (s *Store) SetItemInUse(id, slot, inUse int) ([]Item, error) {
+	if inUse < 0 || inUse > 255 {
+		return nil, errors.New("inUse outside uint8 range")
+	}
+	return s.setItemColumn(id, slot, "inUse", inUse)
+}
+
+func (s *Store) setItemColumn(id, slot int, column string, value int) ([]Item, error) {
+	if slot <= 0 {
+		return nil, ErrItemUnavailable
+	}
+	tx, err := s.DB.Begin()
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	result, err := tx.Exec("UPDATE UserInventory SET "+column+"=? WHERE userID=? AND slot=?", value, id, slot)
+	if err != nil {
+		return nil, err
+	}
+	if n, err := result.RowsAffected(); err != nil {
+		return nil, err
+	} else if n == 0 {
+		return nil, ErrItemUnavailable
+	}
+	items, err := readInventory(tx, id)
+	if err != nil {
+		return nil, err
+	}
+	var changed Item
+	for _, item := range items {
+		if item.Slot == slot {
+			changed = item
+			break
+		}
+	}
+	if changed.Slot == 0 {
+		return nil, ErrItemUnavailable
+	}
+	if err = tx.Commit(); err != nil {
+		return nil, err
+	}
+	return []Item{changed}, nil
+}
+
 // UserIDs lists every registered account, used by GM broadcast commands.
 func (s *Store) UserIDs() ([]int, error) {
 	rows, err := s.DB.Query("SELECT userID FROM User ORDER BY userID")

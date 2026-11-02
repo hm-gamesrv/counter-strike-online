@@ -407,3 +407,9 @@
 - 道具发放走 `prepareGrants` + `Store.GrantReward`，与商城/奖励共用槽位、堆叠和过期规则；`/removeitem` 按同 ID 序号删除，禁止删除默认/伪默认道具，未带序号时列出可选序号。
 - `/addexp` 复用 `GrantReward` 的经验上限与升级逻辑，升级后广播 `157`；`/givereward` 复用 `ItemRewards.json` 的目录奖励，在线目标收到背包更新与奖励通知，离线目标直接落库；`/giverewardtoall` 遍历全部账号。
 - 选择型奖励（`Select`）仍拒绝并提示需要客户端选择 UI；新增测试覆盖加道具、删道具、伪默认道具保护、加经验、单人/全服发奖。`go test ./...`、`go vet ./...` 通过；未做实机界面验收。
+
+## 2026-11-02 GM 剩余道具命令
+
+- 新增 `/addallitems`、`/setitemstatus`、`/setiteminuse`。
+- `/addallitems` 按 `Item.csv` 全量发放，跳过默认/伪默认道具；`/setitemstatus`、`/setiteminuse` 直接改背包行的 status/inUse 并回单条背包更新，对应上游 `UpdateInventoryItem` 的两个字段分支。
+- 新增 `Store.SetItemStatus`、`Store.SetItemInUse`（越界校验、槽位不存在返回 `ErrItemUnavailable`）；测试覆盖字段修改与全量发放。`go test ./...`、`go vet ./...` 通过；未做实机界面验收。

@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"net"
@@ -323,4 +324,43 @@ func TestGMItemExpAndRewardCommands(t *testing.T) {
 	}
 	admin.command("/givereward 2 999999")
 	gmNotice(t, admin, 11, "Reward does not exist")
+}
+
+func TestGMSetItemFieldsAndAllItems(t *testing.T) {
+	addr, db, _ := startGMTestServer(t, true)
+	admin := gmJoin(t, addr, "admin", []byte("aaaaaaaaaaaaaaaa"))
+
+	items, err := db.Inventory(1)
+	if err != nil || len(items) == 0 {
+		t.Fatalf("inventory %v %v", items, err)
+	}
+	slot := items[0].Slot
+	admin.command(fmt.Sprintf("/setitemstatus %d 3", slot))
+	admin.command("/register x y")
+	gmNotice(t, admin, 10, "Already logged in.")
+	var status int
+	if err = db.DB.QueryRow("SELECT status FROM UserInventory WHERE userID=1 AND slot=?", slot).Scan(&status); err != nil || status != 3 {
+		t.Fatalf("status %d %v", status, err)
+	}
+	admin.command(fmt.Sprintf("/setiteminuse %d 1", slot))
+	admin.command("/register x y")
+	gmNotice(t, admin, 10, "Already logged in.")
+	var inUse int
+	if err = db.DB.QueryRow("SELECT inUse FROM UserInventory WHERE userID=1 AND slot=?", slot).Scan(&inUse); err != nil || inUse != 1 {
+		t.Fatalf("inUse %d %v", inUse, err)
+	}
+
+	var before int
+	if err = db.DB.QueryRow("SELECT count(*) FROM UserInventory WHERE userID=1").Scan(&before); err != nil {
+		t.Fatal(err)
+	}
+	admin.command("/addallitems")
+	gmNotice(t, admin, 11, "Done")
+	var after int
+	if err = db.DB.QueryRow("SELECT count(*) FROM UserInventory WHERE userID=1").Scan(&after); err != nil {
+		t.Fatal(err)
+	}
+	if after <= before+100 {
+		t.Fatalf("addallitems inventory %d -> %d", before, after)
+	}
 }

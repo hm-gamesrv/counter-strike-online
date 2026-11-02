@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -20,7 +21,8 @@ func (s *Server) gmCommand(c *client, text string, args []string) (bool, error) 
 	case "/help":
 		c.chatNotice("Available commands: /help, /version, /disconnect, /getfreeslots, /status, /getuid")
 		c.chatNotice("/sendnotice, /sendgmnotice, /addpoints, /givepoints, /addexp")
-		c.chatNotice("/additem, /giveitem, /removeitem, /givereward, /giverewardtoall")
+		c.chatNotice("/additem, /giveitem, /removeitem, /addallitems, /setitemstatus, /setiteminuse")
+		c.chatNotice("/givereward, /giverewardtoall")
 		c.chatNotice("/ban, /hban, /ipban, /unban")
 	case "/version":
 		c.chatNotice("CSNZ Go server; client build 30.12.24")
@@ -258,6 +260,73 @@ func (s *Server) gmCommand(c *client, text string, args []string) (bool, error) 
 			sent++
 		}
 		c.chatNotice(fmt.Sprintf("Reward %d sent to %d users.", rewardID, sent))
+	case "/setitemstatus":
+		slot, okSlot := atoiArg(args, 1)
+		status, okStatus := atoiArg(args, 2)
+		if !okSlot || !okStatus {
+			c.chatNotice("/setitemstatus usage: /setitemstatus <slot> <status>")
+			return true, nil
+		}
+		changed, err := s.Store.SetItemStatus(c.user.ID, slot, status)
+		if errors.Is(err, store.ErrItemUnavailable) {
+			c.chatNotice("Item does not exist")
+			return true, nil
+		}
+		if err != nil {
+			return true, err
+		}
+		if err = s.sendInventoryItems(c, changed); err != nil {
+			return true, err
+		}
+	case "/setiteminuse":
+		slot, okSlot := atoiArg(args, 1)
+		inUse, okUse := atoiArg(args, 2)
+		if !okSlot || !okUse {
+			c.chatNotice("/setiteminuse usage: /setiteminuse <slot> <inUse>")
+			return true, nil
+		}
+		changed, err := s.Store.SetItemInUse(c.user.ID, slot, inUse)
+		if errors.Is(err, store.ErrItemUnavailable) {
+			c.chatNotice("Item does not exist")
+			return true, nil
+		}
+		if err != nil {
+			return true, err
+		}
+		if err = s.sendInventoryItems(c, changed); err != nil {
+			return true, err
+		}
+	case "/addallitems":
+		protected := map[int]bool{}
+		for _, id := range s.Config.DefaultUser.DefaultItems {
+			protected[id] = true
+		}
+		for _, id := range s.Config.DefaultUser.PseudoDefaultItems {
+			protected[id] = true
+		}
+		ids := make([]int, 0, len(s.items))
+		for id := range s.items {
+			if !protected[id] {
+				ids = append(ids, id)
+			}
+		}
+		sort.Ints(ids)
+		rewards := make([]store.Reward, 0, len(ids))
+		for _, id := range ids {
+			rewards = append(rewards, store.Reward{ID: id, Count: 1})
+		}
+		items, err := s.prepareGrants(rewards)
+		if err != nil {
+			return true, err
+		}
+		changed, err := s.Store.GrantReward(c.user.ID, store.Grant{Items: items}, s.Config.InventorySlotMax, len(s.Config.DefaultUser.DefaultItems))
+		if err != nil {
+			return true, err
+		}
+		if err = s.sendInventoryItems(c, changed); err != nil {
+			return true, err
+		}
+		c.chatNotice("Done")
 	case "/ban":
 		id, okID := atoiArg(args, 1)
 		banType, okType := atoiArg(args, 2)
