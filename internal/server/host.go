@@ -508,6 +508,7 @@ func (s *Server) endGame(r *room, forced bool) error {
 		stat.bonusExp = stat.exp * stat.classExp / 100
 		stat.bonusPoints = stat.points * stat.classPoints / 100
 		s.applyEquipmentBonus(stat)
+		s.Log.Info("match reward", "user", stat.user.user.ID, "mode", m.mode, "kills", stat.kills, "base", stat.exp, "class", stat.classExp, "item", stat.itemExp, "bonus", stat.bonusExp, "total", stat.exp+stat.bonusExp, "points", stat.points, "pointsBonus", stat.bonusPoints)
 		update := m.mode == 0 || m.mode == 1 || m.mode == 2 || m.mode == 6 || m.mode == 22
 		won := stat.user.team == 1 && m.tWins > m.ctWins || stat.user.team == 2 && m.ctWins > m.tWins
 		rewards = append(rewards, store.MatchReward{UserID: stat.user.user.ID, Exp: stat.exp + stat.bonusExp, Points: stat.points + stat.bonusPoints, Kills: stat.kills, Deaths: stat.deaths, UpdateStats: update, QuestMatchEnd: !forced, Won: won, Mode: m.mode, Map: m.mapID, Players: len(stats)})
@@ -662,17 +663,25 @@ func (s *Server) grantDropBox(c *client, rewardID int) {
 // items carried into the match. Upstream had this loop commented out while the
 // configuration and result fields already existed.
 func (s *Server) applyEquipmentBonus(stat *matchStat) {
-	for key, bonus := range s.Config.GameMatch.CalcResults.BonusPercentage.Items {
-		itemID, err := strconv.Atoi(key)
+	// Iterate the configured items in a stable order: map iteration used to make
+	// the awarded bonus depend on Go's random order when several were active.
+	keys := make([]int, 0, len(s.Config.GameMatch.CalcResults.BonusPercentage.Items))
+	for key := range s.Config.GameMatch.CalcResults.BonusPercentage.Items {
+		id, err := strconv.Atoi(key)
 		if err != nil {
 			continue
 		}
+		keys = append(keys, id)
+	}
+	sort.Ints(keys)
+	for _, itemID := range keys {
+		bonus := s.Config.GameMatch.CalcResults.BonusPercentage.Items[strconv.Itoa(itemID)]
 		for _, item := range stat.items {
 			if item.ID != itemID || item.InUse == 0 || item.Status == 0 {
 				continue
 			}
-			stat.itemExp = bonus.Exp
-			stat.itemPoints = bonus.Points
+			stat.itemExp += bonus.Exp
+			stat.itemPoints += bonus.Points
 			stat.bonusExp += stat.exp * bonus.Exp / 100
 			stat.bonusPoints += stat.points * bonus.Points / 100
 			break
