@@ -55,7 +55,7 @@
 
 | 入口 | 缺口 |
 | --- | --- |
-| UMsg（67） | 缺 3 军团频道、6 全服喇叭；5 队伍频道上游未实现 |
+| UMsg（67） | 缺 3 军团频道；5 队伍频道上游未实现；6 全服喇叭已实现（消耗道具 204） |
 | Favorite（77） | 已实现 0 购买菜单、1 快捷购买、2 配装、6 书签 |
 | Option（76） | 只有 0（保存配置），缺 2（进入游戏时上报） |
 | Host（68） | 基本齐备（0–24、101–103），缺 4、6、15、100 等少量事件 |
@@ -69,7 +69,7 @@
 | 军团 | clanmanager 1,077 行 + 7 张表 | 完全缺失：创建/申请/审批/成员管理/仓库/军团任务/军团聊天 |
 | 小游戏 | minigamemanager 482 行 + 5 张表 | Bingo、武器解放全缺 |
 | 房间设置校验 | roomsettings 2,655 行 | Go 虽读取 `Room.ValidateSettings` 配置项但代码从未使用；上游按模式/地图校验人数、胜负限制、playlist、zbLimit、家族战、superRoom 等 |
-| 玩家资料与外围 | usermanager 1,541 行 | 缺公告 notices、到期提醒、离线奖励通知、会话历史、断线重连恢复到原房间；改名卡、聊天色、Messenger、快捷购买、Addon 与问卷已接 |
+| 玩家资料与外围 | usermanager 1,541 行 | 缺公告 notices、到期提醒、离线奖励通知、会话历史、断线重连恢复到原房间；改名卡、聊天色、Messenger、快捷购买、Addon、问卷与全服喇叭已接 |
 | 对局结算补全 | gamematch 709 行 | 已有基础结算与等级/职业加成；缺道具加成（`GameMatch.CalcResults.BonusPercentage.Items` 已读未用）、模式统计事件（炸弹/拆弹/人质/怪物/蚊子/风筝）、场景掉落箱奖励（rewardID 3000–3023）、ZBS 名次奖励、第一名计算 |
 | 多频道 | channelmanager | 上游 `channelmanager.cpp:23` 自述 `TODO: Should we implement multi channels?`，不必实现 |
 

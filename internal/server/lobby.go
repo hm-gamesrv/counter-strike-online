@@ -10,6 +10,8 @@ import (
 	"github.com/hm-gamesrv/cso-server-go/internal/store"
 )
 
+const serverYellItemID = 204
+
 // achievementBitmap packs unlocked title IDs into the fixed 128-byte bitmap
 // the client expects for the achievement list section.
 func achievementBitmap(list []int) []byte {
@@ -138,6 +140,45 @@ func (s *Server) message(c *client, r *protocol.Reader) error {
 	}
 	if len(text) > 1024 {
 		return errors.New("chat message too long")
+	}
+	if kind == 6 {
+		// Server yell: consume one megaphone item and broadcast to the channel.
+		items, err := s.Store.Inventory(c.user.ID)
+		if err != nil {
+			return err
+		}
+		owned := false
+		for _, item := range items {
+			if item.ID == serverYellItemID && item.Count > 0 {
+				owned = true
+				break
+			}
+		}
+		if !owned {
+			return nil
+		}
+		protected := append([]int{}, s.Config.DefaultUser.DefaultItems...)
+		protected = append(protected, s.Config.DefaultUser.PseudoDefaultItems...)
+		changed, err := s.Store.ConsumeItem(c.user.ID, serverYellItemID, protected)
+		if errors.Is(err, store.ErrItemUnavailable) || errors.Is(err, store.ErrItemProtected) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if err = s.sendInventoryItems(c, changed); err != nil {
+			return err
+		}
+		w := &protocol.Writer{}
+		w.U8(6)
+		w.String(c.character.Name)
+		w.String(text)
+		for u := range s.clients {
+			if u.user.ID != 0 && u.character.Name != "" && s.chatAllowed(c, u) {
+				u.send(67, w)
+			}
+		}
+		return nil
 	}
 	if kind == 1 && strings.HasPrefix(text, "/") {
 		args := strings.Fields(text)
