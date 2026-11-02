@@ -475,3 +475,10 @@
 - `itemRequest` 的 UseItem 分支按 `ClassName == "LobbyBG"` 分发；切换后回背包更新并广播 `157`。
 - `Character` 新增 `NameplateID`；`userInfo` 在非零时置 `UFLAG_LOW_NAMEPLATE`(bit0)，并在 flags/highFlag 之后、账号名之前写 `U8(0)+U32(nameplateID)`，与上游 `CPacketHelper_FullUserInfo` 的块顺序一致；未持有时不发该块，旧布局不变。
 - 测试覆盖激活/取消、`Character` 读取、`userInfo` 名片块解析、`itemRequest` 端到端切换。`go test ./...`、`go vet ./...` 通过；名片块尚未用真实客户端验收。
+
+## 2026-11-02 修复元数据包缺少 zip 类型字节
+
+- 上游 `SendMetadata*` 的 zipped 元数据帧是 `U8(id) + U8(ZIPMETADATA_FULL_ZIP=5) + U16(size) + data`；Go 之前漏掉了第二个字节，客户端把 size 低字节当成类型、后面整体错位，表现为房间创建界面模式列表空白、地图显示 `map_name` 等。
+- 补上 `U8(5)`；超过 64000 字节的 zip 按上游切成最多 4 个 64000 字节块，块号 1..3、最后一块标记 4，避免 `Item.csv` 等大文件被截断。
+- 新增 `metadata_test.go` 覆盖单帧/分块/超限截断，并校验 zip 能解出正确的条目名。
+- 测试辅助 `listenTestPair` 不再要求 TCP/UDP 同端口，绕开 Windows 偶发拒绝 UDP 端口导致的假失败。

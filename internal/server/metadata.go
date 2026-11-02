@@ -20,6 +20,45 @@ type metadataEntry struct {
 	Raw        bool
 }
 
+const (
+	metadataFullZip   = 5
+	metadataChunkSize = 64000
+	metadataMaxChunks = 4
+)
+
+// zipMetadataFrames wraps a zip stream the way upstream does: a single
+// U8(id)/U8(FULL_ZIP)/U16(size) frame, or up to four 64000-byte chunks where
+// the last one is marked with metadataMaxChunks.
+func zipMetadataFrames(id int, data []byte) [][]byte {
+	if len(data) > metadataChunkSize {
+		frames := make([][]byte, 0, metadataMaxChunks)
+		for i := 0; i < metadataMaxChunks && len(data) > 0; i++ {
+			n := len(data)
+			if n > metadataChunkSize {
+				n = metadataChunkSize
+			}
+			w := &protocol.Writer{}
+			w.U8(id)
+			if i == metadataMaxChunks-1 || n == len(data) {
+				w.U8(metadataMaxChunks)
+			} else {
+				w.U8(i + 1)
+			}
+			w.U16(n)
+			w.Bytes(data[:n])
+			frames = append(frames, w.Data)
+			data = data[n:]
+		}
+		return frames
+	}
+	w := &protocol.Writer{}
+	w.U8(id)
+	w.U8(metadataFullZip)
+	w.U16(len(data))
+	w.Bytes(data)
+	return [][]byte{w.Data}
+}
+
 var metadataFiles = []metadataEntry{
 	{"ModeList", "Metadata_ModeList.bin", 2, true},
 	{"Encyclopedia", "Metadata_Encyclopedia.bin", 23, true},
@@ -80,11 +119,13 @@ func loadMetadata(dir string, c config.Config) ([][]byte, error) {
 			if e = z.Close(); e != nil {
 				return nil, e
 			}
-			w := protocol.Writer{}
-			w.U8(entry.ID)
-			w.U16(buf.Len())
-			w.Bytes(buf.Bytes())
-			b = w.Data
+			for _, frame := range zipMetadataFrames(entry.ID, buf.Bytes()) {
+				if len(frame)+5 > protocol.MaxFrame {
+					return nil, fmt.Errorf("metadata %s exceeds frame limit", entry.File)
+				}
+				packets = append(packets, frame)
+			}
+			continue
 		}
 		if len(b)+5 > protocol.MaxFrame {
 			return nil, fmt.Errorf("metadata %s exceeds frame limit", entry.File)
