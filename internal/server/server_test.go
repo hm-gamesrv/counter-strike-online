@@ -359,8 +359,10 @@ func TestLoginRoomUDPAndShutdown(t *testing.T) {
 				restarted := b.hostPacket(2)
 				rr := &protocol.Reader{Data: restarted.Data}
 				rr.U8()
-				if rr.U32() != 2 || rr.U16() != 3 || string(rr.Bytes(3)) != "\x01\x02\x03" {
-					t.Fatal("match migration did not retain saved state")
+				// The reference stores the host save blob but sends an empty one
+				// on migration; forwarding it crashes the new host client.
+				if rr.U32() != 2 || rr.U16() != 0 || rr.U8() != 1 || rr.U32() != 2 {
+					t.Fatal("host restart did not match the reference payload")
 				}
 			} else {
 				b.send(65, &protocol.Writer{Data: []byte{6}})

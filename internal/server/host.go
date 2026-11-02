@@ -628,8 +628,10 @@ func (s *Server) migrateHost(r *room) {
 		w.U8(2)
 		w.U32(r.host.user.ID)
 		if u == r.host {
-			w.U16(len(r.match.saveData))
-			w.Bytes(r.match.saveData)
+			// The reference stores the host save blob but hardcodes an empty
+			// vector in SendHostRestart; forwarding the real blob makes the new
+			// host apply 12 KB of foreign save state and crash the client.
+			w.U16(0)
 			w.U8(len(r.match.stats))
 			ids := make([]int, 0, len(r.match.stats))
 			for id := range r.match.stats {

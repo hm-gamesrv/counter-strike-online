@@ -2,9 +2,12 @@ package server
 
 import (
 	"encoding/binary"
+	"encoding/hex"
 	"errors"
+	"fmt"
 	"net"
 	"sort"
+	"strings"
 
 	"github.com/hm-gamesrv/cso-server-go/internal/protocol"
 )
@@ -12,8 +15,10 @@ import (
 // settings retains individual flag fields verbatim, allowing incremental
 // updates without losing fields the lobby itself does not interpret.
 type settings struct {
-	flags  [4]uint32
-	fields [128][]byte
+	flags       [4]uint32
+	fields      [128][]byte
+	truncated   bool
+	truncatedAt int
 }
 
 func parseSettings(r *protocol.Reader) (settings, error) {
@@ -24,6 +29,7 @@ func parseSettings(r *protocol.Reader) (settings, error) {
 	if r.Err != nil {
 		return s, r.Err
 	}
+parse:
 	for group, mask := range s.flags {
 		for bit := 0; bit < 32; bit++ {
 			if mask&(1<<bit) == 0 {
@@ -94,7 +100,15 @@ func parseSettings(r *protocol.Reader) (settings, error) {
 				}
 			}
 			if r.Err != nil {
-				return s, r.Err
+				// CRoomSettings reads past the end of the buffer without failing,
+				// and modified clients do send settings this table does not
+				// describe. Keep the fields parsed so far instead of dropping the
+				// connection, and record where the layout diverged.
+				s.truncated = true
+				s.truncatedAt = group*32 + bit
+				r.Err = nil
+				r.Pos = len(r.Data)
+				break parse
 			}
 			s.fields[group*32+bit] = append([]byte{}, r.Data[start:r.Pos]...)
 		}
@@ -153,6 +167,21 @@ func (s *settings) write(w *protocol.Writer) {
 			}
 		}
 	}
+}
+
+// layout renders the length of every transmitted field so a mismatched
+// settings payload can be compared against the client's own bytes.
+func (s *settings) layout() string {
+	var b strings.Builder
+	for group, mask := range s.flags {
+		for bit := 0; bit < 32; bit++ {
+			if mask&(1<<bit) == 0 {
+				continue
+			}
+			fmt.Fprintf(&b, "%d:%d ", group*32+bit, len(s.fields[group*32+bit]))
+		}
+	}
+	return strings.TrimSpace(b.String())
 }
 func (s *settings) number(index int) int {
 	b := s.fields[index]
@@ -380,13 +409,20 @@ func (s *Server) roomRequest(c *client, r *protocol.Reader) error {
 		}
 		st, e := parseSettings(r)
 		if e != nil {
-			return e
+			s.Log.Debug("room settings parse failed", "kind", kind, "len", len(r.Data), "hex", hex.EncodeToString(r.Data))
+			c.notice("Unable to create a room due to incorrect settings")
+			return nil
+		}
+		if st.truncated {
+			s.Log.Warn("room settings truncated", "kind", kind, "at", st.truncatedAt, "len", len(r.Data), "hex", hex.EncodeToString(r.Data), "layout", st.layout())
 		}
 		if r.Pos != len(r.Data) {
-			return errors.New("unexpected room settings tail")
+			s.Log.Debug("room settings tail", "kind", kind, "len", len(r.Data), "pos", r.Pos, "hex", hex.EncodeToString(r.Data))
 		}
+		s.Log.Debug("room settings", "kind", kind, "len", len(r.Data), "flags", st.flags, "layout", st.layout())
 		if st.number(8) < 1 || st.number(8) > 32 || len(st.text(0)) < 1 || len(st.text(0)) > 64 || len(st.text(3)) > 32 {
-			return errors.New("invalid room capacity/name/password")
+			c.notice("Unable to create a room due to incorrect settings")
+			return nil
 		}
 		if len(s.rooms) >= 255 {
 			c.notice("Room limit reached.")
@@ -543,8 +579,14 @@ func (s *Server) roomRequest(c *client, r *protocol.Reader) error {
 		}
 		st, e := parseSettings(r)
 		if e != nil {
-			return e
+			s.Log.Debug("room settings parse failed", "kind", kind, "len", len(r.Data), "hex", hex.EncodeToString(r.Data))
+			c.notice("Unable to create a room due to incorrect settings")
+			return nil
 		}
+		if st.truncated {
+			s.Log.Warn("room settings truncated", "kind", kind, "at", st.truncatedAt, "len", len(r.Data), "hex", hex.EncodeToString(r.Data), "layout", st.layout())
+		}
+		s.Log.Debug("room settings", "kind", kind, "len", len(r.Data), "flags", st.flags, "layout", st.layout())
 		merged := currentRoom.settings
 		if st.fields[6] != nil && st.number(6) != merged.number(6) {
 			if !s.roomDefaults(&st, false) {
@@ -556,8 +598,12 @@ func (s *Server) roomRequest(c *client, r *protocol.Reader) error {
 		if err := s.refreshHostRoomItems(currentRoom.host, &merged); err != nil {
 			return err
 		}
-		if r.Pos != len(r.Data) || merged.number(8) < len(currentRoom.members) || merged.number(8) > 32 || len(merged.text(0)) < 1 || len(merged.text(0)) > 64 || len(merged.text(3)) > 32 {
-			return errors.New("invalid room settings")
+		if r.Pos != len(r.Data) {
+			s.Log.Debug("room settings tail", "kind", kind, "len", len(r.Data), "pos", r.Pos, "hex", hex.EncodeToString(r.Data))
+		}
+		if merged.number(8) < len(currentRoom.members) || merged.number(8) > 32 || len(merged.text(0)) < 1 || len(merged.text(0)) > 64 || len(merged.text(3)) > 32 {
+			c.notice("Unable to create a room due to incorrect settings")
+			return nil
 		}
 		if merged.number(7) == 254 {
 			c.notice("Unable to create a room due to incorrect settings")

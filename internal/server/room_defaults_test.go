@@ -8,6 +8,26 @@ import (
 	"github.com/hm-gamesrv/cso-server-go/internal/protocol"
 )
 
+func TestRoomSettingsTruncatedPayload(t *testing.T) {
+	// lowFlag bit 31 announces 35 bytes that the client never sent. The
+	// reference reader yields zeroes past the buffer, so the settings must be
+	// kept instead of failing the whole request.
+	w := &protocol.Writer{}
+	w.U32(1 << 31)
+	w.U32(0)
+	w.U32(0)
+	w.U32(0)
+	w.Bytes([]byte{1, 2, 3})
+	r := &protocol.Reader{Data: w.Data}
+	st, err := parseSettings(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !st.truncated || st.truncatedAt != 31 || r.Pos != len(w.Data) || r.Err != nil {
+		t.Fatalf("truncation not recorded: truncated=%v at=%d pos=%d err=%v", st.truncated, st.truncatedAt, r.Pos, r.Err)
+	}
+}
+
 func TestRoomDefaultsFromClientTable(t *testing.T) {
 	dir := t.TempDir()
 	if err := assets.Init(dir); err != nil {
