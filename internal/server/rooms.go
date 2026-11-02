@@ -176,6 +176,8 @@ type room struct {
 	match     *gameMatch
 	dedicated *dedicatedServer
 	kicked    map[int]bool
+	clan1     int
+	clan2     int
 }
 
 func (s *Server) roomList(c *client) {
@@ -305,9 +307,22 @@ func (s *Server) roomRequest(c *client, r *protocol.Reader) error {
 			c.notice("Room limit reached.")
 			return nil
 		}
-		if st.number(70) != 0 || st.number(7) == 254 {
-			c.notice("Go migration: clan battles and Studio rooms are not implemented yet.")
+		if st.number(7) == 254 {
+			c.notice("Go migration: Studio rooms are not implemented yet.")
 			return nil
+		}
+		familyBattle := st.number(70) != 0
+		familyClan := 0
+		if familyBattle {
+			var err error
+			familyClan, err = s.clanIDFor(c)
+			if err != nil {
+				return err
+			}
+			if familyClan == 0 {
+				c.notice("ROOM_OPEN_FAILED_CLAN_NOT_MEMBER")
+				return nil
+			}
 		}
 		if !s.roomDefaults(&st, true) {
 			c.notice("Unsupported game mode.")
@@ -328,6 +343,9 @@ func (s *Server) roomRequest(c *client, r *protocol.Reader) error {
 			s.nextRoom = id + 1
 		}
 		currentRoom = &room{id: id, host: c, members: []*client{c}, settings: st}
+		if familyBattle {
+			currentRoom.clan1 = familyClan
+		}
 		s.rooms[id] = currentRoom
 		c.room = id
 		c.team = 2
@@ -335,6 +353,9 @@ func (s *Server) roomRequest(c *client, r *protocol.Reader) error {
 		s.lobbyLeft(c)
 		currentRoom.joined(c)
 		s.refreshRooms()
+		if familyBattle {
+			s.sendClanBattleNotice(c.user.ID, 0, c.character.Name, st.number(6), id)
+		}
 	case 23:
 		r.U8()
 		id := r.U16()
@@ -374,6 +395,9 @@ func (s *Server) roomRequest(c *client, r *protocol.Reader) error {
 			c.notice("ROOM_JOIN_FAILED_BAN")
 			return nil
 		}
+		if to.settings.number(70) != 0 && !s.familyBattleJoin(to, c) {
+			return nil
+		}
 		c.room = id
 		c.team = 2
 		c.ready = 0
@@ -385,6 +409,9 @@ func (s *Server) roomRequest(c *client, r *protocol.Reader) error {
 		s.lobbyLeft(c)
 		to.joined(c)
 		s.refreshRooms()
+		if to.settings.number(70) != 0 {
+			s.sendClanBattleNotice(c.user.ID, 1, c.character.Name, to.settings.number(6), id)
+		}
 	case 2:
 		s.leaveRoom(c)
 		s.joinLobby(c)
@@ -406,6 +433,10 @@ func (s *Server) roomRequest(c *client, r *protocol.Reader) error {
 		team := r.U8()
 		if r.Err != nil {
 			return r.Err
+		}
+		if currentRoom != nil && currentRoom.settings.number(70) != 0 {
+			c.notice("You cannot move teams in Family Battle.")
+			return nil
 		}
 		if currentRoom != nil && !c.playing && c.ready == 0 && team >= 1 && team <= 2 {
 			c.team = team
@@ -434,9 +465,28 @@ func (s *Server) roomRequest(c *client, r *protocol.Reader) error {
 		if r.Pos != len(r.Data) || merged.number(8) < len(currentRoom.members) || merged.number(8) > 32 || len(merged.text(0)) < 1 || len(merged.text(0)) > 64 || len(merged.text(3)) > 32 {
 			return errors.New("invalid room settings")
 		}
-		if merged.number(70) != 0 || merged.number(7) == 254 {
-			c.notice("Go migration: clan battles and Studio rooms are not implemented yet.")
+		if merged.number(7) == 254 {
+			c.notice("Go migration: Studio rooms are not implemented yet.")
 			return nil
+		}
+		if merged.number(70) != 0 {
+			candidate := &room{host: currentRoom.host, members: currentRoom.members, settings: merged}
+			if !s.familyBattleInit(candidate, candidate.host) {
+				return nil
+			}
+			for _, member := range candidate.members {
+				if member == candidate.host {
+					continue
+				}
+				if !s.familyBattleJoin(candidate, member) {
+					return nil
+				}
+			}
+			currentRoom.clan1 = candidate.clan1
+			currentRoom.clan2 = candidate.clan2
+		} else {
+			currentRoom.clan1 = 0
+			currentRoom.clan2 = 0
 		}
 		if err := s.validateRoomSettings(&merged, len(currentRoom.members)); err != nil {
 			c.notice("Invalid room settings.")
@@ -481,6 +531,8 @@ func (s *Server) roomRequest(c *client, r *protocol.Reader) error {
 			c.notice("ROOM_JOIN_FAILED_INVALID_GAME_IP")
 			s.broadcastReady(currentRoom)
 		}
+	case 38:
+		return s.roomNoticeClan(c)
 	default:
 		c.notice("Go migration: this room action is not implemented yet.")
 	}
@@ -546,6 +598,9 @@ func (s *Server) leaveRoom(c *client) {
 		w.U8(1)
 		r.broadcast(65, w)
 		s.migrateHost(r)
+	}
+	if r.settings.number(70) != 0 {
+		s.familyBattleRecompute(r)
 	}
 	s.refreshRooms()
 }

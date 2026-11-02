@@ -47,6 +47,10 @@ func (s *Server) startGame(c *client) error {
 		c.notice("ROOM_JOIN_FAILED_CLOSED")
 		return nil
 	}
+	if r.settings.number(70) != 0 && !s.familyBattleCanStart(r) {
+		c.notice("ROOM_START_FAILED_CLAN_NOT_READY")
+		return nil
+	}
 	var peer *dedicatedServer
 	if s.Config.Room.HostConnectingMethod != 0 {
 		peer = s.availableDedicated()
