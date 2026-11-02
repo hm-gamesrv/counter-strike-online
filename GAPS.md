@@ -1,107 +1,86 @@
 # 差距分析：Go 重写版与上游 C++ 实现
 
-基准：本分支 `go-rewrite`（`cd3145c`）对照上游 `JusicP/CSNZ_Server@12644f2adc0708e2d8b74f7dd6a4c3c29d3e1140`。
+基准：本分支 `go-rewrite`（2026-11-02，`e23fa60`）对照上游 `JusicP/CSNZ_Server@12644f2adc0708e2d8b74f7dd6a4c3c29d3e1140`。
 
-方法：以 `CServerInstance::OnPackets`（`src/serverinstance.cpp:352`）的入口分发表为准，逐项对照 Go `internal/server/server.go` 的 `dispatch`；再下钻到各 manager 的子类型处理。只统计上游真正实现的功能，上游本身为桩的模块单独列在第五节，避免把"上游也没做"当成迁移缺口。
+方法：以 `CServerInstance::OnPackets`（`src/serverinstance.cpp:352`）的入口分发表为准，逐项对照 Go `internal/server/server.go` 的 `dispatch`，再下钻到各 manager 的子类型处理；只统计上游实际实现的功能，上游为桩的模块单独列出（第二节）。本轮复核了上一版之后新增的 39 个提交。
 
 ## 结论
 
-- Go 版已覆盖"登录 → 大厅 → 建房 → 开局 → 结算 → 返回"完整闭环，并实现商店、背包、道具使用与奖励领取、活动任务事件、专服池、主机迁移、UDP 打洞和元数据下发。
-- 外围系统仍有空白：小游戏、军团仓库/军团任务/军团战、称号解锁、玩家资料扩展、管理能力；道具养成、称号设置与军团核心协议已接。
-- 规模对照：C++ 核心源码约 4.6 万行（`src`，不含 GUI/thirdparty/test），Go 非测试代码约 5,700 行、含测试约 8,100 行。
-- 协议入口：上游 33 个包入口（其中 2 个空实现、3 个桩），Go 已接 17 个（含 UDP）。
+- 入口覆盖：上游 33 个入口中 Go 已接 27 个（含 UDP）；未接的 6 个里 5 个在上游是空实现或桩（`15`、`83`、`88`、`90`、`164`），实际功能缺口只有 `103 Voxel`。
+- 业务覆盖：上一版列出的道具养成、军团、武器解放、房间设置校验、称号、屏蔽名单、问卷、重连恢复、结算加成与排名等均已实现（见附录）。
+- 剩余缺口集中在三处：Bingo 小游戏、Voxel/Studio、GM 管理命令；另有少量房间子项、占位回包与 SSL。
+- 规模：C++ 核心约 4.6 万行（不含 GUI/thirdparty/test）；Go 非测试 12,808 行、含测试 19,378 行。
 
-## 一、协议入口层缺口
+## 一、剩余功能缺口
 
-| 包 | 功能 | 上游实现 | Go 状态 | 影响 |
-| --- | --- | --- | --- | --- |
-| `69 UpdateInfo` | 改昵称、位置、教程标记、聊天颜色 | `usermanager.cpp:862` | 已实现：改名/位置/聊天色；教程标记按上游忽略 | 玩家资料更新可用 |
-| `71 Clan` | 军团 25 个子请求 | `clanmanager.cpp`（1,077 行） | 已实现列表/详情/创建/申请/审批/邀请/成员/聊天/设置/解散/转让和仓库（存取/删除/权限/历史空包）；军团任务未接 | 军团主体与仓库可用，军团战仍缺 |
-| `74 Ban` | 屏蔽名单 4 个请求 | `usermanager.cpp:1244` | 已实现：列表/设置/登录下发/过滤 | 屏蔽名单可用 |
-| `84 Title` | 称号设置与列表增删 | `questmanager.cpp:246` | 已实现：前缀、5 槽位设置/移除，按 `achievementList` 校验 | 称号选择可用，解锁仍依赖荣誉任务 |
-| `87 UserSurvey` | 登录问卷 11/12 | `usermanager.cpp:1216` | 已实现：登录下发未答问卷、类型 11 校验并保存；类型 12 忽略 | 问卷可正常弹出与提交 |
-| `89 MiniGame` | Bingo、武器解放 | `minigamemanager.cpp`（482 行） | 武器解放已实现（配置/进度/选字/集齐发奖）；Bingo 上游基本注释，未接 | 武器解放可用，Bingo 不可用 |
-| `93 Messenger` | 查询玩家公开资料 | `usermanager.cpp:1275` | 已实现：按昵称查询角色资料 | 资料查看可用 |
-| `103 Voxel` | 8 个请求 + 登录下发 Voxel URL | `voxelmanager.cpp:15` | 缺失 | Studio 不可用（上游也仅占位） |
-| `112 Kick` | superRoom 房主踢人 | `usermanager.cpp:1353` | 已实现：校验 superRoom/房主/同房，广播踢人包 | 超级房间踢人可用 |
-| `115 Addon` | 附加内容列表下发 | `usermanager.cpp:1305` | 已实现：列表下发 | 附加内容可显示 |
+### 1.1 Bingo 小游戏（MiniGame `89/0`）
 
-## 二、已接入口内的子类型缺口
+上游 `minigamemanager.cpp:51` 处理 Bingo 页面的 update（0）、reset（3）、shuffle（4），open-random（1）为注释状态；状态落在 `UserMiniGameBingo`、`UserMiniGameBingoSlot`、`UserMiniGameBingoPrizeSlot` 三张表。
 
-### Item（78）
+Go 只处理 `89/6`（武器解放），其余请求仅写 debug 日志，三张表未被引用。
 
-已实现：0（使用）、23（切换启用）、26（锁定）、10/11/12（后台通知，无需操作）。
+### 1.2 Voxel / Studio（`103`）
 
-| 子类型 | 上游实现 | 缺口 |
+上游在登录时下发 Voxel URL（`SendVoxelURLs`，`voxelVxlURL` / `voxelVmgURL`），并对 8 个 Voxel 请求返回固定占位包。Go 未处理 `103`，登录也不下发 URL，Studio 入口不可用。
+
+### 1.3 GM 管理命令
+
+上游 `channelmanager.cpp:372` 起实现 31 个聊天命令：`/ban`、`/ipban`、`/hban`、`/unban`、`/additem`、`/giveitem`、`/removeitem`、`/addpoints`、`/givepoints`、`/addexp`、`/addallitems`、`/givereward`、`/giverewardtoall`、`/addgroom`、`/addwpnreleasechar`、`/sendnotice`、`/sendgmnotice`、`/bingo`、`/weaponrelease`、`/setiteminuse`、`/setitemstatus`、`/status`、`/getuid`、`/getfreeslots`、`/disconnect`、`/reqsnapshot`、`/tournament`、`/help` 等。
+
+Go 仅实现 `/login`、`/register`、`/version`；`HWIDBanList`、`IPBanList` 两张表未被引用，`/hban`、`/ipban` 无对应实现。
+
+### 1.4 房间子项（`65`）
+
+| 子类型 | 上游 | Go |
 | --- | --- | --- |
-| 4 OpenDecoder | `luckyitemmanager.cpp:289`（396 行） | 已实现：开箱、概率奖励、事务发奖 |
-| 7 Disassemble | `itemmanager.cpp:1759` | 已实现：删除选中物品并同步背包；上游同样不发奖励 |
-| 14 EnhanceReq | `itemmanager.cpp:2071`（约 460 行） | 已实现类型 0：材料注入经验、概率升级、属性位打包；类型 2：防降级与清除强化 |
-| 16 ItemExtend | `itemmanager.cpp:1726` | 已实现：延期、消耗延长道具 |
-| 17 WeaponPaintReq | `itemmanager.cpp:2533` | 已实现：涂装获取、消耗涂装道具 |
-| 24 WeaponPaintSwitchReq | `itemmanager.cpp:2580` | 已实现：涂装切换/移除 |
-| 21 Part | `itemmanager.cpp:2628` | 已实现：部件装配/卸下、消耗部件 |
-| 9 / 15 Tattoo/Costume | `itemmanager.cpp:2834` | 已实现：头/背/臂/骨盆/脸/纹身/宠物、按 `ZombieSkin` 类型区分的 ZB 皮肤 |
+| 34 Voxel 房间列表 | 返回房间列表 | 未处理，回通用未实现提示 |
+| 35 感染模式 addon 选择 | 设置 addon | 未处理 |
+| 37 军团战踢人 | 实现 | 未处理（38 军团公告已实现） |
+| 32 / 33 | 固定空包（`SendRoomUnk32/33`） | 不回包 |
 
-上游为空的子类型（不迁移）：5 WeaponAssem、6 MaterialAssem（空 `break`）、8 DailyRewards（仅日志）。
+### 1.5 SSL
 
-### Room（65）
+上游支持 `SSL`（wolfSSL）；Go 在配置校验阶段直接拒绝 `SSL=true`。
 
-已实现：0、2、3、4、5、6、7、11、15、17、19、22、23、38。
+## 二、与上游一致、无需实现
 
-缺：34（Voxel 房间列表）、35（感染模式 addon 选择）、37（军团战踢人）、32/33（上游空包）；8/9 投票踢人在上游 `CRoom::VoteKick` 直接输未实现。
+- `73 Rank`：上游在 PUBLIC_RELEASE 下直接回"未实现"，Go 行为一致
+- `88 Quest` 界面与领取：上游 `SendQuests` 为 `TODO: reverse`，领取分支被注释
+- `65/8,9` 投票踢人：`CRoom::VoteKick` 未实现
+- `67/5` 队伍聊天：上游声明 party 未实现
+- `67/3` 军团聊天：上游仅打印警告（军团聊天走 `71/113`）
+- `83 Report`（`#if 0`）、`164 Alarm`（注释）、`15 MileageBingo`（空分支）、`90 Hack`（空分支）
+- `78/8` 每日奖励（仅日志）、`78/5,6` 武器/材料组装（空 `break`）
+- `68/4,6,15`、`68/19` ZBS 结果（仅日志）、`76/2`（空分支）
+- 多频道：上游 `channelmanager.cpp:23` 自述未实现
+- 仅服务端使用或未启用的表：`UserRestore`、`RelationProducts`、`SuspectAction`、`TimeConfig`
 
-### 其他入口
+## 三、数据库
 
-| 入口 | 缺口 |
-| --- | --- |
-| UMsg（67） | 缺 3 军团频道；5 队伍频道上游未实现；6 全服喇叭已实现（消耗道具 204） |
-| Favorite（77） | 已实现 0 购买菜单、1 快捷购买、2 配装、6 书签 |
-| Option（76） | 只有 0（保存配置），缺 2（进入游戏时上报） |
-| Host（68） | 基本齐备（0–24、100–103）；4、6、15 上游也未实现，按无操作处理 |
-| UDP（70） | Go 仅处理打洞类型 0；上游 1–5 也只是日志占位，等价 |
+`internal/store/schema.sql` 与上游一致的 45 张表中，17 张尚未被 Go 代码引用：
 
-## 三、业务模块缺口
+- 待实现功能：Bingo 3 张（`UserMiniGameBingo`、`UserMiniGameBingoSlot`、`UserMiniGameBingoPrizeSlot`）、封禁 2 张（`HWIDBanList`、`IPBanList`）
+- 设计差异：`UserQuest*` 5 张，Go 使用 `GoQuest*` 扩展表
+- 上游桩或未使用：`UserRank`、`UserDailyReward`、`UserDailyRewardItems`、`UserRestore`、`RelationProducts`、`SuspectAction`、`TimeConfig`
 
-| 模块 | 规模（上游） | 现状与差距 |
-| --- | --- | --- |
-| 道具养成 | itemmanager 2,986 行 + luckyitem 396 行 | 开箱、延期、涂装、部件、普通服装、ZB 皮肤、强化（含防降级）与删除式分解已实现；上游分解本身不发奖励 |
-| 军团 | clanmanager 1,077 行 + 7 张表 | 已实现创建/申请/审批/邀请/退出/成员管理/军团聊天/公告/设置/解散/转让、登录回放与仓库存取/删除/权限；仍缺军团任务、军团战和实机验收 |
-| 小游戏 | minigamemanager 482 行 + 5 张表 | 武器解放已实现：读取配置行/字母、进度位、消耗字母、集齐发奖和登录事件标志；Bingo 上游更新/重置/洗牌基本被注释，仍缺 |
-| 房间设置校验 | roomsettings 2,655 行 | 已实现 `Room.ValidateSettings` 开关下的基础校验：人数上下限、地图人数上限、胜负/击杀/时间/回合范围与步长；家族战已支持双军团建房/加入/开局与 `116` 通知；仍缺 playlist、zbLimit、superRoom、家族战踢人和模式-地图互斥等规则 |
-| 玩家资料与外围 | usermanager 1,541 行 | 公告、到期提醒、离线奖励通知与会话历史已接；断线重连已支持关闭旧会话、5 分钟内恢复原房间/对局并保留击杀死亡分数；改名卡、聊天色、Messenger、快捷购买、Addon、问卷与全服喇叭已接 |
-| 对局结算补全 | gamematch 709 行 | 已有基础结算、等级/职业/装备加成、第一名排序与场景掉落箱奖励；仍缺 ZBS 名次奖励和模式专用统计（上游这些分支本身为死代码/注释） |
-| 多频道 | channelmanager | 上游 `channelmanager.cpp:23` 自述 `TODO: Should we implement multi channels?`，不必实现 |
+## 四、验证缺口
 
-## 四、数据库：45 张表中 16 张未被任何 Go 代码引用
+真实 HLDS 对局、多人实机、模式矩阵、Bingo / Voxel / GM 命令的客户端验收、SSL，以及 `30.12.24` 客户端各界面回归。
 
-`internal/store/schema.sql` 已与上游完全一致（45 表），缺的是读写逻辑：
+## 五、建议顺序
 
-- 玩家外围：`UserRestore`、`UserDist`、`TimeConfig`（`UserBanList`、`UserFastBuy`、`UserAddon`、`UserCostumeLoadout`、`UserZBCostumeLoadout`、`UserSurveyAnswer`、`UserExpiryNotice`、`UserRewardNotice`、`UserSession`、`UserSessionHistory` 已接入）
-- 小游戏 Bingo 3 张：`UserMiniGameBingo`、`UserMiniGameBingoPrizeSlot`、`UserMiniGameBingoSlot`
-- 任务与排行：`UserQuest*`（Go 改用 `GoQuest*` 扩展表）、`UserRank`
-- 管理与风控：`HWIDBanList`、`IPBanList`、`SuspectAction`、`RelationProducts`、`UserDailyReward`、`UserDailyRewardItems`
+1. **Bingo**：客户端入口可见，涉及 3 张表与 3 个请求，工作量中等。
+2. **Voxel 通路**：登录下发 URL 与 8 个占位回包，改动小。
+3. **GM 命令与封禁管理**：运维需要，可先做 `/ban`、`/ipban`、`/hban`、`/unban`、`/additem`、`/givereward`、`/sendnotice`。
+4. **房间子项**：`65/34,35,37` 与 `65/32,33` 回包。
+5. **SSL**：按部署需要决定。
+6. **验证**：真实 HLDS、多人实机与客户端界面回归。
 
-## 五、上游本身为空壳，不构成迁移缺口
+## 附：上一版缺口在本轮的实现情况
 
-客户端界面仍在，但 C++ 同样未实现；Go 只需保持"无操作/回错误"而不是实现功能：
-
-- 任务界面与领取：`packetmanager.cpp:3663` 的 `SendQuests` 等均为 `TODO: reverse`，`questmanager.cpp:231` 起三个分支被注释
-- 排行榜：`rankmanager.cpp:23` 在 PUBLIC_RELEASE 下直接回 "Rank system is not implemented"，其余分支为注释
-- 投票踢人：`room.cpp:782` 未实现
-- 队伍/派对聊天：`usermanager.cpp:845` 自述 party 未实现
-- 举报与反作弊：`usermanager.cpp:1163` 为 `#if 0`；Alarm 处理体被注释
-- 每日奖励：`itemmanager.cpp:1975` 仅打日志
-- 武器/材料组装：`itemmanager.cpp:614` 空 `break`
-- 军团仓库上次物品：`userdatabase_sqlite.cpp:4781` 未实现
-
-## 六、验证缺口
-
-真实 HLDS 对局、多人实机、模式矩阵（目前仅验证模式 4/地图 277 等少数组合）、断线重连与换图、管理 GUI、SSL（Go 明确拒绝启动，上游支持）、以及 `30.12.24` 客户端各界面回归。
-
-## 七、建议实施顺序
-
-1. **P0 兜底**：未实现子类型补错误回包。当前 78/7 等只写 debug 日志不回包，客户端界面会等待；上游每种失败都有明确回包，照搬即可。
-2. **P1 低成本高收益**：房间设置校验剩余规则（playlist、zbLimit、家族战、superRoom、模式-地图互斥）。
-3. **P2 道具养成**：已完成。开箱（78/4）、延期（16）、涂装（17/24）、部件（21）、普通服装、ZB 皮肤、强化类型 0、防降级类型 2 与删除式分解（78/7）均已接；后续转向军团、小游戏与结算补全。
-4. **P3 大件与验收**：军团（71 + 7 表）、小游戏（89 + 5 表）、结算补全（道具加成、模式统计、场景奖励），以及真实 HLDS 与多人验收。
+- 道具：解码器开箱、强化（含降级与重置）、分解、涂装、部件、服装与纹身、延期、快捷购买
+- 玩家：昵称/位置/聊天色、屏蔽名单与聊天过滤、Messenger、问卷、Addon、称号、公告、到期与离线奖励通知、会话记录
+- 军团：协议请求、成员与解散规则、仓库转移、军团聊天
+- 小游戏：武器解放
+- 房间与对局：房间设置校验、superRoom 踢人、家族战房间、场景道具消耗、掉落箱奖励、断线重连与会话接管、结算道具加成与模式排名
+- 其他：主菜单皮肤事件、客户端配套数据更新

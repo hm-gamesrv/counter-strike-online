@@ -4,6 +4,8 @@
 
 ## 1. 相关项目
 
+以下为与本项目密切相关的参考项目。需要源码时，统一克隆到本项目的 `.ref/<repo>` 目录（例如 `.ref/CSNZ_Server`）；该目录已列入 `.gitignore`，可自由修改，不会进入版本库。
+
 ### 1.1. CSNZ_Server
 
 **仓库**：<https://github.com/JusicP/CSNZ_Server>
