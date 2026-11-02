@@ -47,6 +47,9 @@ type Character struct {
 	Nation        int
 	City          int
 	Town          int
+	ClanID        int
+	ClanName      string
+	ClanMarkID    int
 }
 type Item struct {
 	Slot, ID, Count, Status, InUse, Obtain, Expiry, Level, Exp, Value, Paint, Part1, Part2, Lock int
@@ -202,7 +205,7 @@ func (s *Store) Login(name, password, ip string, hwid []byte) (User, error) {
 func (s *Store) Character(id int) (Character, error) {
 	c := Character{ID: id}
 	var achievements, titles string
-	e := s.DB.QueryRow("SELECT gameName,level,exp,points,cash,battles,win,kills,deaths,passwordBoxes,mileagePoints,honorPoints,prefixID,chatColorID,nation,city,town,achievementList,titles FROM UserCharacter WHERE userID=?", id).Scan(&c.Name, &c.Level, &c.Exp, &c.Points, &c.Cash, &c.Battles, &c.Win, &c.Kills, &c.Deaths, &c.PasswordBoxes, &c.MileagePoints, &c.HonorPoints, &c.PrefixID, &c.ChatColorID, &c.Nation, &c.City, &c.Town, &achievements, &titles)
+	e := s.DB.QueryRow("SELECT uc.gameName,uc.level,uc.exp,uc.points,uc.cash,uc.battles,uc.win,uc.kills,uc.deaths,uc.passwordBoxes,uc.mileagePoints,uc.honorPoints,uc.prefixID,uc.chatColorID,uc.nation,uc.city,uc.town,uc.achievementList,uc.titles,uc.clanID,coalesce(c.name,''),coalesce(c.markID,0) FROM UserCharacter uc LEFT JOIN Clan c ON c.clanID=uc.clanID WHERE uc.userID=?", id).Scan(&c.Name, &c.Level, &c.Exp, &c.Points, &c.Cash, &c.Battles, &c.Win, &c.Kills, &c.Deaths, &c.PasswordBoxes, &c.MileagePoints, &c.HonorPoints, &c.PrefixID, &c.ChatColorID, &c.Nation, &c.City, &c.Town, &achievements, &titles, &c.ClanID, &c.ClanName, &c.ClanMarkID)
 	if e != nil {
 		return c, e
 	}

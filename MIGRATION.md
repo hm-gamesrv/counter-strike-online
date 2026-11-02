@@ -14,7 +14,7 @@
 | `manager/itemmanager.cpp` | `internal/server/{inventory,rewards,reward_claims,reward_random}.go`、`internal/store/{inventory,purchase,rewards,reward_claims,item_extend,paint,part,costume}.go` | 已实现武器/角色启用、选择副本、锁定/解锁、固定/选择/随机奖励与领取去重、开箱、延期、武器涂装、部件、普通服装、ZB 皮肤、强化（含防降级）与删除式分解；仍缺完整合并 |
 | `manager/{host,dedicatedserver}manager.cpp`、`room/gamematch.cpp` | `internal/server/{host,dedicated,catalog}.go`、`internal/store/{match,levels}.go` | 已实现开局、主机背包、计数、存档迁移、专服池、场景道具使用、场景掉落箱奖励、装备加成与基础结算；尚需真实客户端/HLDS 对局验收、ZBS 名次奖励及特殊模式规则 |
 | `manager/questmanager.cpp`、`quest/questevent.*` | `internal/server/{quests,title}.go`、`internal/store/{quests,quest_events,title}.go` | 已接活动任务条件与持久化进度、完成奖励，以及 `84` 称号前缀/槽位；尚缺任务界面、每日/荣誉/军团任务及称号解锁、VIP 事件与完整实机验收 |
-| `manager/{clan,rank,minigame,luckyitem,voxel}manager.cpp` | 未实现（仅部分元数据） | 各业务状态与协议完整迁移 |
+| `manager/{clan,rank,minigame,luckyitem,voxel}manager.cpp` | `internal/store/clan.go`（军团存储层） | 军团 7 张表的创建/申请/审批/邀请/退出/列表已落地；协议入口、仓库、军团任务、排行、小游戏、抽奖与 Voxel 仍缺 |
 
 当前已跑通真实客户端机器人对局、正常结算和返回房间。后续优先级按用户要求执行下表；每项应以原版出入站协议样本、当前客户端和数据库前后快照校验。
 
@@ -302,6 +302,14 @@
 - 广播格式为 `[6, senderName, text]`，发送给所有已登录且允许发送者聊天的玩家，沿用接收方 `banSettings` 位 2 与屏蔽名单过滤。
 - 没有喇叭道具、道具受保护或数量不足时静默不发送，与上游一致。
 - 新增测试覆盖消耗与删除、广播内容、无道具静默，以及被屏蔽接收方收不到消息。`go test ./...`、`go vet ./...` 通过；未做实机界面验收。
+
+## 2026-11-02 军团存储层
+
+- 新增 `ClanList`/`ClanInfo`/`ClanForUser`：支持按名称、模式、时间段筛选与分页，读取军团头、最近 10 个仓库物品和编年史。
+- 新增 `CreateClan`：校验重名、已有军团/待审申请和 30,000 积分，按 `UserDist.clanIDNext` 分配 ID，写入军团长、5 页 × 20 格仓库和创建编年史。
+- 新增申请/审批/拒绝/邀请/退出/成员列表：默认加入方式 3 直接加入，方式 2 生成待审申请，方式 1 需先邀请；审批、退出和成员数在同一事务中更新。
+- 角色读取新增 `clanID`/军团名/军团标记，为后续用户信息序列化与协议入口做准备。
+- 新增测试覆盖创建扣点、仓库初始化、重名/重复军团/积分不足、审批加入、成员列表权限、邀请加入、退出与筛选。`go test ./...`、`go vet ./...` 通过；未接协议入口，未做实机验收。
 
 
 
