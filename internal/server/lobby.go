@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/hm-gamesrv/cso-server-go/internal/protocol"
 	"github.com/hm-gamesrv/cso-server-go/internal/store"
@@ -234,6 +235,9 @@ func (s *Server) message(c *client, r *protocol.Reader) error {
 			c.user = u
 			c.character = ch
 			s.users[u.ID] = c
+			if sessionErr := s.Store.StartSession(u.ID, c.ip(), c.hwid, int(time.Now().Unix()/60)); sessionErr != nil {
+				return sessionErr
+			}
 			c.reply(0)
 			if errors.Is(e, sql.ErrNoRows) {
 				c.send(6, &protocol.Writer{})
@@ -299,6 +303,7 @@ func (s *Server) message(c *client, r *protocol.Reader) error {
 	return nil
 }
 func (s *Server) loginPackets(c *client) error {
+	s.expireItems(time.Now())
 	w := &protocol.Writer{}
 	w.U32(c.user.ID)
 	w.String(c.user.Name)

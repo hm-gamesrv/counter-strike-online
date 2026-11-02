@@ -192,6 +192,7 @@ func (s *Server) Serve(ctx context.Context, tcp net.Listener, udp *net.UDPConn) 
 				s.mu.Lock()
 				s.tickQuestTime(now)
 				s.pruneRestore(now)
+				s.expireItems(now)
 				s.mu.Unlock()
 			}
 		}
@@ -236,6 +237,9 @@ func (s *Server) serveClient(ctx context.Context, c *client) {
 			if s.users[c.user.ID] == c {
 				delete(s.users, c.user.ID)
 				s.lobbyLeft(c)
+				if err := s.Store.EndSession(c.user.ID, int(time.Now().Unix()/60)); err != nil && s.Log != nil {
+					s.Log.Warn("session history update failed", "user", c.user.ID, "error", err)
+				}
 			}
 		}
 		close(c.queue)
@@ -420,6 +424,9 @@ func (s *Server) dispatch(c *client, p protocol.Packet) error {
 			return s.favorite(c, r)
 		case 72:
 			return s.shopRequest(c, r)
+		case 73:
+			c.notice("Rank system is not implemented")
+			return r.Err
 		case 74:
 			return s.banRequest(c, r)
 		case 78:
@@ -531,5 +538,17 @@ func (s *Server) endSession(id int) {
 	}
 	if s.users[id] == old {
 		delete(s.users, id)
+	}
+}
+func (s *Server) expireItems(now time.Time) {
+	removed, err := s.Store.ExpireItems(int(now.Unix() / 60))
+	if err != nil {
+		if s.Log != nil {
+			s.Log.Warn("expired item sweep failed", "error", err)
+		}
+		return
+	}
+	if removed > 0 && s.Log != nil {
+		s.Log.Info("expired items removed", "count", removed)
 	}
 }
