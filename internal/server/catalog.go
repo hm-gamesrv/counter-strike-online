@@ -25,6 +25,7 @@ type itemDefinition struct {
 	ClassName  string
 	Resource   string
 	ZombieSkin int
+	Grade      int
 }
 
 // itemBoxAward is one rolled decoder prize. Duration follows the client
@@ -213,7 +214,7 @@ func loadItems(dir string) (map[int]itemDefinition, error) {
 		if index := header["recourcename"]; index < len(row) {
 			resource = row[index]
 		}
-		result[id] = itemDefinition{Category: value("Category"), UseType: value("UseType"), RewardID: value("rewardID"), Level: value("Level"), InGame: value("InGameItem") != 0, ClassName: class, Resource: resource, ZombieSkin: value("ZombieSkin")}
+		result[id] = itemDefinition{Category: value("Category"), UseType: value("UseType"), RewardID: value("rewardID"), Level: value("Level"), InGame: value("InGameItem") != 0, ClassName: class, Resource: resource, ZombieSkin: value("ZombieSkin"), Grade: value("ItemGrade")}
 	}
 	if len(result) == 0 {
 		return nil, fmt.Errorf("Item.csv has no items")

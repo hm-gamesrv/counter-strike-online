@@ -11,7 +11,7 @@
 | `manager/channelmanager.cpp`、`room/roomsettings.cpp` | `internal/server/{rooms,room_defaults,room_social,host}.go` | 已实现邀请、房主踢人及踢出名单；仍缺完整设置校验、投票踢人、特殊模式限制与地图轮换 |
 | `manager/packetmanager.cpp` | `internal/server/{metadata,lobby,rooms,shop}.go` | 随各业务逐项实现出站结构 |
 | `manager/shopmanager.cpp` | `internal/server/shop.go`、`internal/store/purchase.go` | 当前客户端购买、计数堆叠和密码箱计数已实现；完整延期规则、礼包校验仍缺 |
-| `manager/itemmanager.cpp` | `internal/server/{inventory,rewards,reward_claims,reward_random}.go`、`internal/store/{inventory,purchase,rewards,reward_claims,item_extend,paint,part,costume}.go` | 已实现武器/角色启用、选择副本、锁定/解锁、固定/选择/随机奖励与领取去重、开箱、延期、武器涂装、部件、普通服装与 ZB 皮肤；仍缺完整合并、强化/分解 |
+| `manager/itemmanager.cpp` | `internal/server/{inventory,rewards,reward_claims,reward_random}.go`、`internal/store/{inventory,purchase,rewards,reward_claims,item_extend,paint,part,costume}.go` | 已实现武器/角色启用、选择副本、锁定/解锁、固定/选择/随机奖励与领取去重、开箱、延期、武器涂装、部件、普通服装、ZB 皮肤与强化；仍缺完整合并、分解、防降级 |
 | `manager/{host,dedicatedserver}manager.cpp`、`room/gamematch.cpp` | `internal/server/{host,dedicated,catalog}.go`、`internal/store/{match,levels}.go` | 已实现开局、主机背包、计数、存档迁移、专服池与基础结算；尚需真实客户端/HLDS 对局验收、事件奖励及特殊模式规则 |
 | `manager/questmanager.cpp`、`quest/questevent.*` | `internal/server/{quests,title}.go`、`internal/store/{quests,quest_events,title}.go` | 已接活动任务条件与持久化进度、完成奖励，以及 `84` 称号前缀/槽位；尚缺任务界面、每日/荣誉/军团任务及称号解锁、VIP 事件与完整实机验收 |
 | `manager/{clan,rank,minigame,luckyitem,voxel}manager.cpp` | 未实现（仅部分元数据） | 各业务状态与协议完整迁移 |
@@ -30,7 +30,7 @@
 
 | 范围 | 剩余内容 |
 | --- | --- |
-| 武器养成 | 强化、分解 |
+| 武器养成 | 分解、防降级强化 |
 | 抽奖和小游戏 | 密码箱实际开启、概率抽奖、Bingo、武器集字兑换 |
 | 军团 | 创建/申请/审批、成员管理、仓库及军团任务 |
 | 玩家外围 | 屏蔽名单、问卷、通知/举报、Addon、完整玩家资料、快捷购买配置 |
@@ -188,6 +188,14 @@
 - 接入 `9/15` 的 `ZombieSkinCostume`：装备/替换写入 `UserZBCostumeLoadout`，卸下时删除对应行；旧皮肤同步清除 `inUse`。
 - 未配置 `ZombieSkin` 的服装道具按不可用拒绝，不写任何配装行。
 - 新增测试覆盖装备、同类型替换、卸下和缺失皮肤列拒绝。`go test ./...`、`go vet ./...` 通过；未做实机界面验收。
+
+## 2026-11-02 武器强化
+
+- 读取 `ReinforceMaxLv.csv`、`ReinforceMaxEXP.csv` 与 `Item.csv` 的 `ItemGrade`，建立可强化武器表、等级上限、属性上限和升级经验。
+- 接入 `78/14` 类型 0：校验目标与材料槽，按材料品质（含 8481/8482/8566 特例）累加经验，封顶当前等级需求后计算成功率；成功提升等级并随机增加一项属性，失败清空经验，两者都消耗材料。
+- 强化状态写入 `enhancementLevel/enhancementExp/enhanceValue`，属性按 7 个 4-bit 字段打包；成功回包包含槽位、等级、属性和尾部标志。
+- 目标不可强化、等级已满、材料缺失或重复时返回 `ENHANCE_SYSTEMERROR`，不消耗任何物品。
+- 新增测试覆盖成功升级、材料扣减/删除、多级强化和拒绝路径。`go test ./...`、`go vet ./...` 通过；未做实机界面验收。
 
 ## 2026-11-02 称号
 

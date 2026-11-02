@@ -105,17 +105,6 @@ func TestOpenItemBoxUnknownBoxDoesNotConsumeKey(t *testing.T) {
 	}
 }
 
-func TestEnhanceRequestReturnsSystemError(t *testing.T) {
-	s := &Server{}
-	c := &client{user: store.User{ID: 1}, character: store.Character{Name: "EnhUser"}, queue: make(chan outbound, 4)}
-	if err := s.dispatch(c, protocol.Packet{ID: 78, Data: []byte{14, 0}}); err != nil {
-		t.Fatal(err)
-	}
-	msg := <-c.queue
-	if msg.id != 78 || len(msg.data) != 2 || msg.data[0] != 14 || msg.data[1] != 5 {
-		t.Fatalf("unexpected enhance error reply %v", msg.data)
-	}
-}
 func TestOpenItemBoxCountFirstOrder(t *testing.T) {
 	db, err := store.Open(filepath.Join(t.TempDir(), "box.db3"))
 	if err != nil {

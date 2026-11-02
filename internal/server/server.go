@@ -78,6 +78,8 @@ type Server struct {
 	rewards      map[int]itemReward
 	quests       []questTask
 	surveys      []surveyDefinition
+	enhanceExp   map[int][]int
+	enhanceMax   map[int]enhanceLimit
 	modes        map[int]modeDefinition
 	dedicated    []*dedicatedServer
 	mu           sync.Mutex
@@ -131,6 +133,14 @@ func New(dir string, c config.Config, db *store.Store, log *slog.Logger) (*Serve
 		return nil, e
 	}
 	s.surveys, e = loadSurveys(c.Surveys)
+	if e != nil {
+		return nil, e
+	}
+	s.enhanceExp, e = loadReinforceExp(dir)
+	if e != nil {
+		return nil, e
+	}
+	s.enhanceMax, e = loadReinforceMax(dir)
 	if e != nil {
 		return nil, e
 	}

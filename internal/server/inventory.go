@@ -432,14 +432,7 @@ func (s *Server) itemRequest(c *client, p *protocol.Reader) error {
 		}
 		return s.openItemBox(c, first, second)
 	case 14:
-		// Enhancement is not migrated yet. The client waits for this result
-		// packet; SYSTEMERROR makes the dialog close instead of hanging.
-		p.U8()
-		if p.Err != nil {
-			return p.Err
-		}
-		c.send(78, &protocol.Writer{Data: []byte{14, 5}})
-		return nil
+		return s.enhanceRequest(c, p)
 	case 16:
 		p.U8()
 		slot, days := p.U16(), p.U16()
