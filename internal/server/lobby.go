@@ -33,8 +33,15 @@ func userInfo(w *protocol.Writer, c store.Character) {
 	if c.ClanID != 0 {
 		flags |= 1 << 12
 	}
+	if c.NameplateID != 0 {
+		flags |= 1 << 0
+	}
 	w.U32(flags)
 	w.U32(1)
+	if c.NameplateID != 0 {
+		w.U8(0)
+		w.U32(c.NameplateID)
+	}
 	w.String(c.Name)
 	w.U32(c.Level)
 	w.U64(int64(c.Exp))

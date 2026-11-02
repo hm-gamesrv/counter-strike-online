@@ -508,6 +508,8 @@ func (s *Server) itemRequest(c *client, p *protocol.Reader) error {
 			return s.toggleEffectItem(c, target, "zbRespawnEffect")
 		case "CombatInfoItem":
 			return s.toggleEffectItem(c, target, "killerMarkEffect")
+		case "LobbyBG":
+			return s.toggleNameplate(c, target)
 		}
 	}
 	if kind == 0 && inventoryType != 1 && s.items[target.ID].RewardID != 0 {

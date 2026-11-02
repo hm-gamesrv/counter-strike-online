@@ -105,3 +105,80 @@ func TestItemRequestTogglesCombatInfoItem(t *testing.T) {
 		t.Fatalf("inventory update packet %d", message.id)
 	}
 }
+
+func TestToggleNameplateAndUserInfo(t *testing.T) {
+	db, err := store.Open(filepath.Join(t.TempDir(), "plate.db3"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if err = db.Register("plateuser", "secret1", "127.0.0.1", 0); err != nil {
+		t.Fatal(err)
+	}
+	if err = db.CreateCharacter(1, "PlateUser", config.DefaultUser{Level: 1}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = db.DB.Exec("INSERT INTO UserInventory(userID,slot,itemID,count,status,inUse,obtainDate,expiryDate,isClanItem,enhancementLevel,enhancementExp,enhanceValue,paintID,partSlot1,partSlot2,lockStatus) VALUES(1,9,8001,1,0,0,0,0,0,0,0,0,0,0,0,0)"); err != nil {
+		t.Fatal(err)
+	}
+	changed, nameplate, err := db.ToggleNameplate(1, 8001, 9)
+	if err != nil || nameplate != 8001 || len(changed) == 0 {
+		t.Fatalf("activate %d %v %v", nameplate, changed, err)
+	}
+	character, err := db.Character(1)
+	if err != nil || character.NameplateID != 8001 {
+		t.Fatalf("character nameplate %d %v", character.NameplateID, err)
+	}
+	if _, nameplate, err = db.ToggleNameplate(1, 8001, 9); err != nil || nameplate != 0 {
+		t.Fatalf("deactivate %d %v", nameplate, err)
+	}
+
+	character.NameplateID = 8001
+	w := &protocol.Writer{}
+	userInfo(w, character)
+	r := &protocol.Reader{Data: w.Data}
+	if flags := r.U32(); flags&1 == 0 {
+		t.Fatalf("nameplate flag missing: %x", flags)
+	}
+	if r.U32() != 1 || r.U8() != 0 || r.U32() != 8001 || r.CString() != character.Name {
+		t.Fatalf("nameplate block malformed: %v", w.Data[:24])
+	}
+}
+
+func TestItemRequestTogglesLobbyBackground(t *testing.T) {
+	db, err := store.Open(filepath.Join(t.TempDir(), "bg.db3"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if err = db.Register("bguser", "secret1", "127.0.0.1", 0); err != nil {
+		t.Fatal(err)
+	}
+	if err = db.CreateCharacter(1, "BgUser", config.DefaultUser{Level: 1}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = db.DB.Exec("INSERT INTO UserInventory(userID,slot,itemID,count,status,inUse,obtainDate,expiryDate,isClanItem,enhancementLevel,enhancementExp,enhanceValue,paintID,partSlot1,partSlot2,lockStatus) VALUES(1,11,8002,1,0,0,0,0,0,0,0,0,0,0,0,0)"); err != nil {
+		t.Fatal(err)
+	}
+	c := &client{user: store.User{ID: 1}, queue: make(chan outbound, 8)}
+	s := &Server{
+		Store: db,
+		items: map[int]itemDefinition{8002: {ClassName: "LobbyBG"}},
+	}
+	p := &protocol.Writer{}
+	p.U8(0)
+	p.U8(0)
+	p.U16(11)
+	p.U8(0)
+	p.U16(1)
+	if err = s.itemRequest(c, &protocol.Reader{Data: p.Data}); err != nil {
+		t.Fatal(err)
+	}
+	character, err := db.Character(1)
+	if err != nil || character.NameplateID != 8002 {
+		t.Fatalf("nameplate %d %v", character.NameplateID, err)
+	}
+	if c.character.NameplateID != 8002 {
+		t.Fatal("client character not refreshed")
+	}
+}

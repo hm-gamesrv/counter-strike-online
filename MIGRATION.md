@@ -468,3 +468,10 @@
 - 新增 `Store.ToggleEffectItem`（列名白名单、槽位校验、`ErrItemUnavailable`）与 `Server.toggleEffectItem`；`itemRequest` 的 UseItem 分支按 `ClassName` 分发。
 - 与上游一致，这两类装饰不发 `157` 用户信息包，只回背包更新；`LobbyBG` 名片需要 `UFLAG_LOW_NAMEPLATE`，等实机确认后再接。
 - 测试覆盖激活/切换/取消、无效槽位、非法列名，以及 `itemRequest` 端到端切换。`go test ./...`、`go vet ./...` 通过；未做实机界面验收。
+
+## 2026-11-02 名片（LobbyBG）装备切换
+
+- `Store.ToggleNameplate` 按上游 nameplate 分支实现：同 ID 其他副本清 `status`、上一个生效道具清 `inUse`、所选道具 `status=1` 且按激活/取消设置 `inUse`，最后写 `UserCharacter.nameplateID`。
+- `itemRequest` 的 UseItem 分支按 `ClassName == "LobbyBG"` 分发；切换后回背包更新并广播 `157`。
+- `Character` 新增 `NameplateID`；`userInfo` 在非零时置 `UFLAG_LOW_NAMEPLATE`(bit0)，并在 flags/highFlag 之后、账号名之前写 `U8(0)+U32(nameplateID)`，与上游 `CPacketHelper_FullUserInfo` 的块顺序一致；未持有时不发该块，旧布局不变。
+- 测试覆盖激活/取消、`Character` 读取、`userInfo` 名片块解析、`itemRequest` 端到端切换。`go test ./...`、`go vet ./...` 通过；名片块尚未用真实客户端验收。
