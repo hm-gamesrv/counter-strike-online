@@ -13,6 +13,7 @@
 CSN:Z 的私服服务端（master server），由 JusicP 维护，实现登录、大厅与房间、道具、元数据下发等客户端协议。
 
 **与本项目的关系**：本项目的重写目标。功能与协议以实现为准，当前基线为 `JusicP/CSNZ_Server@12644f2adc0708e2d8b74f7dd6a4c3c29d3e1140`。
+**对照源码前先确认工作树就在基线**：`.ref/CSNZ_Server` 的 `HEAD` 可能停在更新的私服构建（例如 `3aac2d2`），它与基线在元数据帧、ItemBox 等处的 payload 形状不同，照它实现会写出客户端不认的包。读源码前执行 `pwsh scripts/check-ref.ps1`；它校验工作树提交并给出修复命令。不要用 `HEAD` 或默认分支代替基线。
 
 ### 1.2. counter-strike-online
 
