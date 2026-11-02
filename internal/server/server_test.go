@@ -96,6 +96,9 @@ func TestLoginRoomUDPAndShutdown(t *testing.T) {
 			if e != nil {
 				t.Fatal(e)
 			}
+			// The shipped client config allows one registration per IP; this
+			// integration test creates multiple local accounts.
+			cfg.MaxRegistrationsPerIP = 0
 			cfg.Crypt = scenario.crypt
 			if scenario.dedicated {
 				cfg.Room.HostConnectingMethod = 1
