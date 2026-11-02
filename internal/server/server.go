@@ -425,7 +425,7 @@ func (s *Server) dispatch(c *client, p protocol.Packet) error {
 		}
 		return s.message(c, r)
 	case 10:
-		s.leaveRoom(c)
+		s.leaveRoomRequest(c)
 		s.lobbyLeft(c)
 		s.serverList(c)
 	case 7:

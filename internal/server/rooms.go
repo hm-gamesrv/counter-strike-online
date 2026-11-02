@@ -560,7 +560,7 @@ func (s *Server) roomRequest(c *client, r *protocol.Reader) error {
 			s.sendClanBattleNotice(c.user.ID, 1, c.character.Name, to.settings.number(6), id)
 		}
 	case 2:
-		s.leaveRoom(c)
+		s.leaveRoomRequest(c)
 		s.joinLobby(c)
 		return s.resumeQuestRewards(c)
 	case 3:
@@ -707,6 +707,21 @@ func (s *Server) roomRequest(c *client, r *protocol.Reader) error {
 		s.Log.Debug("unsupported room action", "kind", kind, "user", c.user.ID)
 	}
 	return r.Err
+}
+
+// leaveRoomRequest handles an explicit leave. A peer host that leaves during a
+// match has ended the game for everyone (the client closes its own result
+// window and never sends the host game-end message), so the match is settled
+// first instead of silently dropping every participant's reward.
+func (s *Server) leaveRoomRequest(c *client) {
+	if r := s.rooms[c.room]; r != nil && r.match != nil && r.dedicated == nil && c.playing {
+		if c == r.host || c.user.ID == r.host.user.ID {
+			if e := s.endGame(r, false); e != nil {
+				s.Log.Error("match settlement on host leave failed", "room", r.id, "error", e)
+			}
+		}
+	}
+	s.leaveRoom(c)
 }
 
 func (s *Server) leaveRoom(c *client) {
