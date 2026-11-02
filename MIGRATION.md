@@ -12,7 +12,7 @@
 | `manager/packetmanager.cpp` | `internal/server/{metadata,lobby,rooms,shop}.go` | 随各业务逐项实现出站结构 |
 | `manager/shopmanager.cpp` | `internal/server/shop.go`、`internal/store/purchase.go` | 当前客户端购买、计数堆叠和密码箱计数已实现；完整延期规则、礼包校验仍缺 |
 | `manager/itemmanager.cpp` | `internal/server/{inventory,rewards,reward_claims,reward_random}.go`、`internal/store/{inventory,purchase,rewards,reward_claims,item_extend,paint,part,costume}.go` | 已实现武器/角色启用、选择副本、锁定/解锁、固定/选择/随机奖励与领取去重、开箱、延期、武器涂装、部件、普通服装、ZB 皮肤与强化（含防降级）；仍缺完整合并、分解 |
-| `manager/{host,dedicatedserver}manager.cpp`、`room/gamematch.cpp` | `internal/server/{host,dedicated,catalog}.go`、`internal/store/{match,levels}.go` | 已实现开局、主机背包、计数、存档迁移、专服池与基础结算；尚需真实客户端/HLDS 对局验收、事件奖励及特殊模式规则 |
+| `manager/{host,dedicatedserver}manager.cpp`、`room/gamematch.cpp` | `internal/server/{host,dedicated,catalog}.go`、`internal/store/{match,levels}.go` | 已实现开局、主机背包、计数、存档迁移、专服池、场景道具使用与基础结算；尚需真实客户端/HLDS 对局验收、事件奖励及特殊模式规则 |
 | `manager/questmanager.cpp`、`quest/questevent.*` | `internal/server/{quests,title}.go`、`internal/store/{quests,quest_events,title}.go` | 已接活动任务条件与持久化进度、完成奖励，以及 `84` 称号前缀/槽位；尚缺任务界面、每日/荣誉/军团任务及称号解锁、VIP 事件与完整实机验收 |
 | `manager/{clan,rank,minigame,luckyitem,voxel}manager.cpp` | 未实现（仅部分元数据） | 各业务状态与协议完整迁移 |
 
@@ -210,6 +210,13 @@
 - 新增 `MapList.csv` 的 `max_player` 读取；`Room.ValidateSettings=true` 时在创建和设置更新时校验人数、地图人数上限、模式范围和步长，失败回 `Invalid room settings.` 且不落库。
 - 开关默认关闭，保持现有房间行为不变。
 - 新增测试覆盖合法设置、越界、步长、地图上限、未知地图和关闭开关。`go test ./...`、`go vet ./...` 通过；未做实机界面验收。
+
+## 2026-11-02 场景道具使用
+
+- 接入主机包 `68/100`：读取目标用户、道具 ID 和数量，校验目标在同一房间后消耗 1 个道具。
+- 消耗结果按背包增量下发给目标玩家，并向房主回 `[100, userID, itemID, 0xFF]`；道具不存在或受保护时静默忽略。
+- 数量字段按上游行为忽略，始终消耗 1 个。
+- 新增测试覆盖消耗、背包同步、房主回包和未知道具静默。`go test ./...`、`go vet ./...` 通过；未做实机界面验收。
 
 ## 2026-11-02 称号
 

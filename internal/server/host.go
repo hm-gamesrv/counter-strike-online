@@ -411,6 +411,37 @@ func (s *Server) hostRequest(c *client, p *protocol.Reader) error {
 		if p.U8() == 1 {
 			p.U8()
 		}
+	case 100:
+		userID, itemID := p.U32(), p.U16()
+		p.U16() // The reference implementation always consumes one item.
+		if p.Err != nil {
+			return p.Err
+		}
+		if p.Pos != len(p.Data) || itemID <= 0 {
+			return errors.New("invalid scenario item request")
+		}
+		target := s.users[userID]
+		if target == nil || target.room != r.id {
+			return nil
+		}
+		protected := append([]int{}, s.Config.DefaultUser.DefaultItems...)
+		protected = append(protected, s.Config.DefaultUser.PseudoDefaultItems...)
+		changed, err := s.Store.ConsumeItem(target.user.ID, itemID, protected)
+		if errors.Is(err, store.ErrItemUnavailable) || errors.Is(err, store.ErrItemProtected) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if err = s.sendInventoryItems(target, changed); err != nil {
+			return err
+		}
+		w := &protocol.Writer{}
+		w.U8(100)
+		w.U32(userID)
+		w.U16(itemID)
+		w.U8(255)
+		c.send(68, w)
 	case 102:
 		p.CString()
 		if p.Err != nil {
