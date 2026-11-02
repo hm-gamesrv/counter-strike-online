@@ -23,7 +23,8 @@ func (s *Server) gmCommand(c *client, text string, args []string) (bool, error) 
 		c.chatNotice("/sendnotice, /sendgmnotice, /addpoints, /givepoints, /addexp")
 		c.chatNotice("/additem, /giveitem, /removeitem, /addallitems, /setitemstatus, /setiteminuse")
 		c.chatNotice("/givereward, /giverewardtoall")
-		c.chatNotice("/addwpnreleasechar, /ban, /hban, /ipban, /unban")
+		c.chatNotice("/addwpnreleasechar, /ban, /hban, /ipban, /unban, /tournament")
+		c.chatNotice("/addgroom, /reqsnapshot")
 	case "/version":
 		c.chatNotice("CSNZ Go server; client build 30.12.24")
 	case "/disconnect":
@@ -260,6 +261,30 @@ func (s *Server) gmCommand(c *client, text string, args []string) (bool, error) 
 			sent++
 		}
 		c.chatNotice(fmt.Sprintf("Reward %d sent to %d users.", rewardID, sent))
+	case "/tournament":
+		next := 0
+		if c.character.Tournament == 0 {
+			next = 0xFF
+		}
+		value, err := s.Store.UpdateTournament(c.user.ID, next)
+		if err != nil {
+			return true, err
+		}
+		c.character.Tournament = value
+		w := &protocol.Writer{}
+		userInfo(w, c.character)
+		c.send(157, w)
+		if value != 0 {
+			c.notice("Tournament HUD is ON")
+		} else {
+			c.notice("Tournament HUD is OFF")
+		}
+	case "/reqsnapshot":
+		c.chatNotice("Not implemented")
+	case "/addgroom":
+		if err := s.ghostRoom(c); err != nil {
+			return true, err
+		}
 	case "/addwpnreleasechar":
 		count, ok := atoiArg(args, 2)
 		if len(args) < 3 || !ok || count < 1 || len(args[1]) == 0 {

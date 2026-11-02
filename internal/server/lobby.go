@@ -36,6 +36,9 @@ func userInfo(w *protocol.Writer, c store.Character) {
 	if c.NameplateID != 0 {
 		flags |= 1 << 0
 	}
+	if c.Tournament != 0 {
+		flags |= 1 << 13
+	}
 	w.U32(flags)
 	w.U32(1)
 	if c.NameplateID != 0 {
@@ -66,6 +69,9 @@ func userInfo(w *protocol.Writer, c store.Character) {
 		w.U8(0)
 		w.U8(0)
 		w.U8(0)
+	}
+	if c.Tournament != 0 {
+		w.U8(c.Tournament)
 	}
 	w.U16(c.PasswordBoxes)
 	w.U16(c.PrefixID)

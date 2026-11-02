@@ -38,9 +38,9 @@ Studio 房间创建（地图 254）仍拒绝：上游 `CRoomSettings::CheckSetti
 
 上游 `channelmanager.cpp:372` 起实现 31 个聊天命令：`/ban`、`/ipban`、`/hban`、`/unban`、`/additem`、`/giveitem`、`/removeitem`、`/addpoints`、`/givepoints`、`/addexp`、`/addallitems`、`/givereward`、`/giverewardtoall`、`/addgroom`、`/addwpnreleasechar`、`/sendnotice`、`/sendgmnotice`、`/bingo`、`/weaponrelease`、`/setiteminuse`、`/setitemstatus`、`/status`、`/getuid`、`/getfreeslots`、`/disconnect`、`/reqsnapshot`、`/tournament`、`/help` 等。
 
-Go 已按 `UserCharacterExtended.gameMaster` 鉴权，实现 `/help`、`/version`、`/disconnect`、`/status`、`/getfreeslots`、`/getuid`、`/addpoints`、`/givepoints`、`/addexp`、`/sendnotice`、`/sendgmnotice`、`/additem`、`/giveitem`、`/removeitem`、`/addallitems`、`/setitemstatus`、`/setiteminuse`、`/givereward`、`/giverewardtoall`、`/addwpnreleasechar`、`/ban`、`/hban`、`/ipban`、`/unban`；`/bingo`、`/weaponrelease` 按上游对全部玩家开放。IP 封禁在 TCP accept、HWID 封禁在登录握手（`U` 类型 3）处拦截；三者都会断开在线目标，`/ban type=1` 向全服广播封禁原因。
+Go 已按 `UserCharacterExtended.gameMaster` 鉴权，实现 `/help`、`/version`、`/disconnect`、`/status`、`/getfreeslots`、`/getuid`、`/addpoints`、`/givepoints`、`/addexp`、`/sendnotice`、`/sendgmnotice`、`/additem`、`/giveitem`、`/removeitem`、`/addallitems`、`/setitemstatus`、`/setiteminuse`、`/givereward`、`/giverewardtoall`、`/addwpnreleasechar`、`/ban`、`/hban`、`/ipban`、`/unban`、`/tournament`、`/addgroom`、`/reqsnapshot`；`/bingo`、`/weaponrelease` 按上游对全部玩家开放。IP 封禁在 TCP accept、HWID 封禁在登录握手（`U` 类型 3）处拦截；三者都会断开在线目标，`/ban type=1` 向全服广播封禁原因。
 
-剩余只有 `PUBLIC_RELEASE` 之外的管理命令（`/addgroom`、`/reqsnapshot`、`/tournament`）。GM 发奖复用 `ItemRewards.json` 目录奖励，选择型奖励仍需要客户端选择 UI；上游的 Qt 管理 GUI（账号/角色/封禁编辑）也未迁移。
+基线里 `#ifndef PUBLIC_RELEASE` 包住的两条也按基线行为补上了：`/reqsnapshot` 只回 `Not implemented`（上游本身是空实现），`/addgroom` 用硬编码设置（`GHOST ROOM NAME`、模式 15、地图 128、10 人）走正常建房路径；上游那串 60 字节房间密码超过本项目 32 字节上限，改成固定短密码。`/tournament` 切 `UserCharacter.tournament`（0/0xFF）、在 `userInfo` 的 `UFLAG_LOW_TOURNAMENT` 块下发并补发 `157`。GM 发奖复用 `ItemRewards.json` 目录奖励，选择型奖励仍需要客户端选择 UI；上游的 Qt 管理 GUI（账号/角色/封禁编辑）未迁移。
 
 ### 1.4 房间子项（`65`）
 

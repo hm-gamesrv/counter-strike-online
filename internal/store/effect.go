@@ -126,3 +126,12 @@ func (s *Store) ToggleEffectItem(id, itemID, slot int, column string) ([]Item, e
 	}
 	return changed, nil
 }
+
+// UpdateTournament stores the tournament HUD flag (0 off, 0xFF on); the client
+// reads it from the user info block flagged by UFLAG_LOW_TOURNAMENT.
+func (s *Store) UpdateTournament(id, value int) (int, error) {
+	if _, err := s.DB.Exec("UPDATE UserCharacter SET tournament=? WHERE userID=?", value, id); err != nil {
+		return 0, err
+	}
+	return value, nil
+}

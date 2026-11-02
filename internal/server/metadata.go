@@ -164,6 +164,7 @@ var metadataOrder = []string{
 	"Item",
 	"CodisData",
 	"WeaponProp",
+	"Hash",
 	"RandomWeaponList",
 	"ModeEvent",
 	"EventShop",
@@ -333,6 +334,11 @@ func loadMetadata(dir string, c config.Config) ([][]byte, error) {
 			w.U8(0)
 		}
 		byName["ItemBox"] = [][]byte{w.Data}
+	}
+	if c.Metadata["Hash"] {
+		// The baseline SendMetadataHash writes no payload: the data write stays
+		// commented out, so the client receives an empty metadata packet.
+		byName["Hash"] = [][]byte{{}}
 	}
 	var packets [][]byte
 	for _, name := range metadataOrder {

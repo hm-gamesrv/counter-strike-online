@@ -514,3 +514,12 @@
 - 后续路线：`4859a6e` 之后共 7 个提交才动协议，按顺序逐个过渡——`3b56abf`（引入 `ZIPMETADATA_FULL_ZIP` 帧与 64000 分块，需要把 `MetadataZipTypeByte` 打开）、`6e5275c`（ItemBox 增加 `U8(0)`）、`90bc74a`/`293c9dc`（Voxel 多服务器、voxelhttp 主机名）、`a6e0bf0`/`a2f0026`/`3aac2d2`（typo、content-length、P2P 换图）。`3b56abf` 起的帧本客户端不接受，只有客户端升级后才应切换默认帧。
 - 验证：`go build`、`go vet`、`go test ./...` 全绿；全开配置 + 新基线数据（地图 322、模式 51、道具 3020）下真实客户端登录不闪退。
 
+
+## 2026-11-03 补齐 /tournament、/addgroom、/reqsnapshot 与 Hash 元数据
+
+- `/tournament`：按基线切 `UserCharacter.tournament`（0 ↔ 0xFF）并持久化；`userInfo` 在 `UFLAG_LOW_TOURNAMENT`（bit13）下、clan 块之后写 `U8(tournament)`（对应 `packethelper_fulluserinfo.cpp:154`），切换后补发 `157` 让客户端立即刷新，另发 "Tournament HUD is ON/OFF" 通知。上游只发通知、不补 `157`，这里多一步是为了让 HUD 立即生效。
+- `/reqsnapshot`：基线在 `#ifndef PUBLIC_RELEASE` 里只回 `Not implemented`，Go 与之相同。
+- `/addgroom`：按基线造一个硬编码房间（`GHOST ROOM NAME`、模式 15、地图 128、10 人），设置值重新走正常建房路径，因此默认值、校验和广播与客户端建房一致。上游那串 60 字节密码超过本项目 32 字节上限，改为固定短密码（`addgroom`）。
+- `Hash`（255）元数据：基线的 `SendMetadataHash` 只发头部、数据写入被注释，所以开启时下发一个**空 payload** 的 `91` 包，位置在 `WeaponProp` 与 `RandomWeaponList` 之间（`usermanager.cpp:705`）。`metadataOrder` 增加 `Hash`，`loadMetadata` 在开关打开时放入空切片。
+- 测试：`TestGMTournamentToggle`（DB 值 + `userInfo` bit13 与字节）、`TestGMRequestSnapshotAndGhostRoom`（两条命令行为、房间名）、`TestMetadataHashPacketIsEmpty`（空包 + 顺序）。`go build`、`go vet`、`go test ./...` 全绿。
+
