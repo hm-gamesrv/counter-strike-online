@@ -14,7 +14,7 @@
 | `manager/itemmanager.cpp` | `internal/server/{inventory,rewards,reward_claims,reward_random}.go`、`internal/store/{inventory,purchase,rewards,reward_claims,item_extend,paint,part,costume}.go` | 已实现武器/角色启用、选择副本、锁定/解锁、固定/选择/随机奖励与领取去重、开箱、延期、武器涂装、部件、普通服装、ZB 皮肤、强化（含防降级）与删除式分解；仍缺完整合并 |
 | `manager/{host,dedicatedserver}manager.cpp`、`room/gamematch.cpp` | `internal/server/{host,dedicated,catalog}.go`、`internal/store/{match,levels}.go` | 已实现开局、主机背包、计数、存档迁移、专服池、场景道具使用、场景掉落箱奖励、装备加成与基础结算；尚需真实客户端/HLDS 对局验收、ZBS 名次奖励及特殊模式规则 |
 | `manager/questmanager.cpp`、`quest/questevent.*` | `internal/server/{quests,title}.go`、`internal/store/{quests,quest_events,title}.go` | 已接活动任务条件与持久化进度、完成奖励，以及 `84` 称号前缀/槽位；尚缺任务界面、每日/荣誉/军团任务及称号解锁、VIP 事件与完整实机验收 |
-| `manager/{clan,rank,minigame,luckyitem,voxel}manager.cpp` | `internal/server/{clan,minigame}.go`、`internal/store/{clan,clan_storage,weapon_release}.go` | 军团 7 张表、协议与仓库已接；武器解放配置/进度/选字/发奖已接；仍缺军团任务、军团战、Bingo、排行、抽奖与 Voxel |
+| `manager/{clan,rank,minigame,luckyitem,voxel}manager.cpp` | `internal/server/{clan,minigame,bingo}.go`、`internal/store/{clan,clan_storage,weapon_release,bingo}.go` | 军团 7 张表、协议与仓库已接；武器解放与 Bingo 基础流程已接；仍缺军团任务、军团战踢人、排行、抽奖与 Voxel |
 
 当前已跑通真实客户端机器人对局、正常结算和返回房间。后续优先级按用户要求执行下表；每项应以原版出入站协议样本、当前客户端和数据库前后快照校验。
 
@@ -31,7 +31,7 @@
 | 范围 | 剩余内容 |
 | --- | --- |
 | 武器养成 | 完整道具合并规则 |
-| 抽奖和小游戏 | 密码箱实际开启、概率抽奖、Bingo、武器集字兑换 |
+| 抽奖和小游戏 | 密码箱实际开启、概率抽奖、武器集字兑换；Bingo 桌面/开格/洗牌已接，仍待实机验收 |
 | 军团 | 创建/申请/审批、成员管理、仓库及军团任务 |
 | 玩家外围 | 屏蔽名单、问卷、通知/举报、Addon、完整玩家资料、快捷购买配置 |
 | 管理与运维 | 管理 GUI/命令、IP/HWID 封禁管理、SSL |
