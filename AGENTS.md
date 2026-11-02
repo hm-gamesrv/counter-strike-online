@@ -12,8 +12,11 @@
 
 CSN:Z 的私服服务端（master server），由 JusicP 维护，实现登录、大厅与房间、道具、元数据下发等客户端协议。
 
-**与本项目的关系**：本项目的重写目标。功能与协议以实现为准，当前基线为 `JusicP/CSNZ_Server@e5721ed9bbd6bd16abdd7133f412316bc14d3cf0`（2025-03-20，`Update metadata files for update date 2025-03-19`）。从 `12644f2` 到该提交只改 `bin/Data/*` 与 `bin/*.json` 数据，没有源码变更，因此协议形状与 `12644f2` 相同；再往后才逐步过渡到最新提交。
-**对照源码前先确认工作树就在基线**：`.ref/CSNZ_Server` 的 `HEAD` 可能停在更新的私服构建（例如 `3aac2d2`），它与基线在元数据帧、ItemBox 等处的 payload 形状不同，照它实现会写出客户端不认的包。读源码前执行 `pwsh scripts/check-ref.ps1`；它校验工作树提交并给出修复命令。不要用 `HEAD` 或默认分支代替基线。
+**与本项目的关系**：本项目的重写目标；功能与协议以实现为准。
+
+**基线**：`JusicP/CSNZ_Server@e5721ed9bbd6bd16abdd7133f412316bc14d3cf0`（2025-03-20）。`12644f2` 至该提交仅改 `bin/Data/*` 与 `bin/*.json`，无源码变更，协议形状与 `12644f2` 相同。当前按该版本重写，后续随实现完善逐步同步到上游最新提交。
+
+**对照源码前先确认工作树就在基线**：`.ref/CSNZ_Server` 的 `HEAD` 可能停在更新的构建（如 `3aac2d2`），其元数据帧、ItemBox 等 payload 形状与基线不同，照其实现会发出客户端不接受的包。读源码前运行 `pwsh scripts/check-ref.ps1` 校验提交；不要以 `HEAD` 或默认分支代替基线。
 
 ### 1.2. counter-strike-online
 
