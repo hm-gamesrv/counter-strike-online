@@ -59,6 +59,16 @@ func loadNotices(cfg map[string]config.Notice) ([]noticeDefinition, error) {
 	return notices, nil
 }
 
+func (s *Server) sendMainMenuSkin(c *client) {
+	if s.Config.MainMenuSkinEvent <= 0 {
+		return
+	}
+	w := &protocol.Writer{}
+	w.U8(3)
+	w.U32(s.Config.MainMenuSkinEvent)
+	c.send(159, w)
+}
+
 func (s *Server) sendNotices(c *client) {
 	for _, notice := range s.notices {
 		w := &protocol.Writer{}

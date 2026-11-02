@@ -99,6 +99,7 @@ type Config struct {
 	CheckClientBuild       bool
 	AllowedClientTimestamp int
 	AllowedLauncherVersion int
+	MainMenuSkinEvent      int
 	Metadata               map[string]bool
 	DefaultUser            DefaultUser
 	Room                   struct {
@@ -145,6 +146,9 @@ func Load(path string) (Config, error) {
 	}
 	if c.BanListMaxSize < 0 || c.BanListMaxSize > 65535 {
 		return c, fmt.Errorf("BanListMaxSize must be 0..65535")
+	}
+	if c.MainMenuSkinEvent < 0 || c.MainMenuSkinEvent > 255 {
+		return c, fmt.Errorf("MainMenuSkinEvent must be 0..255")
 	}
 	if c.InventorySlotMax < 1 || c.InventorySlotMax > 65535-len(c.DefaultUser.DefaultItems) {
 		return c, fmt.Errorf("InventorySlotMax plus default item slots must fit uint16")

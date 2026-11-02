@@ -75,3 +75,26 @@ func TestLoadNoticesRejectsInvalidType(t *testing.T) {
 		t.Fatal("invalid notice type was accepted")
 	}
 }
+func TestMainMenuSkinEvent(t *testing.T) {
+	s := &Server{
+		Config: config.Config{
+			MainMenuSkinEvent: 8,
+		},
+	}
+	c := &client{
+		queue: make(chan outbound, 2),
+	}
+	s.sendMainMenuSkin(c)
+	message := <-c.queue
+	r := &protocol.Reader{Data: message.data}
+	if message.id != 159 || r.U8() != 3 || r.U32() != 8 {
+		t.Fatalf("main menu skin packet %d %v", message.id, message.data)
+	}
+	s.Config.MainMenuSkinEvent = 0
+	s.sendMainMenuSkin(c)
+	select {
+	case message = <-c.queue:
+		t.Fatalf("unexpected disabled skin packet %v", message.data)
+	default:
+	}
+}

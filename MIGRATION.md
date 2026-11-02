@@ -334,6 +334,14 @@
 - 新增 `UserMiniGameWeaponReleaseItemProgress` 与 `UserMiniGameWeaponReleaseCharacters` 事务读写；进度和字母扣减同事务提交。
 - Bingo 的上游更新/重置/洗牌主体均被注释，未按“现成功能”搬运。新增测试覆盖配置顺序/校验、进度位、重复位、缺字、登录进度包、完整集齐发奖和 inactive 状态。`go test ./...`、`go vet ./...` 通过；未做实机界面验收。
 
+## 2026-11-02 切换到当前客户端数据
+
+- 嵌入数据源从上游默认配置切换为 `S:\.temp\CSNZ\Server`：`ServerConfig.json`、商店/奖励/活动/皮肤/武器列表以及 `Server/Data` 全部按当前客户端文件重取。
+- 当前客户端配置带来的变化包括：每 IP 注册上限 1、主菜单皮肤事件 8、百科/荣誉商店/里程商店/活动商店元数据开启、Bingo/武器解放事件开启，以及 2025 年春节公告和新的 Voxel 地址。
+- `Metadata_ModeList.bin`、`Metadata_Encyclopedia.bin` 当前客户端目录没有独立文件，继续使用从上游头文件提取的固定数据块，其余元数据以客户端 `Server/Data` 为准。
+- 集成测试改为显式允许多个本地账号注册，避免被客户端的每 IP 上限 1 误伤。
+- 新增 `MainMenuSkinEvent` 配置与 `159/3` 登录下发；新增测试覆盖启用/关闭。`go test ./...` 通过；未做实机界面验收。
+
 
 
 
