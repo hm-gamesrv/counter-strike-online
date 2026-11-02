@@ -413,7 +413,7 @@ func (s *Server) roomRequest(c *client, r *protocol.Reader) error {
 			c.notice("Unsupported game mode.")
 			return nil
 		}
-		if err := s.refreshSuperRoom(c, &st); err != nil {
+		if err := s.refreshHostRoomItems(c, &st); err != nil {
 			return err
 		}
 		if err := s.validateRoomSettings(&st, 1); err != nil {
@@ -550,7 +550,7 @@ func (s *Server) roomRequest(c *client, r *protocol.Reader) error {
 			}
 		}
 		merged.merge(st)
-		if err := s.refreshSuperRoom(currentRoom.host, &merged); err != nil {
+		if err := s.refreshHostRoomItems(currentRoom.host, &merged); err != nil {
 			return err
 		}
 		if r.Pos != len(r.Data) || merged.number(8) < len(currentRoom.members) || merged.number(8) > 32 || len(merged.text(0)) < 1 || len(merged.text(0)) > 64 || len(merged.text(3)) > 32 {

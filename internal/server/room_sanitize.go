@@ -119,7 +119,106 @@ func weaponBuyCoolTimeAllowed(mode int) bool {
 	return false
 }
 
+func buyTimeValid(mode, value int) bool {
+	if mode == 32 {
+		return value == 17 || value == 20
+	}
+	return value >= 10 && value <= 180 && value%10 == 0
+}
+
+func startingCashValid(mode, value int) bool {
+	if mode == 17 {
+		return value == 800 || value == 7500
+	}
+	switch value {
+	case 800, 2400, 5000, 7500:
+		return true
+	}
+	return false
+}
+
+func canChangeTeamBalance(mode int) bool {
+	switch mode {
+	case 0, 3, 23, 32, 57:
+		return true
+	}
+	return false
+}
+
+func defaultTeamBalance(mode int) int {
+	switch mode {
+	case 41, 48, 50, 55, 56:
+		return 0
+	}
+	return 1
+}
+
+func canChangeFriendlyFire(mode int) bool {
+	switch mode {
+	case 0, 3, 8, 9, 14, 19, 30, 32, 37, 40, 45, 49, 51, 53, 54, 57, 58:
+		return true
+	}
+	return false
+}
+
+func defaultFriendlyFire(mode int) int {
+	switch mode {
+	case 1, 4, 38, 39:
+		return 1
+	}
+	return 0
+}
+
 func (s *Server) sanitizeRoomSettings(st *settings, mode, mapID int) {
+	// Fields upstream always drops or clamps on a room update.
+	for _, index := range []int{1, 4, 5, 19, 22, 23, 24, 25, 26, 27, 30} {
+		if st.hasField(index) {
+			st.clearField(index)
+		}
+	}
+	if st.hasField(14) {
+		st.clampField(14, 10)
+	}
+	if st.hasField(15) {
+		st.clampField(15, 10)
+	}
+	if st.hasField(17) {
+		st.clampField(17, 2)
+	}
+	for _, index := range []int{21, 29} { // flashlight, voice chat
+		if st.hasField(index) {
+			st.clampField(index, 1)
+		}
+	}
+	if st.hasField(16) && !buyTimeValid(mode, st.number(16)) {
+		st.clearField(16)
+	}
+	if st.hasField(36) { // starting cash
+		switch {
+		case mode != 0 && mode != 3 && mode != 17 && mode != 50 && st.number(36) != 0:
+			st.clearField(36)
+		case !startingCashValid(mode, st.number(36)):
+			st.clearField(36)
+		}
+	}
+	if st.hasField(18) { // team balance
+		if !canChangeTeamBalance(mode) && st.number(18) != defaultTeamBalance(mode) {
+			st.clearField(18)
+		} else {
+			st.clampField(18, 1)
+		}
+	}
+	if st.hasField(20) { // friendly fire
+		if !canChangeFriendlyFire(mode) && st.number(20) != defaultFriendlyFire(mode) {
+			st.clearField(20)
+		} else {
+			st.clampField(20, 1)
+		}
+	}
+	if st.hasField(28) && len(st.fields[28]) == 1 { // view flags
+		st.fields[28][0] &^= 1<<1 | 1<<2 | 1<<3 | 1<<4
+	}
+
 	// Studio settings only exist on the Voxel map.
 	if mapID != 254 && st.hasField(50) {
 		st.clearField(50)

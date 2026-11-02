@@ -441,3 +441,9 @@
 - 更新 `mapId`(7)、`mapId2`(48)、`mapPlaylistIndex`(42) 后广播 `65/4` 设置更新（掩码 `1<<7` 与 `1<<10|1<<16`），与上游 `CRoom::EndGame` 的字段顺序一致。
 - `Room.HostConnectingMethod=1`（仅专服）时，轮换未回到第一张地图前不释放专服。
 - 新增 `rotateRoomMap` 与测试覆盖下一张、回绕、强制结束和无 playlist。`go test ./...`、`go vet ./...` 通过；未做实机界面验收。
+
+## 2026-11-02 房主道具设置与低层字段清洗
+
+- `refreshSuperRoom` 扩展为 `refreshHostRoomItems`：`superRoom`（8357）、`sd` 大头事件（439）、`c4Timer` 音效（112）都按房主实际持有道具决定；`sd` 只在模式 3/4/5/15/24 生效，其余模式清除。
+- 补充 `LoadNewSettings` 的低层清洗：`buyTime`/`startingCash` 取值校验，`teamBalance`/`friendlyFire` 默认值比对，`viewFlag` 位清理，`displayNickname`/`hostageKillLimit`/`freezeTime`/`flashLight`/`voiceChat` 夹紧，以及 `levelLimit`/`status` 等上游固定丢弃的字段。
+- 测试覆盖房主道具应用与清除、buyTime/startingCash、teamBalance、viewFlag。`go test ./...`、`go vet ./...` 通过；未做实机界面验收。

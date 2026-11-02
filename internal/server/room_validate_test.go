@@ -268,4 +268,42 @@ func TestSanitizeOptionalRoomFields(t *testing.T) {
 	if st.hasField(54) {
 		t.Fatal("teamSwitch kept for mode 15")
 	}
+
+	st = validRoomSettings()
+	st.setNumber(16, 33, 1)
+	if err := s.validateRoomSettings(&st, 1); err != nil {
+		t.Fatal(err)
+	}
+	if st.hasField(16) {
+		t.Fatal("invalid buy time kept")
+	}
+	st = validRoomSettings()
+	st.setNumber(36, 123, 1)
+	if err := s.validateRoomSettings(&st, 1); err != nil {
+		t.Fatal(err)
+	}
+	if st.hasField(36) {
+		t.Fatal("invalid starting cash kept")
+	}
+	st = validRoomSettings()
+	st.setNumber(6, 15, 1)
+	st.setNumber(7, 3, 2)
+	st.fields[45] = make([]byte, 9)
+	binary.LittleEndian.PutUint16(st.fields[45], 1)
+	st.flags[1] |= 1 << 13
+	st.setNumber(18, 0, 1)
+	if err := s.validateRoomSettings(&st, 1); err != nil {
+		t.Fatal(err)
+	}
+	if st.hasField(18) {
+		t.Fatal("team balance changed for a mode that disallows it")
+	}
+	st = validRoomSettings()
+	st.setNumber(28, 0x1f, 1)
+	if err := s.validateRoomSettings(&st, 1); err != nil {
+		t.Fatal(err)
+	}
+	if len(st.fields[28]) != 1 || st.fields[28][0] != 0x01 {
+		t.Fatalf("view flags not cleaned: %v", st.fields[28])
+	}
 }

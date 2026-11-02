@@ -25,7 +25,7 @@ func TestSuperRoomFlagComesFromHostItem(t *testing.T) {
 
 	st := settings{}
 	st.setNumber(58, 1, 1)
-	if err = s.refreshSuperRoom(c, &st); err != nil {
+	if err = s.refreshHostRoomItems(c, &st); err != nil {
 		t.Fatal(err)
 	}
 	if st.number(58) != 0 {
@@ -38,10 +38,43 @@ func TestSuperRoomFlagComesFromHostItem(t *testing.T) {
 	if _, err = db.DB.Exec("INSERT INTO UserInventory(userID,slot,itemID,count,status,inUse,obtainDate,expiryDate,isClanItem,enhancementLevel,enhancementExp,enhanceValue,paintID,partSlot1,partSlot2,lockStatus) VALUES(1,20,8357,1,0,0,0,0,0,0,0,0,0,0,0,0)"); err != nil {
 		t.Fatal(err)
 	}
-	if err = s.refreshSuperRoom(c, &st); err != nil {
+	if err = s.refreshHostRoomItems(c, &st); err != nil {
 		t.Fatal(err)
 	}
 	if st.number(58) != 1 {
 		t.Fatal("owned superRoom item did not set the flag")
+	}
+
+	host := settings{}
+	host.setNumber(6, 3, 1)
+	host.setNumber(33, 1, 1)
+	host.setNumber(44, 1, 1)
+	if err = s.refreshHostRoomItems(c, &host); err != nil {
+		t.Fatal(err)
+	}
+	if host.number(33) != 0 || host.number(44) != 0 {
+		t.Fatal("unowned C4 sound or big-head item kept")
+	}
+	if _, err = db.DB.Exec("INSERT INTO UserInventory(userID,slot,itemID,count,status,inUse,obtainDate,expiryDate,isClanItem,enhancementLevel,enhancementExp,enhanceValue,paintID,partSlot1,partSlot2,lockStatus) VALUES(1,21,112,1,0,0,0,0,0,0,0,0,0,0,0,0)"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = db.DB.Exec("INSERT INTO UserInventory(userID,slot,itemID,count,status,inUse,obtainDate,expiryDate,isClanItem,enhancementLevel,enhancementExp,enhanceValue,paintID,partSlot1,partSlot2,lockStatus) VALUES(1,22,439,1,0,0,0,0,0,0,0,0,0,0,0,0)"); err != nil {
+		t.Fatal(err)
+	}
+	host.setNumber(33, 1, 1)
+	if err = s.refreshHostRoomItems(c, &host); err != nil {
+		t.Fatal(err)
+	}
+	if host.number(33) != 1 || host.number(44) != 1 {
+		t.Fatal("owned C4 sound or big-head item not applied")
+	}
+	clear := settings{}
+	clear.setNumber(6, 0, 1)
+	clear.setNumber(44, 1, 1)
+	if err = s.refreshHostRoomItems(c, &clear); err != nil {
+		t.Fatal(err)
+	}
+	if clear.hasField(44) {
+		t.Fatal("big-head flag kept for a mode that does not use it")
 	}
 }

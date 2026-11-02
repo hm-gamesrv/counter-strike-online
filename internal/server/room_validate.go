@@ -288,23 +288,41 @@ func (s *settings) zsDifficulty() int {
 	return int(binary.LittleEndian.Uint16(b))
 }
 
-const superRoomItemID = 8357
+const (
+	superRoomItemID = 8357
+	bigHeadItemID   = 439
+	c4SoundItemID   = 112
+)
 
-// refreshSuperRoom mirrors CRoom::CheckForHostItems: the superRoom flag comes
-// from the host owning the item, never from the client packet.
-func (s *Server) refreshSuperRoom(host *client, st *settings) error {
+// refreshHostRoomItems mirrors CRoom::CheckForHostItems and the item-backed
+// settings in CRoomSettings::LoadNewSettings: superRoom, sd (big head event) and
+// c4Timer come from items the host actually owns.
+func (s *Server) refreshHostRoomItems(host *client, st *settings) error {
 	items, err := s.Store.Inventory(host.user.ID)
 	if err != nil {
 		return err
 	}
-	value := 0
-	for _, item := range items {
-		if item.ID == superRoomItemID && item.Count > 0 {
-			value = 1
-			break
+	owned := func(id int) bool {
+		for _, item := range items {
+			if item.ID == id && item.Count > 0 {
+				return true
+			}
+		}
+		return false
+	}
+	st.setNumber(58, boolInt(owned(superRoomItemID)), 1)
+	mode := st.number(6)
+	if st.hasField(33) && st.number(33) != 0 { // C4 sound
+		st.setNumber(33, boolInt(owned(c4SoundItemID)), 1)
+	}
+	switch mode {
+	case 3, 4, 5, 15, 24:
+		st.setNumber(44, boolInt(owned(bigHeadItemID)), 1)
+	default:
+		if st.hasField(44) {
+			st.clearField(44)
 		}
 	}
-	st.setNumber(58, value, 1)
 	return nil
 }
 
