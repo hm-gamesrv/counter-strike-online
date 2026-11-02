@@ -1,6 +1,6 @@
 # 差距分析：Go 重写版与上游 C++ 实现
 
-基准：本分支 `go-rewrite`（2026-11-02）对照上游 `JusicP/CSNZ_Server@12644f2adc0708e2d8b74f7dd6a4c3c29d3e1140`。默认嵌入数据也使用该提交的 `bin/` 快照。
+基准：本分支 `go-rewrite`（2026-11-03）对照上游 `JusicP/CSNZ_Server@12644f2adc0708e2d8b74f7dd6a4c3c29d3e1140`。默认嵌入数据也使用该提交的 `bin/` 快照。
 
 方法：以 `CServerInstance::OnPackets`（`src/serverinstance.cpp:352`）的入口分发表为准，逐项对照 Go `internal/server/server.go` 的 `dispatch`，再下钻到各 manager 的子类型处理；只统计上游实际实现的功能，上游为桩的模块单独列出（第二节）。
 
@@ -9,7 +9,8 @@
 - 入口覆盖：上游 33 个入口中 Go 已接 28 个（含 UDP）；未接的 5 个在上游是空实现或桩（`15`、`83`、`88`、`90`、`164`）；`103 Voxel` 已接登录 URL 与占位回包。
 - 业务覆盖：上一版列出的道具养成、军团、武器解放、房间设置校验、称号、屏蔽名单、问卷、重连恢复、结算加成与排名等均已实现（见附录）。
 - 剩余缺口只有 Studio 房间创建（依赖 Voxel 槽位 HTTP 服务）；其余已实现的功能都还等实机验收。Bingo 与 Voxel `103` 基础通路已接。
-- 规模：C++ 核心约 4.6 万行（不含 GUI/thirdparty/test）；Go 非测试 15,334 行、含测试 23,667 行。
+- 规模：C++ 核心约 4.6 万行（不含 GUI/thirdparty/test）；Go 非测试 14,967 行、含测试 23,129 行。
+- 元数据帧已按目标客户端校准并在实机登录验收：客户端只认 `U8(id) + U16(size) + data`，上游私服 build 2063 的 `ZIPMETADATA_FULL_ZIP=5` 字节会让它按长度 `5` 解析并闪退，ItemBox 也必须有 `U16` 长度。默认关闭该私服扩展（`MetadataZipTypeByte`），细节见 [MIGRATION.md](MIGRATION.md) 2026-11-03 条目。
 
 ## 〇、默认数据与目标客户端
 

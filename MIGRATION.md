@@ -476,9 +476,21 @@
 - `Character` 新增 `NameplateID`；`userInfo` 在非零时置 `UFLAG_LOW_NAMEPLATE`(bit0)，并在 flags/highFlag 之后、账号名之前写 `U8(0)+U32(nameplateID)`，与上游 `CPacketHelper_FullUserInfo` 的块顺序一致；未持有时不发该块，旧布局不变。
 - 测试覆盖激活/取消、`Character` 读取、`userInfo` 名片块解析、`itemRequest` 端到端切换。`go test ./...`、`go vet ./...` 通过；名片块尚未用真实客户端验收。
 
-## 2026-11-02 修复元数据包缺少 zip 类型字节
+## 2026-11-03 元数据帧改回客户端实际解析的长度帧（修正 11-02 的 zip 类型字节）
+
+- 现象：元数据全开时客户端登录即闪退（`0xE0005916` 自抛致命异常），元数据全关则一切正常。
+- 定位：客户端在 `U8(id)` 之后直接读 `U16(size)`，不认上游 build 2063 的 `ZIPMETADATA_FULL_ZIP=5` 字节；多出的字节被当成长度 `5`，客户端只取 5 字节 zip 头继续解析，随即崩。与内容无关：把 `MapList.csv` 砍到 4 行（实际内容几乎为空）仍秒崩；把客户端自己 `Data/Metadata_ModeList.bin` 里的 zip 原样抽出、用带 `5` 的帧发送，同样秒崩。
+- 反向验证：去掉该字节（`U8(id) + U16(size) + data`）后，客户端把 36 个元数据包全部接收并写入其 `MetadataDump/`（hook `-dumpmetadata`），大厅、模式、地图正常，连接保持不再退出。
+- 默认改为长度帧；新增 `MetadataZipTypeByte`（默认 `false`）保留上游私服帧，`ZIPMETADATA_FULL_ZIP` 的 64000 字节分块只在该开关打开时使用。旧帧下单帧超过 `U16` 上限的条目直接跳过并告警，不再发送会被误解析的字节。
+- ItemBox（type 4）同样需要长度：`U8(4) + U16(bodyLen) + U8(0) + U32(count) + 26×count`。缺长度时客户端把 `00 <count 低字节>` 当长度（空表恰好为 0，所以"空 ItemBox 不崩"），满表 145 条越界崩。
+- type 字节必须是 payload 首字节：实测把长度写在类型之前时客户端按首字节分派成 type=191。
+- 上游私服 build 2063 的 `5` 字节、ItemBox 不带长度，都是该私服的扩展；配套客户端（README 中的 `30.12.24`）不实现，不要因为"客户端日期更新"就假定它支持私服扩展。
+- 测试：`TestMetadataZipFrames`（两种帧 + 超限跳过）、`TestLoadMetadataZipPayload`、`TestLoadMetadataZipTypeByte`、`TestMetadataItemBoxHeader`（长度 + 8 字节头 + 26 字节项）。`go test ./...`、`go vet ./...` 通过，并完成真实客户端登录验收（36 包全收、无闪退）。
+
+## 2026-11-02 修复元数据包缺少 zip 类型字节（已于 2026-11-03 修正）
 
 - 上游 `SendMetadata*` 的 zipped 元数据帧是 `U8(id) + U8(ZIPMETADATA_FULL_ZIP=5) + U16(size) + data`；Go 之前漏掉了第二个字节，客户端把 size 低字节当成类型、后面整体错位，表现为房间创建界面模式列表空白、地图显示 `map_name` 等。
 - 补上 `U8(5)`；超过 64000 字节的 zip 按上游切成最多 4 个 64000 字节块，块号 1..3、最后一块标记 4，避免 `Item.csv` 等大文件被截断。
 - 新增 `metadata_test.go` 覆盖单帧/分块/超限截断，并校验 zip 能解出正确的条目名。
 - 测试辅助 `listenTestPair` 不再要求 TCP/UDP 同端口，绕开 Windows 偶发拒绝 UDP 端口导致的假失败。
+- 结论已修正：该 zip 类型字节是本客户端不认的私服扩展，默认帧见 2026-11-03 条目。

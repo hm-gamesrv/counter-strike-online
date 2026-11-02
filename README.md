@@ -112,7 +112,7 @@ go run ./cmd/cso-server -data ./.data -listen 127.0.0.1:30012
 
 ## 数据目录与存储
 
-配置采用配套 `ServerConfig.json`，支持注释；`Port` 使用字符串（例如 `"30002"`）。当前只读取已实现模块涉及的配置项，其他选项不会自动获得对应业务能力。`SSL=true` 需要 `Data/Certs/server-cert.pem` 与 `server-key.pem`，缺失时启动失败。
+配置采用配套 `ServerConfig.json`，支持注释；`Port` 使用字符串（例如 `"30002"`）。元数据默认按目标客户端解析的长度帧 `U8(id) + U16(size) + data` 下发；`MetadataZipTypeByte=true` 才切回上游私服 build 2063 的 `U8(id) + U8(5) + U16(size) + data` 帧，该字节会让本客户端把 `5` 当成长度并闪退。当前只读取已实现模块涉及的配置项，其他选项不会自动获得对应业务能力。`SSL=true` 需要 `Data/Certs/server-cert.pem` 与 `server-key.pem`，缺失时启动失败。
 
 SQLite 使用 `UserDatabase.db3`、v4 表结构、事务、外键与 WAL，不支持其他数据库版本。默认目录为 `./.data`。密码只接受本项目生成的 PBKDF2 摘要；账号、道具和封禁日期直接使用 Unix 分钟，不再自动转换早期 Go 构建的秒时间戳。Go 结算审计表的 `settledAt` 字段使用秒。
 
