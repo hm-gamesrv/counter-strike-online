@@ -171,3 +171,68 @@ func TestClanListFilters(t *testing.T) {
 		t.Fatalf("mode and time filter %+v, %v", byBoth, err)
 	}
 }
+func TestClanManagementRules(t *testing.T) {
+	s := testStore(t)
+	master := clanUser(t, s, "master", 40000)
+	target := clanUser(t, s, "target", 0)
+	other := clanUser(t, s, "other", 0)
+	clanID, err := s.CreateClan(ClanCreate{MasterID: master, Name: "Alpha", JoinMethod: 3, MarkChangeCount: 1}, 1000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []int{target, other} {
+		if code, _, err := s.JoinClan(id, clanID, 1000); err != nil || code != 1 {
+			t.Fatalf("join %d: %d, %v", id, code, err)
+		}
+	}
+	if code, got, err := s.SetClanGrade(master, "target", 1); err != nil || code != 1 || got != target {
+		t.Fatalf("set grade %d %d, %v", code, got, err)
+	}
+	if code, _, err := s.SetClanGrade(target, "other", 1); err != nil || code != -1 {
+		t.Fatalf("officer set grade %d, %v", code, err)
+	}
+	if code, err := s.SetClanJoinMethod(target, 2); err != nil || code != 1 {
+		t.Fatalf("officer config %d, %v", code, err)
+	}
+	if code, err := s.SetClanRegion(target, 7); err != nil || code != 1 {
+		t.Fatalf("officer region %d, %v", code, err)
+	}
+	if code, err := s.SetClanNotice(target, "notice"); err != nil || code != 1 {
+		t.Fatalf("officer notice %d, %v", code, err)
+	}
+	if code, err := s.SetClanMark(master, 9); err != nil || code != 1 {
+		t.Fatalf("mark %d, %v", code, err)
+	}
+	if code, err := s.SetClanMark(master, 10); err != nil || code != -2 {
+		t.Fatalf("second mark %d, %v", code, err)
+	}
+	if code, targetID, err := s.KickClanMember(master, "other"); err != nil || code != 1 || targetID != other {
+		t.Fatalf("kick %d %d, %v", code, targetID, err)
+	}
+	if code, _, err := s.KickClanMember(target, "master"); err != nil || code != -1 {
+		t.Fatalf("officer kick master %d, %v", code, err)
+	}
+	if code, targetID, err := s.DelegateClanMaster(master, "target", 1001); err != nil || code != 1 || targetID != target {
+		t.Fatalf("delegate %d %d, %v", code, targetID, err)
+	}
+	_, targetGrade, err := s.ClanGrade(target)
+	if err != nil || targetGrade != 0 {
+		t.Fatalf("target grade %d, %v", targetGrade, err)
+	}
+	_, masterGrade, err := s.ClanGrade(master)
+	if err != nil || masterGrade != 1 {
+		t.Fatalf("master grade %d, %v", masterGrade, err)
+	}
+	if code, members, err := s.DissolveClan(target); err != nil || code != 1 || len(members) != 2 {
+		t.Fatalf("dissolve %d %v, %v", code, members, err)
+	}
+	if _, err := s.ClanInfo(clanID); err == nil {
+		t.Fatal("clan still exists after dissolve")
+	}
+	for _, id := range []int{master, target} {
+		character, err := s.Character(id)
+		if err != nil || character.ClanID != 0 {
+			t.Fatalf("character %d clan %d, %v", id, character.ClanID, err)
+		}
+	}
+}
