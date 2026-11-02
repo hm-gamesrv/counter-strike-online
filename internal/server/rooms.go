@@ -68,8 +68,9 @@ parse:
 					n := r.U8()
 					r.Bytes(n * 3)
 				case 13:
-					// This client writes the Zombie Scenario difficulty as one
-					// byte; the reference's trailing unk56/unk57 never arrive.
+					// The client writes a single difficulty byte but reads nine
+					// back (difficulty plus the reference's unk56/unk57), so the
+					// stored field is padded to nine bytes below.
 					r.U8()
 				case 17:
 					r.Bytes(17)
@@ -112,7 +113,11 @@ parse:
 				r.Pos = len(r.Data)
 				break parse
 			}
-			s.fields[group*32+bit] = append([]byte{}, r.Data[start:r.Pos]...)
+			field := append([]byte{}, r.Data[start:r.Pos]...)
+			if group == 1 && bit == 13 && len(field) < 9 {
+				field = append(field, make([]byte, 9-len(field))...)
+			}
+			s.fields[group*32+bit] = field
 		}
 	}
 	return s, nil

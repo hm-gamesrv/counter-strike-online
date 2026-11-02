@@ -29,10 +29,38 @@ func TestRoomSettingsScenarioCreatePayload(t *testing.T) {
 	if st.number(6) != 15 || st.number(7) != 235 || st.number(8) != 10 || st.zsDifficulty() != 2 {
 		t.Fatalf("mode=%d map=%d players=%d difficulty=%d", st.number(6), st.number(7), st.number(8), st.zsDifficulty())
 	}
+	// The client sends one byte but parses nine, so the echo pads the block.
+	if len(st.fields[45]) != 9 {
+		t.Fatalf("difficulty field is %d bytes", len(st.fields[45]))
+	}
 	w := &protocol.Writer{}
 	st.write(w)
-	if !bytes.Equal(w.Data, raw) {
-		t.Fatalf("round trip mismatch: got %x want %x", w.Data, raw)
+	want := append(append([]byte{}, raw...), make([]byte, 8)...)
+	if !bytes.Equal(w.Data, want) {
+		t.Fatalf("round trip mismatch: got %x want %x", w.Data, want)
+	}
+}
+
+// TestRoomSettingsDifficultyFollowedByField makes sure the padded difficulty
+// does not swallow the fields that follow it on the wire.
+func TestRoomSettingsDifficultyFollowedByField(t *testing.T) {
+	w := &protocol.Writer{}
+	w.U32(0)
+	w.U32(1<<13 | 1<<14)
+	w.U32(0)
+	w.U32(0)
+	w.U8(2) // difficulty
+	w.U8(1) // league rule
+	r := &protocol.Reader{Data: w.Data}
+	st, err := parseSettings(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.truncated || r.Pos != len(w.Data) {
+		t.Fatalf("truncated=%v pos=%d", st.truncated, r.Pos)
+	}
+	if len(st.fields[45]) != 9 || st.zsDifficulty() != 2 || st.number(46) != 1 {
+		t.Fatalf("difficulty=%v league=%d", st.fields[45], st.number(46))
 	}
 }
 
