@@ -1,0 +1,76 @@
+name: Build CSOLauncher (Win32)
+
+# 手动触发；修改本文件也会触发一次。
+# 想跟上游 main：把 ref 改成 main；生产建议固定 SHA。
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/build-launcher.yml
+
+permissions:
+  contents: read
+
+jobs:
+  build-launcher:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout Launcher_CSNZ source
+        uses: actions/checkout@v7
+        with:
+          repository: JusicP/Launcher_CSNZ
+          # 2026-10-22 latest commit. Bump this together with the client build.
+          ref: 44afc908fd0314c19b0879f951805b9176c68087
+          path: Launcher_CSNZ
+
+      - name: Show source revision
+        shell: pwsh
+        run: |
+          git -C Launcher_CSNZ rev-parse HEAD
+          git -C Launcher_CSNZ log -1 --format='%ci %s'
+
+      - name: Set up MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Build Release Win32
+        shell: pwsh
+        run: |
+          # Solution platform is x86; it maps to the project's Win32 platform.
+          msbuild Launcher_CSNZ\CSOLauncher.sln `
+            /m `
+            /p:Configuration=Release `
+            /p:Platform=x86 `
+            /verbosity:minimal
+
+      - name: Collect artifact
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem -Path Launcher_CSNZ -Recurse -Filter CSOLauncher.exe |
+            Where-Object { $_.FullName -match '\\Release\\' } |
+            Select-Object -First 1
+          if (-not $exe) { throw 'CSOLauncher.exe not found' }
+
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Copy-Item $exe.FullName dist\CSOLauncher.exe
+          Copy-Item Launcher_CSNZ\LICENSE dist\LICENSE.txt
+
+          $hash = (Get-FileHash dist\CSOLauncher.exe -Algorithm SHA256).Hash.ToLower()
+          "$hash  CSOLauncher.exe" | Set-Content dist\CSOLauncher.exe.sha256
+
+          "upstream: JusicP/Launcher_CSNZ@44afc908fd0314c19b0879f951805b9176c68087" |
+            Set-Content dist\VERSION.txt
+          $built = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
+          "built: $built" | Add-Content dist\VERSION.txt
+
+          Compress-Archive -Path dist\* -DestinationPath CSOLauncher-win32.zip -Force
+          Get-ChildItem dist
+          Get-Content dist\CSOLauncher.exe.sha256
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CSOLauncher-win32
+          path: CSOLauncher-win32.zip
+          if-no-files-found: error
+          retention-days: 14
