@@ -486,6 +486,7 @@ func (s *Server) itemRequest(c *client, p *protocol.Reader) error {
 	if p.Pos != len(p.Data) {
 		return errors.New("unexpected item request tail")
 	}
+	gameSlot := slot
 	slot -= len(s.Config.DefaultUser.DefaultItems)
 	items, err := s.Store.Inventory(c.user.ID)
 	if err != nil {
@@ -511,6 +512,12 @@ func (s *Server) itemRequest(c *client, p *protocol.Reader) error {
 		case "LobbyBG":
 			return s.toggleNameplate(c, target)
 		}
+		// Upstream sends the character tab (inventoryType 8) and tattoo items to
+		// OnCostumeEquip before the generic use path, so costume activation never
+		// reaches the weapon-only check below.
+		if inventoryType == 8 || s.items[target.ID].ClassName == "Tattoo" {
+			return s.toggleCostume(c, gameSlot)
+		}
 	}
 	if kind == 0 && inventoryType != 1 && s.items[target.ID].RewardID != 0 {
 		return s.useRewardItem(c, target, count)
@@ -519,6 +526,7 @@ func (s *Server) itemRequest(c *client, p *protocol.Reader) error {
 		definition, ok := s.items[target.ID]
 		weapon := definition.Category >= 1 && definition.Category <= 6 || definition.Category == 11
 		if !ok || (!weapon && definition.Category != 7) || kind == 0 && inventoryType == 1 && !weapon {
+			s.Log.Debug("item activation rejected", "kind", kind, "inventoryType", inventoryType, "gameSlot", gameSlot, "class", definition.ClassName, "category", definition.Category)
 			c.notice("This item cannot be activated here.")
 			return nil
 		}
