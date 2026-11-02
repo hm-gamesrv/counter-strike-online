@@ -2,7 +2,7 @@
 
 这是原 C++ 主服务器的 Go 重写工程，目前实现基础服务、账号、大厅、房间、基础商店，以及客户端/专用服务器对局协议和基础结算。**尚未完成全功能重写；真实客户端已跑通登录、建房、机器人对局、正常结算和返回房间。**
 
-参考仓库按 `AGENTS.md` 约定放在 `./.ref/<repo>`：`CSNZ_Server` 是服务端源码基线 `JusicP/CSNZ_Server@12644f2adc0708e2d8b74f7dd6a4c3c29d3e1140`，`counter-strike-online` 是部署封装。Go 程序独立编译运行，不调用 C++ 程序。客户端与游戏资源不包含在本工程中。
+参考仓库按 `AGENTS.md` 约定放在 `./.ref/<repo>`：`CSNZ_Server` 是服务端源码基线 `JusicP/CSNZ_Server@e5721ed9bbd6bd16abdd7133f412316bc14d3cf0`，`counter-strike-online` 是部署封装。Go 程序独立编译运行，不调用 C++ 程序。客户端与游戏资源不包含在本工程中。
 
 ## 运行
 
@@ -34,7 +34,7 @@ Docker 使用 UID/GID 1000，Compose 默认使用命名卷。绑定宿主目录�
 
 ## 默认数据
 
-嵌入的默认配置和元数据固定取上游基线 `12644f2` 的 `bin/`。重新生成需要参考仓库：
+嵌入的默认配置和元数据固定取上游基线 `e5721ed` 的 `bin/`（`Metadata_ModeList.bin`、`Metadata_Encyclopedia.bin` 由基线 `packet_metadata_data.h` 里的硬编码数组生成）。重新生成需要参考仓库：
 
 ```powershell
 git clone https://github.com/JusicP/CSNZ_Server ./.ref/CSNZ_Server
@@ -99,7 +99,7 @@ UPDATE UserCharacterExtended SET gameMaster=1 WHERE userID=1;
 
 ## 客户端基准与默认数据
 
-默认数据固定嵌入上游 `JusicP/CSNZ_Server@12644f2adc0708e2d8b74f7dd6a4c3c29d3e1140` 的 `bin/` 快照：`ServerConfig.json`、商店/奖励/活动/皮肤/武器列表和 `bin/Data` 下 Go 服务端读取的表与二进制数据。`S:\.temp\CSNZ` 的客户端定制数据暂不使用。新运行目录直接初始化即可，无需再复制客户端目录：
+默认数据固定嵌入上游 `JusicP/CSNZ_Server@e5721ed9bbd6bd16abdd7133f412316bc14d3cf0` 的 `bin/` 快照：`ServerConfig.json`、商店/奖励/活动/皮肤/武器列表和 `bin/Data` 下 Go 服务端读取的表与二进制数据。`S:\.temp\CSNZ` 的客户端定制数据暂不使用。新运行目录直接初始化即可，无需再复制客户端目录：
 
 ```powershell
 go run ./cmd/cso-server -data ./.data -init

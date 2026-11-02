@@ -503,3 +503,14 @@
 - 新增 `metadata_test.go` 覆盖单帧/分块/超限截断，并校验 zip 能解出正确的条目名。
 - 测试辅助 `listenTestPair` 不再要求 TCP/UDP 同端口，绕开 Windows 偶发拒绝 UDP 端口导致的假失败。
 - 结论已修正：`12644f2` 的帧没有这个字节（该字节是更晚构建 `3aac2d2` 的写法），默认帧见 2026-11-03 条目。
+
+## 2026-11-03 基线迁移到 e5721ed，元数据按下发顺序重排
+
+- 基线从 `12644f2` 移到 `e5721ed9bbd6bd16abdd7133f412316bc14d3cf0`（2025-03-20，`Update metadata files for update date 2025-03-19`）。`12644f2..e5721ed` 共 9 个提交，`git diff --name-only` 只有 `bin/Data/*` 与 `bin/*.json`，没有源码改动，协议形状与 `12644f2` 相同。`scripts/check-ref.ps1`、`scripts/sync-defaults.ps1`、`AGENTS.md`、`GAPS.md`、`README.md`、`assets/README.md` 一并更新。
+- `scripts/sync-defaults.ps1` 现在还会从基线 `src/packet/packet_metadata_data.h` 生成 `Metadata_ModeList.bin`（`02 + U16(787) + metaData2`）与 `Metadata_Encyclopedia.bin`（`metaData_Encyclopedia`），两者与基线 payload 逐字节一致；脚本按字节比较，重复运行不产生无意义 diff。基线 `ServerConfig.json` 默认关闭这两项。
+- `loadMetadata` 改为"先按名字收集帧、再按 `metadataOrder` 发射"。`metadataOrder` 就是基线 `CUserManager::SendMetadata` 的调度顺序（`Hash` 保持不实现、默认关闭）；此前 ItemBox/WeaponPaints/ZombieWar/RandomWeapon 被追加在表尾，与基线不符。
+- 单帧预算修正为 `protocol.MaxPayload-3`（元数据头 `U8(type)+U16(size)` 占 3 字节），65528/65529 边界由测试覆盖。`MetadataZipTypeByte` 的 64000×4 分块在超限时直接跳过并告警，不再发送被截断却标记为末块的 zip。
+- 缺少数据文件的条目跳过并 `Warn`（对应基线 sender 文件缺失即 return），不再让 `New` 失败。
+- 后续路线：`e5721ed` 之后的 8 个提交才开始动协议，按顺序逐个过渡——`4859a6e`（数据）、`3b56abf`（引入 `ZIPMETADATA_FULL_ZIP` 帧与 64000 分块，需要把 `MetadataZipTypeByte` 打开）、`6e5275c`（ItemBox 增加 `U8(0)`）、`90bc74a`/`293c9dc`（Voxel 多服务器、voxelhttp 主机名）、`a6e0bf0`/`a2f0026`/`3aac2d2`（typo、content-length、P2P 换图）。`3b56abf` 起的帧本客户端不接受，只有客户端升级后才应切换默认帧。
+- 验证：`go build`、`go vet`、`go test ./...` 全绿；全开配置 + 新基线数据（地图 322、模式 51、道具 3020）下真实客户端登录不闪退。
+

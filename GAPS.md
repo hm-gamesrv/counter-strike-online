@@ -1,6 +1,6 @@
 # 差距分析：Go 重写版与上游 C++ 实现
 
-基准：本分支 `go-rewrite`（2026-11-03）对照上游 `JusicP/CSNZ_Server@12644f2adc0708e2d8b74f7dd6a4c3c29d3e1140`。默认嵌入数据也使用该提交的 `bin/` 快照。
+基准：本分支 `go-rewrite`（2026-11-03）对照上游 `JusicP/CSNZ_Server@e5721ed9bbd6bd16abdd7133f412316bc14d3cf0`（2025-03-20）。默认嵌入数据也使用该提交的 `bin/` 快照。`12644f2` → `e5721ed` 只改 `bin/Data/*` 与 `bin/*.json`，协议形状相同；再往后的提交才改协议，按提交历史逐步过渡。
 
 方法：以 `CServerInstance::OnPackets`（`src/serverinstance.cpp:352`）的入口分发表为准，逐项对照 Go `internal/server/server.go` 的 `dispatch`，再下钻到各 manager 的子类型处理；只统计上游实际实现的功能，上游为桩的模块单独列出（第二节）。
 
@@ -10,12 +10,13 @@
 - 业务覆盖：上一版列出的道具养成、军团、武器解放、房间设置校验、称号、屏蔽名单、问卷、重连恢复、结算加成与排名等均已实现（见附录）。
 - 剩余缺口只有 Studio 房间创建（依赖 Voxel 槽位 HTTP 服务）；其余已实现的功能都还等实机验收。Bingo 与 Voxel `103` 基础通路已接。
 - 规模：C++ 核心约 4.6 万行（不含 GUI/thirdparty/test）；Go 非测试 14,967 行、含测试 23,129 行。
-- 元数据帧已按项目基线 `12644f2` 校准并在实机登录验收：zipped 元数据是 `U8(id) + U16(size) + data`，ItemBox 是 `U8(4) + U32(count) + 26×count`。更晚的 `3aac2d2` 多出的 `ZIPMETADATA_FULL_ZIP=5` 字节会让客户端按长度 `5` 解析并闪退；`MetadataZipTypeByte`（默认 false）仅用于适配那类构建。细节见 [MIGRATION.md](MIGRATION.md) 2026-11-03 条目。
+- 元数据帧已按项目基线校准并在实机登录验收：zipped 元数据是 `U8(id) + U16(size) + data`（单帧 zip 预算 = `MaxPayload-3`），ItemBox 是 `U8(4) + U32(count) + 26×count`，下发顺序按基线 `SendMetadata` 调度。更晚的提交（`3b56abf` 起）改用 `U8(id) + U8(5) + U16(size) + data` 与 64000 字节分块，本客户端不认；`MetadataZipTypeByte`（默认 false）只用于过渡到那些版本。细节见 [MIGRATION.md](MIGRATION.md) 2026-11-03 条目。
+- 缺少元数据数据文件时按基线 sender 的行为跳过并告警，不再让服务器启动失败；超限的单帧/分块流同样跳过，不发送被截断的 zip。
 
 ## 〇、默认数据与目标客户端
 
-- 默认嵌入数据已回退到上游 `12644f2` 的 `bin/`，不是 `S:\.temp\CSNZ` 的客户端定制数据。
-- 对比基线，`S:\.temp\CSNZ` 的 `Item.csv` 多 60 个 ID、`MapList.csv` 多 28 个、`GameModeList.csv` 多 8 个；其中 `Item.csv` 的 ID 集合对应上游 2025-02-19 元数据，地图/模式另有私服追加。
+- 默认嵌入数据取自上游 `e5721ed` 的 `bin/`（地图 322、模式 51、道具 3020），不是 `S:\.temp\CSNZ` 的私服定制数据。
+- 与私服侧 `S:\.temp\CSNZ\Server\Data` 相比：地图 341 vs 322、模式 59 vs 51、道具 2987 vs 3020；私服数据含自加地图/模式，道具表则少了一批上游新增项。UI 与活动相关表（EventShop、ItemExpireTime、progress_unlock、RandomWeaponList、WeaponPaints 等）也随基线版本不同。
 - 当前默认配置的 `Bingo.Active`、`WeaponRelease.Active` 均为 `false`，`MainMenuSkinEvent` 为 0；因此现成默认数据不会暴露这些活动。
 - 目标客户端仍是 `30.12.24`；如果要用它的活动/商店/道具，必须在运行目录替换 `ServerConfig.json` 和 `Data`，或重新制作嵌入数据。默认上游数据与目标客户端存在内容差异，这是部署缺口，不是协议入口缺口。
 

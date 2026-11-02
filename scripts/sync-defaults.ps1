@@ -18,7 +18,7 @@
 #>
 [CmdletBinding()]
 param(
-    [string]$Baseline = '12644f2adc0708e2d8b74f7dd6a4c3c29d3e1140',
+    [string]$Baseline = 'e5721ed9bbd6bd16abdd7133f412316bc14d3cf0',
     [string]$Repo = ''
 )
 
@@ -79,5 +79,45 @@ foreach ($relative in $expected.Keys) {
     $changed++
 }
 
+
+# 基线的 ModeList/Encyclopedia 是 packet_metadata_data.h 里的硬编码数组，
+# bin/ 下没有对应文件；这里按发送顺序拼成可直接下发的 payload 一并嵌入。
+$header = Join-Path $worktree "src/packet/packet_metadata_data.h"
+if (Test-Path -LiteralPath $header) {
+    $text = Get-Content -LiteralPath $header -Raw
+    function Get-MetadataBlob([string]$name) {
+        $m = [regex]::Match($text, "unsigned char\s+" + $name + "\s*\[\s*\d+\s*\]\s*=\s*\{(?<body>.*?)\};", "Singleline")
+        if (-not $m.Success) { return $null }
+        $bytes = [System.Collections.Generic.List[byte]]::new()
+        foreach ($h in [regex]::Matches($m.Groups["body"].Value, "0x([0-9a-fA-F]{1,2})")) {
+            $bytes.Add([Convert]::ToByte($h.Groups[1].Value, 16))
+        }
+        return ,$bytes.ToArray()
+    }
+    $extras = @()
+    $modeList = Get-MetadataBlob "metaData2"
+    if ($null -ne $modeList) {
+        $payload = [System.Collections.Generic.List[byte]]::new()
+        $payload.Add(2)
+        $payload.Add([byte]($modeList.Length -band 0xFF))
+        $payload.Add([byte](($modeList.Length -shr 8) -band 0xFF))
+        $payload.AddRange($modeList)
+        $extras += , @("Data/Metadata_ModeList.bin", $payload.ToArray())
+    }
+    $encyclopedia = Get-MetadataBlob "metaData_Encyclopedia"
+    if ($null -ne $encyclopedia) {
+        $extras += , @("Data/Metadata_Encyclopedia.bin", $encyclopedia)
+    }
+    foreach ($extra in $extras) {
+        $destination = Join-Path $target $extra[0]
+        New-Item -ItemType Directory -Force (Split-Path -Parent $destination) | Out-Null
+        if ((Test-Path -LiteralPath $destination) -and ([System.IO.File]::ReadAllBytes($destination) -join ",") -eq ($extra[1] -join ",")) {
+            continue
+        }
+        [System.IO.File]::WriteAllBytes($destination, $extra[1])
+        $changed++
+    }
+    Write-Host ("已从 packet_metadata_data.h 生成 {0} 个元数据 blob" -f $extras.Count)
+}
 git -C $Repo worktree remove --force $worktree | Out-Null
 Write-Host ("已按 {0} 校验 {1} 个文件：写入 {2}，删除 {3}" -f $Baseline.Substring(0, 7), $expected.Count, $changed, $removed)
