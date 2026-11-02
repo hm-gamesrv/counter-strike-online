@@ -1,15 +1,15 @@
 # 差距分析：Go 重写版与上游 C++ 实现
 
-基准：本分支 `go-rewrite`（2026-11-02，`e23fa60`）对照上游 `JusicP/CSNZ_Server@12644f2adc0708e2d8b74f7dd6a4c3c29d3e1140`。
+基准：本分支 `go-rewrite`（2026-11-02）对照上游 `JusicP/CSNZ_Server@12644f2adc0708e2d8b74f7dd6a4c3c29d3e1140`。默认嵌入数据也使用该提交的 `bin/` 快照。
 
-方法：以 `CServerInstance::OnPackets`（`src/serverinstance.cpp:352`）的入口分发表为准，逐项对照 Go `internal/server/server.go` 的 `dispatch`，再下钻到各 manager 的子类型处理；只统计上游实际实现的功能，上游为桩的模块单独列出（第二节）。本轮复核了上一版之后新增的 39 个提交。
+方法：以 `CServerInstance::OnPackets`（`src/serverinstance.cpp:352`）的入口分发表为准，逐项对照 Go `internal/server/server.go` 的 `dispatch`，再下钻到各 manager 的子类型处理；只统计上游实际实现的功能，上游为桩的模块单独列出（第二节）。
 
 ## 结论
 
 - 入口覆盖：上游 33 个入口中 Go 已接 27 个（含 UDP）；未接的 6 个里 5 个在上游是空实现或桩（`15`、`83`、`88`、`90`、`164`），实际功能缺口只有 `103 Voxel`。
 - 业务覆盖：上一版列出的道具养成、军团、武器解放、房间设置校验、称号、屏蔽名单、问卷、重连恢复、结算加成与排名等均已实现（见附录）。
-- 剩余缺口集中在三处：Bingo 小游戏、Voxel/Studio、GM 管理命令；另有少量房间子项、占位回包与 SSL。
-- 规模：C++ 核心约 4.6 万行（不含 GUI/thirdparty/test）；Go 非测试 12,808 行、含测试 19,378 行。
+- 剩余缺口集中在：Bingo 小游戏、Voxel/Studio、GM 管理命令、房间子项（Voxel 房间列表/ZB addon/军团战踢人）、房间高级设置校验与 SSL。
+- 规模：C++ 核心约 4.6 万行（不含 GUI/thirdparty/test）；Go 非测试 12,307 行、含测试 18,633 行。
 
 ## 一、剩余功能缺口
 
@@ -27,18 +27,29 @@ Go 只处理 `89/6`（武器解放），其余请求仅写 debug 日志，三张
 
 上游 `channelmanager.cpp:372` 起实现 31 个聊天命令：`/ban`、`/ipban`、`/hban`、`/unban`、`/additem`、`/giveitem`、`/removeitem`、`/addpoints`、`/givepoints`、`/addexp`、`/addallitems`、`/givereward`、`/giverewardtoall`、`/addgroom`、`/addwpnreleasechar`、`/sendnotice`、`/sendgmnotice`、`/bingo`、`/weaponrelease`、`/setiteminuse`、`/setitemstatus`、`/status`、`/getuid`、`/getfreeslots`、`/disconnect`、`/reqsnapshot`、`/tournament`、`/help` 等。
 
-Go 仅实现 `/login`、`/register`、`/version`；`HWIDBanList`、`IPBanList` 两张表未被引用，`/hban`、`/ipban` 无对应实现。
+Go 仅实现 `/login`、`/register`、`/version`；`HWIDBanList`、`IPBanList` 两张表未被引用，`/hban`、`/ipban` 无对应实现。上游的 Qt 管理 GUI（账号/角色/封禁编辑）也未迁移。
 
 ### 1.4 房间子项（`65`）
 
 | 子类型 | 上游 | Go |
 | --- | --- | --- |
 | 34 Voxel 房间列表 | 返回房间列表 | 未处理，回通用未实现提示 |
-| 35 感染模式 addon 选择 | 设置 addon | 未处理 |
+| 35 ZB addon 设置 | 校验并保存 addon | 未处理 |
 | 37 军团战踢人 | 实现 | 未处理（38 军团公告已实现） |
 | 32 / 33 | 固定空包（`SendRoomUnk32/33`） | 不回包 |
 
-### 1.5 SSL
+### 1.5 房间高级设置校验
+
+Go 在 `Room.ValidateSettings` 下已校验人数、地图人数上限、胜负/击杀/时间/回合范围与步长；家族战已支持双军团建房/加入/开局与 `116` 通知。仍缺：
+
+- `mapPlaylist` 数量、重复、首图、地图合法性与模式互斥
+- `zbLimit` 与 `fireBomb` 的联动
+- `superRoom` 标记校验
+- ZS 难度上限、模式专属必填项
+- 家族战踢人（`65/37`）和更完整的家族战人数/准备校验
+- 地图是否允许该模式的完整矩阵
+
+### 1.6 SSL
 
 上游支持 `SSL`（wolfSSL）；Go 在配置校验阶段直接拒绝 `SSL=true`。
 

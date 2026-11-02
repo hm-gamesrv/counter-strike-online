@@ -10,10 +10,10 @@
 	"CheckClientBuild": false,
 	"AllowedClientTimestamp": 0,
 	"AllowedLauncherVersion": 67,
-	"MaxRegistrationsPerIP": 1,
+	"MaxRegistrationsPerIP": 3,
 	"SSL": false,
 	"Crypt": false,
-	"MainMenuSkinEvent": 8,
+	"MainMenuSkinEvent": 0,
 	"BanListMaxSize": 300,
 	"Metadata": {
 		"Maplist": true,
@@ -25,7 +25,7 @@
 		"ZombieWarWeaponList": true,
 		"WeaponParts": true,
 		"Unk20": true,
-		"Encyclopedia": true,
+		"Encyclopedia": false,
 		"GameModeList": true,
 		"ProgressUnlock": true,
 		"WeaponPaints": true,
@@ -33,7 +33,7 @@
 		"ReinforceMaxEXP": true,
 		"ReinforceItemsExp": true,
 		"Unk31": true,
-		"HonorMoneyShop": true,
+		"HonorMoneyShop": false,
 		"ItemExpireTime": true,
 		"ScenarioTX_Common": true,
 		"ScenarioTX_Dedi": true,
@@ -48,8 +48,8 @@
 		"Hash": false,
 		"RandomWeaponList": true,
 		"ModeEvent": true,
-		"MileageShop": true,
-		"EventShop": true,
+		"MileageShop": false,
+		"EventShop": false,
 		"FamilyTotalWarMap": true,
 		"FamilyTotalWar": true,
 		"Unk54": true,
@@ -417,10 +417,10 @@
 	"Notices": {
 		"1": {
 			"Type": 0,
-			"Name": "传奇年神 冰璃寒蟒",
-			"Description": "传奇年神 冰璃寒蟒\n\n2025年1月22日维护后 - 2025年3月12日维护前\n1)新年集字道具[冰璃寒蟒名片+（蟒）字]活动期间入库密码箱，使用[传奇翡翠芯片]破译密码箱，将有机会获取新年集字道具[冰璃寒蟒名片+（蟒）字]\n集齐文字[冰璃寒蟒]即可在新年集字活动界面中获取传奇年度神器[冰璃寒蟒（无期限）]\n2)4款无期限超凡武器活动期间入库密码箱，使用[传奇翡翠芯片]破译密码箱，将有机会获取无期限超凡武器\n4款无期限超凡武器：\n【墨焰】自动炮台（无期限）、【雪崩】冰霜巨锤（无期限）、【光谱】动能枪（无期限）、【幽浮】控制核心（无期限）\n3)活动期间每次使用[传奇翡翠芯片]还将赠送[冰璃碎片箱（1个）]，开启[冰璃碎片箱]可100%获得[冰璃碎片]，每次获得数量为3~100个不等\n冰璃碎片可用于兑换，包括无期限 冰璃寒蟒 及 2025特典武器\n【火狐】Bizon 在内的道具奖励\n4)【血契】安娜Plus（1天/10天/30天）、【血契】安娜Plus（100天）\n活动期间商城兑换\n※兑换【血契】安娜Plus即赠送[传奇翡翠芯片]，每1天期限赠送1个\n\n小提示：\n※如开启密码箱获得了重复的（蟒）字，可在新年集字活动界面中获取对应数量冰璃寒蟒（无期限）\n※未使用的传奇翡翠芯片与冰璃碎片都将在3月12日维护时过期\n 传奇翡翠芯片 - 每个替换为100欢乐积分\n 冰璃碎片箱 - 每个替换为30欢乐积分\n 冰璃碎片 - 每个替换为15欢乐积分",
-			"StartDate": 1737475200,
-			"EndDate": 1741708800
+			"Name": "Server information",
+			"Description": "Welcome to the CSO server. Report about bugs in discord: https://discord.gg/EvUAY6D",
+			"StartDate": 0,
+			"EndDate": 0
 		}
 	},
 	"GameMatch": {
@@ -590,7 +590,7 @@
 	},
 	"MiniGames": {
 		"Bingo": {
-			"Active": true,
+			"Active": false,
 			"Items": {
 				"564": {
 					"Count": 1,
@@ -823,7 +823,7 @@
 			}
 		},
 		"WeaponRelease": {
-			"Active": true,
+			"Active": false,
 			"Items": {
 				"566": {
 					"Name": "DAGGER",
@@ -904,10 +904,10 @@
 		}
 	},
 	"Voxel": {
-		"VoxelHTTPIP": "60.191.86.186",
-		"VoxelHTTPPort": "3006",
-		"VoxelVxlURL": "http://ct01.csosandbox.tiancity.com/resources/%s.vxl",
-		"VoxelVmgURL": "http://ct01.csosandbox.tiancity.com/images/%s.vmg"
+		"VoxelHTTPIP": "52.28.231.59",
+		"VoxelHTTPPort": "3000",
+		"VoxelVxlURL": "http://d1u9da8nyooy18.cloudfront.net/resources_prod/%s.vxl",
+		"VoxelVmgURL": "https://d1u9da8nyooy18.cloudfront.net/images_prod/%s.vmg"
 	},
 	"DedicatedServerWhitelist": [
 		"127.0.0.1"

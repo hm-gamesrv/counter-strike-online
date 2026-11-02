@@ -350,6 +350,20 @@
 - Studio 房间（地图 254）仍明确拒绝；家族战踢人（子类型 37）未接。
 - 新增测试覆盖军团槽分配、无军团拒绝、离开后清空、开局条件和通知包。`go test ./...`、`go vet ./...` 通过；未做实机界面验收。
 
+## 2026-11-02 默认数据回退到上游基线
+
+- `assets/defaults` 重新取上游 `12644f2` 的 `bin/`：`ServerConfig.json`、8 个根 JSON 和 `bin/Data`；不再使用 `S:\.temp\CSNZ` 的客户端定制配置。
+- 移除上游 `bin/Data` 中不存在的 `Metadata_ModeList.bin`、`Metadata_Encyclopedia.bin`；上游配置对应元数据为关闭。
+- 集成测试仍显式允许多个本地账号注册，不受默认 `MaxRegistrationsPerIP` 影响。
+- 同步 README/GAPS：说明默认数据是上游基线，客户端定制数据需在运行目录手工替换。
+
+## 2026-11-02 剩余缺口复核
+
+- 入口：Bingo `89/0`、Voxel `103`、GM 命令、房间高级设置校验和 SSL 仍缺；房间子项剩 `65/34`、`65/35`、`65/37`、`65/32/33`。
+- 数据库 45 张表中 17 张未引用：Bingo 3 张、封禁 2 张、`UserQuest*` 5 张、`UserRank`/`UserDailyReward`/`UserDailyRewardItems` 3 张、`UserRestore`/`RelationProducts`/`SuspectAction`/`TimeConfig` 4 张。
+- 上游桩不计缺口：Rank、Quest 界面、投票踢人、party 聊天、Report、ZBS 奖励/模式统计、每日奖励、组装等。
+- 详见 `GAPS.md`；真实 HLDS、多人实机、模式矩阵和客户端界面回归仍未验收。
+
 
 
 
