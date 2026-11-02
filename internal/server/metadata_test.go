@@ -168,24 +168,17 @@ func TestMetadataItemBoxHeader(t *testing.T) {
 		t.Fatalf("packets %d", len(packets))
 	}
 	data := packets[0]
-	// The client reads a length after the type byte for ItemBox; without it the
-	// leading zero and the low count byte are taken as the length.
+	// CSNZ_Server@12644f2 writes the type and the entry count only; adding the
+	// later build's "unknown" byte or a length prefix makes the client misread
+	// the count and crash.
 	if data[0] != 4 {
 		t.Fatalf("item box type %v", data[0])
 	}
-	size := int(data[1]) | int(data[2])<<8
-	if size != len(data)-3 {
-		t.Fatalf("item box size %d, body %d", size, len(data)-3)
-	}
-	if data[3] != 0 {
-		t.Fatalf("item box unknown byte %v", data[3])
-	}
-	count := uint32(data[4]) | uint32(data[5])<<8 | uint32(data[6])<<16 | uint32(data[7])<<24
+	count := uint32(data[1]) | uint32(data[2])<<8 | uint32(data[3])<<16 | uint32(data[4])<<24
 	if count == 0 {
 		t.Fatal("item box count is zero")
 	}
-	// Each entry is 26 bytes after the 8-byte header.
-	if len(data) != 8+int(count)*26 {
+	if len(data) != 5+int(count)*26 {
 		t.Fatalf("item box size %d for %d entries", len(data), count)
 	}
 }

@@ -83,18 +83,22 @@ func zipMetadataFrames(id int, data []byte, zipType bool) [][]byte {
 	return [][]byte{w.Data}
 }
 
-// Upstream defines the ModeList (2) and Encyclopedia (23) flags but never
-// sends them: SendMetadata has no branch for either type. Sending them makes
-// the 2024 client raise a fatal error, so the table stays silent about them.
+// metadataFiles mirrors CSNZ_Server@12644f2's SendMetadata order and payload
+// shapes. ModeList (2) and Encyclopedia (23) are hard-coded blobs upstream; the
+// files embedded here are already the exact wire payloads
+// (U8(type)+U16(size)+zip for ModeList, the raw blob for Encyclopedia), so they
+// are sent unmodified.
 var metadataFiles = []metadataEntry{
 	{"Maplist", "MapList.csv", 0, false},
 	{"ClientTable", "ClientTable.csv", 1, false},
+	{"ModeList", "Metadata_ModeList.bin", 2, true},
 	{"Unk3", "Metadata_Unk3.bin", 3, true},
 	{"Unk8", "Metadata_Unk8.bin", 8, true},
 	{"MatchOption", "MatchOption.csv", 9, false},
 	{"WeaponParts", "weaponparts.csv", 17, false},
 	{"MileageShop", "MileageShop.csv", 18, false},
 	{"Unk20", "Metadata_Unk20.bin", 20, true},
+	{"Encyclopedia", "Metadata_Encyclopedia.bin", 23, true},
 	{"GameModeList", "GameModeList.csv", 24, false},
 	{"ProgressUnlock", "progress_unlock.csv", 27, false},
 	{"ReinforceMaxLvl", "ReinforceMaxLv.csv", 28, false},
@@ -246,10 +250,11 @@ func loadMetadata(dir string, c config.Config) ([][]byte, error) {
 				}
 			}
 		}
+		// CSNZ_Server@12644f2 writes U8(type)/U32(count)/entries: no "unknown"
+		// byte and no length prefix. The later private build added both, which is
+		// what made this packet crash the client.
 		w := &protocol.Writer{}
 		w.U8(4)
-		w.U16(5 + 26*len(pairs))
-		w.U8(0)
 		w.U32(len(pairs))
 		for _, pair := range pairs {
 			w.U32(pair.Box)

@@ -10,7 +10,7 @@
 - 业务覆盖：上一版列出的道具养成、军团、武器解放、房间设置校验、称号、屏蔽名单、问卷、重连恢复、结算加成与排名等均已实现（见附录）。
 - 剩余缺口只有 Studio 房间创建（依赖 Voxel 槽位 HTTP 服务）；其余已实现的功能都还等实机验收。Bingo 与 Voxel `103` 基础通路已接。
 - 规模：C++ 核心约 4.6 万行（不含 GUI/thirdparty/test）；Go 非测试 14,967 行、含测试 23,129 行。
-- 元数据帧已按目标客户端校准并在实机登录验收：客户端只认 `U8(id) + U16(size) + data`，上游私服 build 2063 的 `ZIPMETADATA_FULL_ZIP=5` 字节会让它按长度 `5` 解析并闪退，ItemBox 也必须有 `U16` 长度。默认关闭该私服扩展（`MetadataZipTypeByte`），细节见 [MIGRATION.md](MIGRATION.md) 2026-11-03 条目。
+- 元数据帧已按项目基线 `12644f2` 校准并在实机登录验收：zipped 元数据是 `U8(id) + U16(size) + data`，ItemBox 是 `U8(4) + U32(count) + 26×count`。更晚的 `3aac2d2` 多出的 `ZIPMETADATA_FULL_ZIP=5` 字节会让客户端按长度 `5` 解析并闪退；`MetadataZipTypeByte`（默认 false）仅用于适配那类构建。细节见 [MIGRATION.md](MIGRATION.md) 2026-11-03 条目。
 
 ## 〇、默认数据与目标客户端
 
