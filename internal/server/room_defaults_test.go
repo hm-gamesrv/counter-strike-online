@@ -2,11 +2,51 @@ package server
 
 import (
 	"bytes"
+	"encoding/binary"
+	"encoding/hex"
 	"testing"
 
 	"github.com/hm-gamesrv/cso-server-go/assets"
 	"github.com/hm-gamesrv/cso-server-go/internal/protocol"
 )
+
+// TestRoomSettingsScenarioCreatePayload replays the bytes the client sends when
+// creating a Zombie Scenario room: the difficulty is one byte, not the nine the
+// reference reads.
+func TestRoomSettingsScenarioCreatePayload(t *testing.T) {
+	raw, err := hex.DecodeString("c90700000021000000000000000000004c6574277320646f20746869732100000feb000a0000000002")
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := &protocol.Reader{Data: raw}
+	st, err := parseSettings(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.truncated || r.Pos != len(raw) {
+		t.Fatalf("truncated=%v at=%d pos=%d", st.truncated, st.truncatedAt, r.Pos)
+	}
+	if st.number(6) != 15 || st.number(7) != 235 || st.number(8) != 10 || st.zsDifficulty() != 2 {
+		t.Fatalf("mode=%d map=%d players=%d difficulty=%d", st.number(6), st.number(7), st.number(8), st.zsDifficulty())
+	}
+	w := &protocol.Writer{}
+	st.write(w)
+	if !bytes.Equal(w.Data, raw) {
+		t.Fatalf("round trip mismatch: got %x want %x", w.Data, raw)
+	}
+}
+
+// TestRoomSettingsFlagWithoutPayload guards the write side: a flag set without
+// bytes would shift every following field on the client.
+func TestRoomSettingsFlagWithoutPayload(t *testing.T) {
+	var st settings
+	st.flags[0] = 1 << 31
+	w := &protocol.Writer{}
+	st.write(w)
+	if binary.LittleEndian.Uint32(w.Data[:4]) != 0 || len(w.Data) != 16 {
+		t.Fatalf("dangling flag kept: %x", w.Data)
+	}
+}
 
 func TestRoomSettingsTruncatedPayload(t *testing.T) {
 	// lowFlag bit 31 announces 35 bytes that the client never sent. The

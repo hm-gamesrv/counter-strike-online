@@ -68,7 +68,9 @@ parse:
 					n := r.U8()
 					r.Bytes(n * 3)
 				case 13:
-					r.Bytes(9)
+					// This client writes the Zombie Scenario difficulty as one
+					// byte; the reference's trailing unk56/unk57 never arrive.
+					r.U8()
 				case 17:
 					r.Bytes(17)
 				case 18:
@@ -157,6 +159,7 @@ func (s *settings) voxelID() string {
 }
 
 func (s *settings) write(w *protocol.Writer) {
+	s.normalize()
 	for _, v := range s.flags {
 		w.U32(int(v))
 	}
@@ -182,6 +185,18 @@ func (s *settings) layout() string {
 		}
 	}
 	return strings.TrimSpace(b.String())
+}
+
+// normalize clears flag bits whose payload never arrived. A set bit with no
+// bytes would make the client read the next field as this one and desync.
+func (s *settings) normalize() {
+	for group, mask := range s.flags {
+		for bit := 0; bit < 32; bit++ {
+			if mask&(1<<bit) != 0 && len(s.fields[group*32+bit]) == 0 {
+				s.flags[group] &^= 1 << bit
+			}
+		}
+	}
 }
 func (s *settings) number(index int) int {
 	b := s.fields[index]

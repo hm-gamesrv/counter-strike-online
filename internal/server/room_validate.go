@@ -282,10 +282,10 @@ func (s *settings) playlist() []int {
 
 func (s *settings) zsDifficulty() int {
 	b := s.fields[45]
-	if len(b) < 2 {
+	if len(b) == 0 {
 		return 0
 	}
-	return int(binary.LittleEndian.Uint16(b))
+	return int(b[0])
 }
 
 const (
