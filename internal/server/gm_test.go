@@ -16,7 +16,7 @@ import (
 	"github.com/hm-gamesrv/cso-server-go/internal/store"
 )
 
-func startGMTestServer(t *testing.T, gameMaster bool) (string, *store.Store) {
+func startGMTestServer(t *testing.T, gameMaster bool) (string, *store.Store, *Server) {
 	t.Helper()
 	dir := t.TempDir()
 	if e := assets.Init(dir); e != nil {
@@ -60,7 +60,7 @@ func startGMTestServer(t *testing.T, gameMaster bool) (string, *store.Store) {
 			t.Error("shutdown hung")
 		}
 	})
-	return tcp.Addr().String(), db
+	return tcp.Addr().String(), db, srv
 }
 
 func gmHandshake(t *testing.T, addr string, hwid []byte) *testPeer {
@@ -187,7 +187,7 @@ func gmExpectDialClosed(t *testing.T, addr string) {
 }
 
 func TestGMCommandsRequireGameMaster(t *testing.T) {
-	addr, db := startGMTestServer(t, false)
+	addr, db, _ := startGMTestServer(t, false)
 	p := gmJoin(t, addr, "plain", []byte("aaaaaaaaaaaaaaaa"))
 	gmJoin(t, addr, "victim", []byte("bbbbbbbbbbbbbbbb"))
 
@@ -211,7 +211,7 @@ func TestGMCommandsRequireGameMaster(t *testing.T) {
 }
 
 func TestGMBanCommandsAndEnforcement(t *testing.T) {
-	addr, db := startGMTestServer(t, true)
+	addr, db, _ := startGMTestServer(t, true)
 	adminHWID := []byte("aaaaaaaaaaaaaaaa")
 	victimHWID := []byte("bbbbbbbbbbbbbbbb")
 	admin := gmJoin(t, addr, "admin", adminHWID)
@@ -261,4 +261,66 @@ func TestGMBanCommandsAndEnforcement(t *testing.T) {
 	victim = gmReconnect(t, addr, "victim", victimHWID)
 	victim.command("/register x y")
 	gmNotice(t, victim, 10, "Already logged in.")
+}
+
+func gmItemCount(t *testing.T, db *store.Store, userID, itemID int) int {
+	t.Helper()
+	items, err := db.Inventory(userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	total := 0
+	for _, item := range items {
+		if item.ID == itemID {
+			total += item.Count
+		}
+	}
+	return total
+}
+
+func TestGMItemExpAndRewardCommands(t *testing.T) {
+	addr, db, _ := startGMTestServer(t, true)
+	admin := gmJoin(t, addr, "admin", []byte("aaaaaaaaaaaaaaaa"))
+	gmJoin(t, addr, "victim", []byte("bbbbbbbbbbbbbbbb"))
+
+	base := gmItemCount(t, db, 1, 567)
+	admin.command("/additem 567 2 0")
+	gmNotice(t, admin, 11, "Item 567 x2 added.")
+	afterAdd := gmItemCount(t, db, 1, 567)
+	if afterAdd != base+2 {
+		t.Fatalf("additem count %d, want %d", afterAdd, base+2)
+	}
+
+	admin.command("/removeitem 567")
+	gmNotice(t, admin, 11, "Select one of the available item slots to remove:")
+	admin.command("/removeitem 567 0")
+	gmNotice(t, admin, 11, "Item (567, 0) removed")
+	if got := gmItemCount(t, db, 1, 567); got >= afterAdd {
+		t.Fatalf("removeitem count %d, want below %d", got, afterAdd)
+	}
+
+	admin.command("/addexp 500")
+	gmSync(t, admin)
+	character, err := db.Character(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if character.Exp != 500 {
+		t.Fatalf("addexp stored %d", character.Exp)
+	}
+
+	admin.command("/givereward 2 2189")
+	admin.command("/getuid victim")
+	gmNoticeExact(t, admin, 11, "2")
+	if got := gmItemCount(t, db, 2, 8084); got < 1 {
+		t.Fatalf("givereward inventory %d", got)
+	}
+
+	admin.command("/giverewardtoall 2189")
+	gmNotice(t, admin, 11, "sent to")
+	if got := gmItemCount(t, db, 1, 8084); got < 1 {
+		t.Fatalf("giverewardtoall inventory %d", got)
+	}
+	admin.command("/givereward 2 999999")
+	gmNotice(t, admin, 11, "Reward does not exist")
 }

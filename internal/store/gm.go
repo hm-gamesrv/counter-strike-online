@@ -102,6 +102,24 @@ func (s *Store) HWIDBanned(hwid []byte) (bool, error) {
 	return banned, err
 }
 
+// UserIDs lists every registered account, used by GM broadcast commands.
+func (s *Store) UserIDs() ([]int, error) {
+	rows, err := s.DB.Query("SELECT userID FROM User ORDER BY userID")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var ids []int
+	for rows.Next() {
+		var id int
+		if err = rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
 // AddPoints applies delta to the character's points and returns the new balance.
 func (s *Store) AddPoints(id, delta int) (int, error) {
 	tx, err := s.DB.Begin()

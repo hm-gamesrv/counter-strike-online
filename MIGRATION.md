@@ -400,3 +400,10 @@
 - 新增 `settings.voxelID()` 解析 group1/bit18 的 Voxel 块；无 Voxel 块或未设置 ID 的房间不匹配。
 - Studio 房间创建仍拒绝：上游 `CRoomSettings::CheckSettings` 需要 `CVoxelManager::GetSlotDetails` 访问 `Data/VoxelConfigList.json` 配置的 HTTP 服务，用槽位详情覆盖房间名、人数和模式；仓库默认配置没有该服务地址。
 - 测试覆盖按 `voxel_id` 过滤与房间条目编码。`go test ./...`、`go vet ./...` 通过；未做实机界面验收。
+
+## 2026-11-02 GM 道具与奖励命令
+
+- 新增 `/additem`、`/giveitem`、`/removeitem`、`/addexp`、`/givereward`、`/giverewardtoall`。
+- 道具发放走 `prepareGrants` + `Store.GrantReward`，与商城/奖励共用槽位、堆叠和过期规则；`/removeitem` 按同 ID 序号删除，禁止删除默认/伪默认道具，未带序号时列出可选序号。
+- `/addexp` 复用 `GrantReward` 的经验上限与升级逻辑，升级后广播 `157`；`/givereward` 复用 `ItemRewards.json` 的目录奖励，在线目标收到背包更新与奖励通知，离线目标直接落库；`/giverewardtoall` 遍历全部账号。
+- 选择型奖励（`Select`）仍拒绝并提示需要客户端选择 UI；新增测试覆盖加道具、删道具、伪默认道具保护、加经验、单人/全服发奖。`go test ./...`、`go vet ./...` 通过；未做实机界面验收。

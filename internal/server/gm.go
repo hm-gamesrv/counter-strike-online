@@ -4,11 +4,13 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/hm-gamesrv/cso-server-go/internal/protocol"
+	"github.com/hm-gamesrv/cso-server-go/internal/store"
 )
 
 // gmCommand runs a GM chat command. It reports whether the command was
@@ -17,7 +19,8 @@ func (s *Server) gmCommand(c *client, text string, args []string) (bool, error) 
 	switch args[0] {
 	case "/help":
 		c.chatNotice("Available commands: /help, /version, /disconnect, /getfreeslots, /status, /getuid")
-		c.chatNotice("/addpoints, /givepoints, /sendnotice, /sendgmnotice")
+		c.chatNotice("/sendnotice, /sendgmnotice, /addpoints, /givepoints, /addexp")
+		c.chatNotice("/additem, /giveitem, /removeitem, /givereward, /giverewardtoall")
 		c.chatNotice("/ban, /hban, /ipban, /unban")
 	case "/version":
 		c.chatNotice("CSNZ Go server; client build 30.12.24")
@@ -100,6 +103,161 @@ func (s *Server) gmCommand(c *client, text string, args []string) (bool, error) 
 			target.character.Points = points
 			s.broadcastUserInfo(target)
 		}
+	case "/additem":
+		itemID, ok := atoiArg(args, 1)
+		if !ok {
+			c.chatNotice("/additem usage: /additem <itemID> <count> <duration>")
+			return true, nil
+		}
+		if _, known := s.items[itemID]; !known {
+			c.chatNotice("Item ID you wrote does not exist in the item database")
+			return true, nil
+		}
+		count, duration := gmCountDuration(args, 2, 3)
+		changed, err := s.gmGrantItem(c.user.ID, itemID, count, duration)
+		if err != nil {
+			return true, err
+		}
+		if err = s.sendInventoryItems(c, changed); err != nil {
+			return true, err
+		}
+		c.chatNotice(fmt.Sprintf("Item %d x%d added.", itemID, count))
+	case "/giveitem":
+		id, okID := atoiArg(args, 1)
+		itemID, okItem := atoiArg(args, 2)
+		if !okID || !okItem {
+			c.chatNotice("/giveitem usage: /giveitem <userID> <itemID> <count> <duration>")
+			return true, nil
+		}
+		if _, known := s.items[itemID]; !known {
+			c.chatNotice("Item ID you wrote does not exist in the item database")
+			return true, nil
+		}
+		if done, err := s.rejectMissingUser(c, id); done {
+			return true, err
+		}
+		count, duration := gmCountDuration(args, 3, 4)
+		changed, err := s.gmGrantItem(id, itemID, count, duration)
+		if err != nil {
+			return true, err
+		}
+		if target := s.users[id]; target != nil {
+			if err = s.sendInventoryItems(target, changed); err != nil {
+				return true, err
+			}
+			target.chatNotice(fmt.Sprintf("GM gave you item %d x%d.", itemID, count))
+		}
+	case "/removeitem":
+		itemID, ok := atoiArg(args, 1)
+		if !ok {
+			c.chatNotice("/removeitem usage: /removeitem <itemID> <slot>")
+			return true, nil
+		}
+		items, err := s.Store.Inventory(c.user.ID)
+		if err != nil {
+			return true, err
+		}
+		slots := make([]int, 0, len(items))
+		for _, item := range items {
+			if item.ID == itemID && item.Count > 0 {
+				slots = append(slots, item.Slot)
+			}
+		}
+		if len(slots) == 0 {
+			c.chatNotice("Item does not exist")
+			return true, nil
+		}
+		index, hasSlot := atoiArg(args, 2)
+		if !hasSlot {
+			c.chatNotice("Select one of the available item slots to remove:")
+			for i, slot := range slots {
+				c.chatNotice(fmt.Sprintf("%d) slot %d", i, slot))
+			}
+			return true, nil
+		}
+		if index < 0 || index >= len(slots) {
+			c.chatNotice(fmt.Sprintf("You have written an invalid slot ID %d", index))
+			return true, nil
+		}
+		if slices.Contains(s.Config.DefaultUser.DefaultItems, itemID) || slices.Contains(s.Config.DefaultUser.PseudoDefaultItems, itemID) {
+			c.chatNotice(fmt.Sprintf("Item (%d, %d) cannot be removed", itemID, index))
+			return true, nil
+		}
+		changed, err := s.Store.DeleteItems(c.user.ID, []int{slots[index]}, nil)
+		if err != nil {
+			return true, err
+		}
+		if err = s.sendInventoryItems(c, changed); err != nil {
+			return true, err
+		}
+		c.chatNotice(fmt.Sprintf("Item (%d, %d) removed", itemID, index))
+	case "/addexp":
+		exp, ok := atoiArg(args, 1)
+		if !ok || exp < 0 {
+			c.chatNotice("/addexp usage: /addexp <exp>")
+			return true, nil
+		}
+		if _, err := s.Store.GrantReward(c.user.ID, store.Grant{Exp: exp}, s.Config.InventorySlotMax, len(s.Config.DefaultUser.DefaultItems)); err != nil {
+			return true, err
+		}
+		character, err := s.Store.Character(c.user.ID)
+		if err != nil {
+			return true, err
+		}
+		c.character = character
+		s.broadcastUserInfo(c)
+	case "/givereward":
+		id, okID := atoiArg(args, 1)
+		rewardID, okReward := atoiArg(args, 2)
+		if !okID || !okReward {
+			c.chatNotice("/givereward usage: /givereward <userID> <rewardID>")
+			return true, nil
+		}
+		if done, err := s.rejectMissingUser(c, id); done {
+			return true, err
+		}
+		p, err := s.buildCatalogReward(rewardID, 1)
+		if err != nil {
+			c.chatNotice("Reward does not exist")
+			return true, nil
+		}
+		if len(p.Choices) > 0 {
+			c.chatNotice("Choice reward needs the selection UI")
+			return true, nil
+		}
+		if err = s.gmGrantReward(id, p); err != nil {
+			return true, err
+		}
+	case "/giverewardtoall":
+		rewardID, ok := atoiArg(args, 1)
+		if !ok {
+			c.chatNotice("/giverewardtoall usage: /giverewardtoall <rewardID>")
+			return true, nil
+		}
+		p, err := s.buildCatalogReward(rewardID, 1)
+		if err != nil {
+			c.chatNotice("Reward does not exist")
+			return true, nil
+		}
+		if len(p.Choices) > 0 {
+			c.chatNotice("Choice reward needs the selection UI")
+			return true, nil
+		}
+		ids, err := s.Store.UserIDs()
+		if err != nil {
+			return true, err
+		}
+		sent := 0
+		for _, id := range ids {
+			if err = s.gmGrantReward(id, p); err != nil {
+				if s.Log != nil {
+					s.Log.Warn("GM reward failed", "user", id, "reward", rewardID, "error", err)
+				}
+				continue
+			}
+			sent++
+		}
+		c.chatNotice(fmt.Sprintf("Reward %d sent to %d users.", rewardID, sent))
 	case "/ban":
 		id, okID := atoiArg(args, 1)
 		banType, okType := atoiArg(args, 2)
@@ -212,6 +370,49 @@ func (s *Server) rejectMissingUser(c *client, id int) (bool, error) {
 		return true, nil
 	}
 	return false, nil
+}
+
+// gmGrantItem adds one item stack to an account, online or offline.
+func (s *Server) gmGrantItem(id, itemID, count, duration int) ([]store.Item, error) {
+	if count < 1 {
+		count = 1
+	}
+	items, err := s.prepareGrants([]store.Reward{{ID: itemID, Count: count, Duration: duration}})
+	if err != nil {
+		return nil, err
+	}
+	return s.Store.GrantReward(id, store.Grant{Items: items}, s.Config.InventorySlotMax, len(s.Config.DefaultUser.DefaultItems))
+}
+
+// gmGrantReward applies a catalog reward and notifies the target when online.
+func (s *Server) gmGrantReward(id int, p pendingReward) error {
+	changed, err := s.Store.GrantReward(id, p.Grant, s.Config.InventorySlotMax, len(s.Config.DefaultUser.DefaultItems))
+	if err != nil {
+		return err
+	}
+	target := s.users[id]
+	if target == nil {
+		return nil
+	}
+	if err = s.sendInventoryItems(target, changed); err != nil {
+		return err
+	}
+	if w := rewardNotice(p.Label, p.NoticeItems, p.Grant); len(w.Data) <= protocol.MaxPayload {
+		target.send(67, w)
+	}
+	return nil
+}
+
+// gmCountDuration reads optional <count> <duration> arguments.
+func gmCountDuration(args []string, countIndex, durationIndex int) (int, int) {
+	count, duration := 1, 0
+	if value, ok := atoiArg(args, countIndex); ok && value > 0 {
+		count = value
+	}
+	if value, ok := atoiArg(args, durationIndex); ok {
+		duration = value
+	}
+	return count, duration
 }
 
 func (s *Server) kick(id int) {
