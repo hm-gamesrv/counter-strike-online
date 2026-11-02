@@ -144,3 +144,90 @@ func TestEnhanceRejectsUnsupportedTargets(t *testing.T) {
 		t.Fatalf("rejected enhance consumed materials: %d", count)
 	}
 }
+func TestEnhanceDecreaseWithAntiEnhancers(t *testing.T) {
+	s, c, db := newEnhanceTestServer(t)
+	if _, err := db.DB.Exec("UPDATE UserInventory SET enhancementLevel=2,enhancementExp=5,enhanceValue=? WHERE userID=1 AND slot=2", 0x11); err != nil {
+		t.Fatal(err)
+	}
+	for slot, item := range map[int]int{5: 5206, 6: 5205} {
+		if _, err := db.DB.Exec("INSERT INTO UserInventory(userID,slot,itemID,count,status,inUse,obtainDate,expiryDate,isClanItem,enhancementLevel,enhancementExp,enhanceValue,paintID,partSlot1,partSlot2,lockStatus) VALUES(1,?,?,1,1,0,0,0,0,0,0,0,0,0,0,0)", slot, item); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Anti-damage clears only the damage attribute.
+	if err := s.dispatch(c, protocol.Packet{ID: 78, Data: []byte{14, 2, 0, 2, 0, 0, 5, 0}}); err != nil {
+		t.Fatal(err)
+	}
+	if msg := <-c.queue; msg.id != 154 {
+		t.Fatalf("missing decrease inventory update, got %d", msg.id)
+	}
+	result := <-c.queue
+	r := &protocol.Reader{Data: result.data}
+	if result.id != 78 || r.U8() != 14 || r.U8() != 3 || r.U16() != 5 || r.U16() != 1 || r.U32() != 1 || r.U8() != 0 {
+		t.Fatalf("unexpected decrease packet %d %v", result.id, result.data)
+	}
+	var level, exp, value int
+	if err := db.DB.QueryRow("SELECT enhancementLevel,enhancementExp,enhanceValue FROM UserInventory WHERE userID=1 AND slot=2").Scan(&level, &exp, &value); err != nil {
+		t.Fatal(err)
+	}
+	if level != 1 || exp != 5 || value != 0x10 {
+		t.Fatalf("decreased target level=%d exp=%d value=%#x", level, exp, value)
+	}
+	if rows := inventoryRows(t, db, 5); rows != 0 {
+		t.Fatalf("anti-damage item not consumed: %d", rows)
+	}
+
+	// Full reset clears the remaining accuracy attribute.
+	if err := s.dispatch(c, protocol.Packet{ID: 78, Data: []byte{14, 2, 0, 2, 0, 0, 6, 0}}); err != nil {
+		t.Fatal(err)
+	}
+	if msg := <-c.queue; msg.id != 154 {
+		t.Fatalf("missing reset inventory update, got %d", msg.id)
+	}
+	result = <-c.queue
+	r = &protocol.Reader{Data: result.data}
+	if result.id != 78 || r.U8() != 14 || r.U8() != 4 || r.U16() != 6 || r.U16() != 0 || r.U32() != 0 || r.U8() != 0xFF {
+		t.Fatalf("unexpected reset packet %d %v", result.id, result.data)
+	}
+	if err := db.DB.QueryRow("SELECT enhancementLevel,enhanceValue FROM UserInventory WHERE userID=1 AND slot=2").Scan(&level, &value); err != nil {
+		t.Fatal(err)
+	}
+	if level != 0 || value != 0 {
+		t.Fatalf("reset target level=%d value=%#x", level, value)
+	}
+	if rows := inventoryRows(t, db, 6); rows != 0 {
+		t.Fatalf("full reset item not consumed: %d", rows)
+	}
+}
+
+func TestEnhanceDecreaseRejectsEmptyAttribute(t *testing.T) {
+	s, c, db := newEnhanceTestServer(t)
+	if _, err := db.DB.Exec("UPDATE UserInventory SET enhancementLevel=1,enhanceValue=? WHERE userID=1 AND slot=2", 0x10); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.DB.Exec("INSERT INTO UserInventory(userID,slot,itemID,count,status,inUse,obtainDate,expiryDate,isClanItem,enhancementLevel,enhancementExp,enhanceValue,paintID,partSlot1,partSlot2,lockStatus) VALUES(1,5,5206,1,1,0,0,0,0,0,0,0,0,0,0,0)"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.dispatch(c, protocol.Packet{ID: 78, Data: []byte{14, 2, 0, 2, 0, 0, 5, 0}}); err != nil {
+		t.Fatal(err)
+	}
+	if msg := <-c.queue; msg.id != 78 || len(msg.data) != 2 || msg.data[1] != 5 {
+		t.Fatalf("unexpected rejection %d %v", msg.id, msg.data)
+	}
+	var rows int
+	if err := db.DB.QueryRow("SELECT count(*) FROM UserInventory WHERE userID=1 AND slot=5").Scan(&rows); err != nil {
+		t.Fatal(err)
+	}
+	if rows != 1 {
+		t.Fatalf("rejected decrease consumed item: %d", rows)
+	}
+}
+func inventoryRows(t *testing.T, db *store.Store, slot int) int {
+	t.Helper()
+	var rows int
+	if err := db.DB.QueryRow("SELECT count(*) FROM UserInventory WHERE userID=1 AND slot=?", slot).Scan(&rows); err != nil {
+		t.Fatal(err)
+	}
+	return rows
+}

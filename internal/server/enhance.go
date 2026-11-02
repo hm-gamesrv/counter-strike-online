@@ -211,23 +211,37 @@ func (s *Server) enhanceReply(c *client, status, gameSlot, level, attribute int)
 	w := &protocol.Writer{}
 	w.U8(14)
 	w.U8(status)
-	if status == 0 {
+	switch status {
+	case 0:
 		w.U16(gameSlot)
 		w.U16(level)
 		w.U32(level)
 		w.U8(attribute)
 		w.U8(0)
-	} else if status == 1 {
+	case 1:
 		w.U8(0)
+	case 3, 4:
+		w.U16(gameSlot)
+		w.U16(level)
+		w.U32(level)
+		w.U8(attribute)
 	}
 	c.send(78, w)
 }
 
 func (s *Server) enhanceRequest(c *client, p *protocol.Reader) error {
-	if p.U8() != 0 {
+	switch p.U8() {
+	case 0:
+		return s.enhanceInsert(c, p)
+	case 2:
+		return s.enhanceDecrease(c, p)
+	default:
 		s.enhanceError(c)
 		return nil
 	}
+}
+
+func (s *Server) enhanceInsert(c *client, p *protocol.Reader) error {
 	p.U8()
 	targetGameSlot := p.U16()
 	count := p.U8()
@@ -352,5 +366,108 @@ func (s *Server) enhanceRequest(c *client, p *protocol.Reader) error {
 		return err
 	}
 	s.enhanceReply(c, status, targetGameSlot, enhanceLevel(attrs), attribute)
+	return nil
+}
+
+var antiEnhanceAttribute = map[int]int{
+	5206: 0, // damage
+	5207: 3, // weight
+	5208: 1, // accuracy
+	5209: 4, // fire rate
+	5210: 2, // kickback
+	5211: 5, // ammo
+}
+
+// enhanceDecrease applies anti-enhancer items. They either clear one attribute,
+// one random attribute, or every enhancement on the target.
+func (s *Server) enhanceDecrease(c *client, p *protocol.Reader) error {
+	p.U8()
+	targetGameSlot := p.U16()
+	p.U8()
+	materialGameSlot := p.U16()
+	if p.Err != nil {
+		return p.Err
+	}
+	if p.Pos != len(p.Data) {
+		s.enhanceError(c)
+		return nil
+	}
+	defaults := len(s.Config.DefaultUser.DefaultItems)
+	targetSlot, materialSlot := targetGameSlot-defaults, materialGameSlot-defaults
+	if targetSlot <= 0 || materialSlot <= 0 || targetSlot == materialSlot {
+		s.enhanceError(c)
+		return nil
+	}
+	items, err := s.Store.Inventory(c.user.ID)
+	if err != nil {
+		return err
+	}
+	bySlot := map[int]int{}
+	for index, item := range items {
+		bySlot[item.Slot] = index
+	}
+	targetIndex, ok := bySlot[targetSlot]
+	if !ok {
+		s.enhanceError(c)
+		return nil
+	}
+	materialIndex, ok := bySlot[materialSlot]
+	if !ok {
+		s.enhanceError(c)
+		return nil
+	}
+	target := items[targetIndex]
+	material := items[materialIndex]
+	if _, ok := s.enhanceMax[target.ID]; !ok {
+		s.enhanceError(c)
+		return nil
+	}
+	attrs := unpackEnhanceAttributes(target.Value)
+	if enhanceLevel(attrs) <= 0 {
+		s.enhanceError(c)
+		return nil
+	}
+	status := 3
+	attribute := -1
+	switch material.ID {
+	case 5205:
+		status = 4
+		attrs = [7]int{}
+	case 5250:
+		var candidates []int
+		for index, value := range attrs {
+			if value != 0 {
+				candidates = append(candidates, index)
+			}
+		}
+		if len(candidates) == 0 {
+			s.enhanceError(c)
+			return nil
+		}
+		attribute = candidates[rand.IntN(len(candidates))]
+		attrs[attribute] = 0
+	default:
+		index, ok := antiEnhanceAttribute[material.ID]
+		if !ok || attrs[index] == 0 {
+			s.enhanceError(c)
+			return nil
+		}
+		attribute = index
+		attrs[attribute] = 0
+	}
+	newLevel := enhanceLevel(attrs)
+	newValue := packEnhanceAttributes(attrs)
+	if status == 4 {
+		newLevel = 0
+		newValue = 0
+	}
+	changed, err := s.Store.EnhanceItem(c.user.ID, targetSlot, []int{materialSlot}, newLevel, target.Exp, newValue)
+	if err != nil {
+		return err
+	}
+	if err = s.sendInventoryItems(c, changed); err != nil {
+		return err
+	}
+	s.enhanceReply(c, status, materialGameSlot, newLevel, attribute)
 	return nil
 }
