@@ -69,7 +69,7 @@
 | 军团 | clanmanager 1,077 行 + 7 张表 | 完全缺失：创建/申请/审批/成员管理/仓库/军团任务/军团聊天 |
 | 小游戏 | minigamemanager 482 行 + 5 张表 | Bingo、武器解放全缺 |
 | 房间设置校验 | roomsettings 2,655 行 | 已实现 `Room.ValidateSettings` 开关下的基础校验：人数上下限、地图人数上限、胜负/击杀/时间/回合范围与步长；仍缺 playlist、zbLimit、家族战、superRoom 及模式-地图互斥等上游规则 |
-| 玩家资料与外围 | usermanager 1,541 行 | 缺公告 notices、到期提醒、离线奖励通知、会话历史、断线重连恢复到原房间；改名卡、聊天色、Messenger、快捷购买、Addon、问卷与全服喇叭已接 |
+| 玩家资料与外围 | usermanager 1,541 行 | 缺公告 notices、到期提醒、离线奖励通知、会话历史；断线重连已支持关闭旧会话重新登录，但未恢复原房间/对局；改名卡、聊天色、Messenger、快捷购买、Addon、问卷与全服喇叭已接 |
 | 对局结算补全 | gamematch 709 行 | 已有基础结算、等级/职业加成、第一名排序与场景掉落箱奖励；仍缺 ZBS 名次奖励和部分模式专用统计；道具加成在上游已被注释，不属于迁移缺口 |
 | 多频道 | channelmanager | 上游 `channelmanager.cpp:23` 自述 `TODO: Should we implement multi channels?`，不必实现 |
 

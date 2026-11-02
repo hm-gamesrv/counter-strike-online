@@ -225,8 +225,10 @@ func (s *Server) serveClient(ctx context.Context, c *client) {
 		s.removeDedicated(c)
 		s.leaveRoom(c)
 		if c.user.ID != 0 {
-			delete(s.users, c.user.ID)
-			s.lobbyLeft(c)
+			if s.users[c.user.ID] == c {
+				delete(s.users, c.user.ID)
+				s.lobbyLeft(c)
+			}
 		}
 		close(c.queue)
 		s.mu.Unlock()
@@ -495,5 +497,21 @@ func (s *Server) serveUDP(ctx context.Context, conn *net.UDPConn) {
 		if ok {
 			conn.WriteToUDP([]byte{'W', 0, 1}, addr)
 		}
+	}
+}
+
+// endSession closes a previous connection for the same account so a reconnect
+// can log in immediately. Cleanup is idempotent and never removes a newer
+// session that already replaced this one.
+func (s *Server) endSession(id int) {
+	old := s.users[id]
+	if old == nil {
+		return
+	}
+	if old.conn != nil {
+		old.conn.Close()
+	}
+	if s.users[id] == old {
+		delete(s.users, id)
 	}
 }

@@ -218,9 +218,10 @@ func (s *Server) message(c *client, r *protocol.Reader) error {
 				c.notice(e.Error())
 				return nil
 			}
-			if s.users[u.ID] != nil {
-				c.reply(4)
-				return nil
+			if old := s.users[u.ID]; old != nil && old != c {
+				// A reconnect must take over the stale session instead of
+				// waiting for the old socket to time out.
+				s.endSession(u.ID)
 			}
 			if len(s.users) >= s.Config.MaxPlayers {
 				c.reply(26)
