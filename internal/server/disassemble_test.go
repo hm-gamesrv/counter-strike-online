@@ -26,8 +26,23 @@ func TestDisassembleRemovesSelectedItems(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	s := &Server{Store: db, Config: config.Config{InventorySlotMax: 10}}
-	c := &client{user: store.User{ID: 1}, character: store.Character{ID: 1, Name: "DisassembleUser"}, version: true, queue: make(chan outbound, 8)}
+	s := &Server{
+		Store: db,
+		Config: config.Config{
+			InventorySlotMax: 10,
+		},
+	}
+	c := &client{
+		user: store.User{
+			ID: 1,
+		},
+		character: store.Character{
+			ID:   1,
+			Name: "DisassembleUser",
+		},
+		version: true,
+		queue:   make(chan outbound, 8),
+	}
 	// Remove slots 2 and 3, keep slot 4.
 	request := []byte{7, 2, 0, 0, 2, 0, 0, 0, 0, 0, 0, 3, 0, 0, 0, 0, 0}
 	if err = s.dispatch(c, protocol.Packet{ID: 78, Data: request}); err != nil {
