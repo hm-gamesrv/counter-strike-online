@@ -422,6 +422,8 @@ func (s *Server) dispatch(c *client, p protocol.Packet) error {
 			}
 		case 77:
 			return s.favorite(c, r)
+		case 71:
+			return s.clanRequest(c, r)
 		case 72:
 			return s.shopRequest(c, r)
 		case 73:

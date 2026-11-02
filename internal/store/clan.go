@@ -609,3 +609,265 @@ func (s *Store) ClanJoinRequests(userID int) ([]ClanJoinRequest, error) {
 	}
 	return requests, rows.Err()
 }
+func (s *Store) ClanGrade(userID int) (int, int, error) {
+	var clanID, grade int
+	err := s.DB.QueryRow("SELECT clanID,memberGrade FROM ClanMember WHERE userID=?", userID).Scan(&clanID, &grade)
+	return clanID, grade, err
+}
+
+// SetClanGrade lets the master assign officer (1), regular (2) or associate (3)
+// grades. Grade 0 is reserved for the single master and is changed through
+// DelegateClanMaster instead.
+func (s *Store) SetClanGrade(actorID int, targetName string, grade int) (int, int, error) {
+	if grade < 1 || grade > 3 {
+		return -1, 0, nil
+	}
+	tx, err := s.DB.Begin()
+	if err != nil {
+		return 0, 0, err
+	}
+	defer tx.Rollback()
+	clanID, actorGrade, err := s.clanMembership(tx, actorID)
+	if errors.Is(err, sql.ErrNoRows) || actorGrade != 0 {
+		return -1, 0, nil
+	}
+	if err != nil {
+		return 0, 0, err
+	}
+	var targetID int
+	err = tx.QueryRow("SELECT m.userID FROM ClanMember m INNER JOIN User u ON u.userID=m.userID WHERE m.clanID=? AND u.userName=? COLLATE NOCASE LIMIT 1", clanID, targetName).Scan(&targetID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return -1, 0, nil
+	}
+	if err != nil {
+		return 0, 0, err
+	}
+	if targetID == actorID {
+		return -1, 0, nil
+	}
+	if _, err = tx.Exec("UPDATE ClanMember SET memberGrade=? WHERE clanID=? AND userID=?", grade, clanID, targetID); err != nil {
+		return 0, 0, err
+	}
+	if err = tx.Commit(); err != nil {
+		return 0, 0, err
+	}
+	return 1, targetID, nil
+}
+
+// KickClanMember enforces that an actor can only remove members with a lower
+// grade than their own, matching upstream's memberGrade comparison.
+func (s *Store) KickClanMember(actorID int, targetName string) (int, int, error) {
+	tx, err := s.DB.Begin()
+	if err != nil {
+		return 0, 0, err
+	}
+	defer tx.Rollback()
+	clanID, actorGrade, err := s.clanMembership(tx, actorID)
+	if errors.Is(err, sql.ErrNoRows) || actorGrade > 1 {
+		return -1, 0, nil
+	}
+	if err != nil {
+		return 0, 0, err
+	}
+	var targetID, targetGrade int
+	err = tx.QueryRow("SELECT m.userID,m.memberGrade FROM ClanMember m INNER JOIN User u ON u.userID=m.userID WHERE m.clanID=? AND u.userName=? COLLATE NOCASE LIMIT 1", clanID, targetName).Scan(&targetID, &targetGrade)
+	if errors.Is(err, sql.ErrNoRows) || targetID == actorID || targetGrade <= actorGrade {
+		return -1, 0, nil
+	}
+	if err != nil {
+		return 0, 0, err
+	}
+	if _, err = tx.Exec("DELETE FROM ClanMember WHERE clanID=? AND userID=?", clanID, targetID); err != nil {
+		return 0, 0, err
+	}
+	if _, err = tx.Exec("UPDATE Clan SET memberCount=(SELECT count(*) FROM ClanMember WHERE clanID=?) WHERE clanID=?", clanID, clanID); err != nil {
+		return 0, 0, err
+	}
+	if _, err = tx.Exec("UPDATE UserCharacter SET clanID=0 WHERE userID=?", targetID); err != nil {
+		return 0, 0, err
+	}
+	if _, err = tx.Exec("DELETE FROM ClanMemberRequest WHERE userID=?", targetID); err != nil {
+		return 0, 0, err
+	}
+	if _, err = tx.Exec("DELETE FROM ClanInvite WHERE destUserID=?", targetID); err != nil {
+		return 0, 0, err
+	}
+	if err = tx.Commit(); err != nil {
+		return 0, 0, err
+	}
+	return 1, targetID, nil
+}
+
+func (s *Store) SetClanJoinMethod(actorID, method int) (int, error) {
+	if method < 0 || method > 3 {
+		return -1, nil
+	}
+	result, err := s.DB.Exec("UPDATE Clan SET joinMethod=? WHERE clanID=(SELECT clanID FROM ClanMember WHERE userID=? AND memberGrade<=1 LIMIT 1)", method, actorID)
+	if err != nil {
+		return 0, err
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return 0, err
+	}
+	if n == 0 {
+		return -1, nil
+	}
+	return 1, nil
+}
+
+func (s *Store) SetClanRegion(actorID, region int) (int, error) {
+	if region < 0 || region > 65535 {
+		return -1, nil
+	}
+	result, err := s.DB.Exec("UPDATE Clan SET region=? WHERE clanID=(SELECT clanID FROM ClanMember WHERE userID=? AND memberGrade<=1 LIMIT 1)", region, actorID)
+	if err != nil {
+		return 0, err
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return 0, err
+	}
+	if n == 0 {
+		return -1, nil
+	}
+	return 1, nil
+}
+
+func (s *Store) SetClanNotice(actorID int, notice string) (int, error) {
+	result, err := s.DB.Exec("UPDATE Clan SET notice=? WHERE clanID=(SELECT clanID FROM ClanMember WHERE userID=? AND memberGrade<=1 LIMIT 1)", notice, actorID)
+	if err != nil {
+		return 0, err
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return 0, err
+	}
+	if n == 0 {
+		return -1, nil
+	}
+	return 1, nil
+}
+
+// SetClanMark consumes one mark-change charge. Result codes: -2 no charge,
+// -1 no permission, 1 changed, 2 mark already used by another clan.
+func (s *Store) SetClanMark(actorID, markID int) (int, error) {
+	tx, err := s.DB.Begin()
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+	clanID, grade, err := s.clanMembership(tx, actorID)
+	if errors.Is(err, sql.ErrNoRows) || grade > 1 {
+		return -1, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	var changes, current int
+	if err = tx.QueryRow("SELECT markChangeCount,coalesce(markID,0) FROM Clan WHERE clanID=?", clanID).Scan(&changes, &current); err != nil {
+		return 0, err
+	}
+	if changes <= 0 {
+		return -2, nil
+	}
+	if markID != current && markID != 0 {
+		var used int
+		if err = tx.QueryRow("SELECT EXISTS(SELECT 1 FROM Clan WHERE markID=? AND clanID<>? LIMIT 1)", markID, clanID).Scan(&used); err != nil {
+			return 0, err
+		}
+		if used != 0 {
+			return 2, nil
+		}
+	}
+	if _, err = tx.Exec("UPDATE Clan SET markID=?,markChangeCount=markChangeCount-1 WHERE clanID=?", markID, clanID); err != nil {
+		return 0, err
+	}
+	if err = tx.Commit(); err != nil {
+		return 0, err
+	}
+	return 1, nil
+}
+
+// DissolveClan removes the clan and clears every member's character clan ID.
+// The returned member IDs let the caller notify online clients.
+func (s *Store) DissolveClan(actorID int) (int, []int, error) {
+	tx, err := s.DB.Begin()
+	if err != nil {
+		return 0, nil, err
+	}
+	defer tx.Rollback()
+	clanID, grade, err := s.clanMembership(tx, actorID)
+	if errors.Is(err, sql.ErrNoRows) || grade > 1 {
+		return -1, nil, nil
+	}
+	if err != nil {
+		return 0, nil, err
+	}
+	rows, err := tx.Query("SELECT userID FROM ClanMember WHERE clanID=?", clanID)
+	if err != nil {
+		return 0, nil, err
+	}
+	var members []int
+	for rows.Next() {
+		var id int
+		if err = rows.Scan(&id); err != nil {
+			rows.Close()
+			return 0, nil, err
+		}
+		members = append(members, id)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return 0, nil, err
+	}
+	if _, err = tx.Exec("UPDATE UserCharacter SET clanID=0 WHERE clanID=?", clanID); err != nil {
+		return 0, nil, err
+	}
+	if _, err = tx.Exec("DELETE FROM Clan WHERE clanID=?", clanID); err != nil {
+		return 0, nil, err
+	}
+	if err = tx.Commit(); err != nil {
+		return 0, nil, err
+	}
+	return 1, members, nil
+}
+
+// DelegateClanMaster promotes an officer (grade 1) and demotes the current
+// master, matching upstream's two-step update.
+func (s *Store) DelegateClanMaster(actorID int, targetName string, now int) (int, int, error) {
+	tx, err := s.DB.Begin()
+	if err != nil {
+		return 0, 0, err
+	}
+	defer tx.Rollback()
+	clanID, grade, err := s.clanMembership(tx, actorID)
+	if errors.Is(err, sql.ErrNoRows) || grade != 0 {
+		return -1, 0, nil
+	}
+	if err != nil {
+		return 0, 0, err
+	}
+	var targetID, targetGrade int
+	err = tx.QueryRow("SELECT m.userID,m.memberGrade FROM ClanMember m INNER JOIN User u ON u.userID=m.userID WHERE m.clanID=? AND u.userName=? COLLATE NOCASE LIMIT 1", clanID, targetName).Scan(&targetID, &targetGrade)
+	if errors.Is(err, sql.ErrNoRows) || targetID == actorID || targetGrade != 1 {
+		return -1, 0, nil
+	}
+	if err != nil {
+		return 0, 0, err
+	}
+	if _, err = tx.Exec("UPDATE ClanMember SET memberGrade=0 WHERE clanID=? AND userID=?", clanID, targetID); err != nil {
+		return 0, 0, err
+	}
+	if _, err = tx.Exec("UPDATE ClanMember SET memberGrade=1 WHERE clanID=? AND userID=?", clanID, actorID); err != nil {
+		return 0, 0, err
+	}
+	if _, err = tx.Exec("INSERT INTO ClanChronicle(clanID,date,type,string) VALUES(?,?,1,?)", clanID, clanDate(now), targetName); err != nil {
+		return 0, 0, err
+	}
+	if err = tx.Commit(); err != nil {
+		return 0, 0, err
+	}
+	return 1, targetID, nil
+}

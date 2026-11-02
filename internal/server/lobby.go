@@ -28,8 +28,12 @@ func achievementBitmap(list []int) []byte {
 
 func userInfo(w *protocol.Writer, c store.Character) {
 	// Only advertise fields actually serialized below; absent flags preserve
-	// client defaults and avoid fabricating clan or ranking state.
-	w.U32(1<<1 | 1<<3 | 1<<5 | 1<<6 | 1<<7 | 1<<8 | 1<<9 | 1<<16 | 1<<18 | 1<<19 | 1<<22 | 1<<26 | 1<<27)
+	// client defaults and avoid fabricating ranking state.
+	flags := 1<<1 | 1<<3 | 1<<5 | 1<<6 | 1<<7 | 1<<8 | 1<<9 | 1<<16 | 1<<18 | 1<<19 | 1<<22 | 1<<26 | 1<<27
+	if c.ClanID != 0 {
+		flags |= 1 << 12
+	}
+	w.U32(flags)
 	w.U32(1)
 	w.String(c.Name)
 	w.U32(c.Level)
@@ -48,6 +52,14 @@ func userInfo(w *protocol.Writer, c store.Character) {
 	w.U16(c.City)
 	w.U16(c.Town)
 	w.String("")
+	if c.ClanID != 0 {
+		w.U32(c.ClanID)
+		w.U32(c.ClanMarkID)
+		w.String(c.ClanName)
+		w.U8(0)
+		w.U8(0)
+		w.U8(0)
+	}
 	w.U16(c.PasswordBoxes)
 	w.U16(c.PrefixID)
 	w.U8(0)
@@ -377,6 +389,9 @@ func (s *Server) loginPackets(c *client) error {
 	s.sendShop(c)
 	s.sendLeague(c)
 	s.joinLobby(c)
+	if e := s.sendClanLogin(c); e != nil {
+		return e
+	}
 	c.send(69, &protocol.Writer{Data: []byte{11}})
 	if s.Config.WelcomeMessage != "" {
 		c.notice(s.Config.WelcomeMessage)
