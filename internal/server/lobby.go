@@ -344,6 +344,9 @@ func (s *Server) loginPackets(c *client) error {
 	if s.Config.WelcomeMessage != "" {
 		c.notice(s.Config.WelcomeMessage)
 	}
+	if e := s.sendSurveys(c); e != nil {
+		return e
+	}
 	if !c.questLogin {
 		if err := s.applyQuestEvent(c, nil, nil, questEvent{Kind: 3}); err != nil {
 			return err

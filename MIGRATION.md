@@ -7,7 +7,7 @@
 | `net/{extendedsocket,sendpacket,receivepacket}.cpp` | `internal/protocol` | SSL、实客户端抓包验证 |
 | `serverconfig.cpp` | `internal/config` | 随业务迁移补齐配置项 |
 | `manager/userdatabase_sqlite.cpp` | `internal/store` | 其余角色字段、会话历史、封禁规则、迁移工具 |
-| `manager/usermanager.cpp` | `internal/server/{server,lobby,ban,update_info,messenger,addon,kick}.go` | 完整 UserInfo、装备、调查；改名/位置/聊天色、Messenger、快捷购买与 Addon、superRoom 踢人已实现，屏蔽名单已实现列表/设置/登录下发及聊天、私聊、房间加入过滤 |
+| `manager/usermanager.cpp` | `internal/server/{server,lobby,ban,update_info,messenger,addon,kick}.go` | 完整 UserInfo、装备；改名/位置/聊天色、Messenger、快捷购买与 Addon、superRoom 踢人、登录问卷已实现，屏蔽名单已实现列表/设置/登录下发及聊天、私聊、房间加入过滤 |
 | `manager/channelmanager.cpp`、`room/roomsettings.cpp` | `internal/server/{rooms,room_defaults,room_social,host}.go` | 已实现邀请、房主踢人及踢出名单；仍缺完整设置校验、投票踢人、特殊模式限制与地图轮换 |
 | `manager/packetmanager.cpp` | `internal/server/{metadata,lobby,rooms,shop}.go` | 随各业务逐项实现出站结构 |
 | `manager/shopmanager.cpp` | `internal/server/shop.go`、`internal/store/purchase.go` | 当前客户端购买、计数堆叠和密码箱计数已实现；完整延期规则、礼包校验仍缺 |
@@ -195,6 +195,13 @@
 - 解析并持久化 `UserCharacter.achievementList` 与 `titles`，用 `achievementList` 校验已解锁称号，未解锁的请求静默忽略。
 - `157` 用户信息新增 128 字节解锁位图（位 19）与 5 个称号槽（位 22），更新后向大厅/同房广播。
 - 新增测试覆盖前缀设置、未解锁拒绝、槽位设置/移除、越界槽位和用户信息序列化。`go test ./...`、`go vet ./...` 通过；未做实机界面验收。
+
+## 2026-11-02 登录问卷
+
+- 读取 `ServerConfig.json` 的 `Surveys`，归一化复选框与文本输入两种答案结构，并在启动时校验 ID、数量和长度范围。
+- 登录时仅下发 `UserSurveyAnswer` 中尚无记录的问卷；包格式为 `[0, surveyID, title, questions...]`。
+- 接入 `87` 类型 11：校验问卷、问题、选项和重复选项，按问题保存答案，事务提交；成功/非法/数据库错误分别回复 0/1/2。类型 12 按上游读取后忽略。
+- 新增测试覆盖问卷包结构、复选框与文本答案、回答后不再下发，以及未知问卷/选项拒绝。`go test ./...`、`go vet ./...` 通过；未做实机界面验收。
 
 
 

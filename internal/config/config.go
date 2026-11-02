@@ -125,6 +125,7 @@ type Config struct {
 	}
 	FlockingFlyerType        int
 	DedicatedServerWhitelist []string
+	Surveys                  map[string]Survey
 }
 
 func Load(path string) (Config, error) {

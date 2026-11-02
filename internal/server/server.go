@@ -77,6 +77,7 @@ type Server struct {
 	weaponPaints map[int][]int
 	rewards      map[int]itemReward
 	quests       []questTask
+	surveys      []surveyDefinition
 	modes        map[int]modeDefinition
 	dedicated    []*dedicatedServer
 	mu           sync.Mutex
@@ -126,6 +127,10 @@ func New(dir string, c config.Config, db *store.Store, log *slog.Logger) (*Serve
 		return nil, e
 	}
 	s.quests, e = loadEventQuests(dir)
+	if e != nil {
+		return nil, e
+	}
+	s.surveys, e = loadSurveys(c.Surveys)
 	if e != nil {
 		return nil, e
 	}
@@ -396,6 +401,8 @@ func (s *Server) dispatch(c *client, p protocol.Packet) error {
 			return s.itemRequest(c, r)
 		case 84:
 			return s.titleRequest(c, r)
+		case 87:
+			return s.surveyRequest(c, r)
 		case 93:
 			return s.messengerRequest(c, r)
 		case 115:

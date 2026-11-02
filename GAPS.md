@@ -19,7 +19,7 @@
 | `71 Clan` | 军团 25 个子请求 | `clanmanager.cpp`（1,077 行） | 缺失 | 军团界面全不可用 |
 | `74 Ban` | 屏蔽名单 4 个请求 | `usermanager.cpp:1244` | 已实现：列表/设置/登录下发/过滤 | 屏蔽名单可用 |
 | `84 Title` | 称号设置与列表增删 | `questmanager.cpp:246` | 已实现：前缀、5 槽位设置/移除，按 `achievementList` 校验 | 称号选择可用，解锁仍依赖荣誉任务 |
-| `87 UserSurvey` | 登录问卷 11/12 | `usermanager.cpp:1216` | 缺失 | 问卷不弹 |
+| `87 UserSurvey` | 登录问卷 11/12 | `usermanager.cpp:1216` | 已实现：登录下发未答问卷、类型 11 校验并保存；类型 12 忽略 | 问卷可正常弹出与提交 |
 | `89 MiniGame` | Bingo、武器解放 | `minigamemanager.cpp`（482 行） | 缺失 | 小游戏不可用 |
 | `93 Messenger` | 查询玩家公开资料 | `usermanager.cpp:1275` | 已实现：按昵称查询角色资料 | 资料查看可用 |
 | `103 Voxel` | 8 个请求 + 登录下发 Voxel URL | `voxelmanager.cpp:15` | 缺失 | Studio 不可用（上游也仅占位） |
@@ -69,16 +69,16 @@
 | 军团 | clanmanager 1,077 行 + 7 张表 | 完全缺失：创建/申请/审批/成员管理/仓库/军团任务/军团聊天 |
 | 小游戏 | minigamemanager 482 行 + 5 张表 | Bingo、武器解放全缺 |
 | 房间设置校验 | roomsettings 2,655 行 | Go 虽读取 `Room.ValidateSettings` 配置项但代码从未使用；上游按模式/地图校验人数、胜负限制、playlist、zbLimit、家族战、superRoom 等 |
-| 玩家资料与外围 | usermanager 1,541 行 | 缺问卷、公告 notices、到期提醒、离线奖励通知、会话历史、断线重连恢复到原房间；改名卡、聊天色、Messenger、快捷购买与 Addon 已接 |
+| 玩家资料与外围 | usermanager 1,541 行 | 缺公告 notices、到期提醒、离线奖励通知、会话历史、断线重连恢复到原房间；改名卡、聊天色、Messenger、快捷购买、Addon 与问卷已接 |
 | 对局结算补全 | gamematch 709 行 | 已有基础结算与等级/职业加成；缺道具加成（`GameMatch.CalcResults.BonusPercentage.Items` 已读未用）、模式统计事件（炸弹/拆弹/人质/怪物/蚊子/风筝）、场景掉落箱奖励（rewardID 3000–3023）、ZBS 名次奖励、第一名计算 |
 | 多频道 | channelmanager | 上游 `channelmanager.cpp:23` 自述 `TODO: Should we implement multi channels?`，不必实现 |
 
-## 四、数据库：45 张表中 30 张未被任何 Go 代码引用
+## 四、数据库：45 张表中 29 张未被任何 Go 代码引用
 
 `internal/store/schema.sql` 已与上游完全一致（45 表），缺的是读写逻辑：
 
 - 军团 7 张：`Clan`、`ClanMember`、`ClanInvite`、`ClanMemberRequest`、`ClanStorageItem`、`ClanStoragePage`、`ClanChronicle`
-- 玩家外围：`UserSurveyAnswer`、`UserExpiryNotice`、`UserRewardNotice`、`UserSession`、`UserSessionHistory`、`UserRestore`、`UserDist`、`TimeConfig`（`UserBanList`、`UserFastBuy`、`UserAddon`、`UserCostumeLoadout`、`UserZBCostumeLoadout` 已接入）
+- 玩家外围：`UserExpiryNotice`、`UserRewardNotice`、`UserSession`、`UserSessionHistory`、`UserRestore`、`UserDist`、`TimeConfig`（`UserBanList`、`UserFastBuy`、`UserAddon`、`UserCostumeLoadout`、`UserZBCostumeLoadout`、`UserSurveyAnswer` 已接入）
 - 小游戏 5 张：`UserMiniGameBingo`、`UserMiniGameBingoPrizeSlot`、`UserMiniGameBingoSlot`、`UserMiniGameWeaponReleaseCharacters`、`UserMiniGameWeaponReleaseItemProgress`
 - 任务与排行：`UserQuest*`（Go 改用 `GoQuest*` 扩展表）、`UserRank`
 - 管理与风控：`HWIDBanList`、`IPBanList`、`SuspectAction`、`RelationProducts`、`UserDailyReward`、`UserDailyRewardItems`
