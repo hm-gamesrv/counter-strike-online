@@ -108,6 +108,7 @@ type Config struct {
 	AllowedLauncherVersion int
 	MainMenuSkinEvent      int
 	Metadata               map[string]bool
+	MetadataZipTypeByte    bool
 	DefaultUser            DefaultUser
 	Room                   struct {
 		HostConnectingMethod int

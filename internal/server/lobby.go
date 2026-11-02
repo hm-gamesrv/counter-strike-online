@@ -373,6 +373,9 @@ func (s *Server) loginPackets(c *client) error {
 		c.send(76, w)
 	}
 	for _, b := range s.metadata {
+		if len(b) != 0 {
+			s.Log.Debug("metadata", "type", b[0], "len", len(b))
+		}
 		c.send(91, &protocol.Writer{Data: b})
 	}
 	// Match tabs and state markers are required by the 2024 client UI.

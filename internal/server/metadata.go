@@ -3,16 +3,26 @@ package server
 import (
 	"archive/zip"
 	"bytes"
+	"compress/flate"
 	"encoding/json"
 	"fmt"
+	"hash/crc32"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
+	"time"
 
 	"github.com/hm-gamesrv/cso-server-go/internal/config"
 	"github.com/hm-gamesrv/cso-server-go/internal/protocol"
 )
+
+// itemBoxPair is one (box, item) entry of the ItemBox metadata packet.
+type itemBoxPair struct {
+	Box  int
+	Item int
+}
 
 type metadataEntry struct {
 	Name, File string
@@ -26,11 +36,21 @@ const (
 	metadataMaxChunks = 4
 )
 
-// zipMetadataFrames wraps a zip stream the way upstream does: a single
-// U8(id)/U8(FULL_ZIP)/U16(size) frame, or up to four 64000-byte chunks where
-// the last one is marked with metadataMaxChunks.
-func zipMetadataFrames(id int, data []byte) [][]byte {
-	if len(data) > metadataChunkSize {
+// zipMetadataFrames wraps a zip stream for the metadata packet. The client
+// this server targets reads U8(id)/U16(size)/data, so that is the default. A
+// zipType frame (U8(id)/U8(5)/U16(size)/data, upstream CSNZ_Server's private
+// extension) is only produced when the configuration asks for it: that extra
+// byte is read as the payload length by the public client, which then parses
+// five bytes of the zip and raises a fatal error.
+func zipMetadataFrames(id int, data []byte, zipType bool) [][]byte {
+	if !zipType && len(data) <= protocol.MaxPayload {
+		w := &protocol.Writer{}
+		w.U8(id)
+		w.U16(len(data))
+		w.Bytes(data)
+		return [][]byte{w.Data}
+	}
+	if len(data) > metadataChunkSize && zipType {
 		frames := make([][]byte, 0, metadataMaxChunks)
 		for i := 0; i < metadataMaxChunks && len(data) > 0; i++ {
 			n := len(data)
@@ -51,6 +71,10 @@ func zipMetadataFrames(id int, data []byte) [][]byte {
 		}
 		return frames
 	}
+	if !zipType {
+		slog.Warn("metadata payload exceeds the legacy single frame limit; entry skipped", "id", id, "len", len(data))
+		return nil
+	}
 	w := &protocol.Writer{}
 	w.U8(id)
 	w.U8(metadataFullZip)
@@ -59,9 +83,10 @@ func zipMetadataFrames(id int, data []byte) [][]byte {
 	return [][]byte{w.Data}
 }
 
+// Upstream defines the ModeList (2) and Encyclopedia (23) flags but never
+// sends them: SendMetadata has no branch for either type. Sending them makes
+// the 2024 client raise a fatal error, so the table stays silent about them.
 var metadataFiles = []metadataEntry{
-	{"ModeList", "Metadata_ModeList.bin", 2, true},
-	{"Encyclopedia", "Metadata_Encyclopedia.bin", 23, true},
 	{"Maplist", "MapList.csv", 0, false},
 	{"ClientTable", "ClientTable.csv", 1, false},
 	{"Unk3", "Metadata_Unk3.bin", 3, true},
@@ -107,19 +132,11 @@ func loadMetadata(dir string, c config.Config) ([][]byte, error) {
 			return nil, e
 		}
 		if !entry.Raw {
-			var buf bytes.Buffer
-			z := zip.NewWriter(&buf)
-			f, e := z.Create(entry.File)
+			archive, e := classicZip(entry.File, b)
 			if e != nil {
 				return nil, e
 			}
-			if _, e = f.Write(b); e != nil {
-				return nil, e
-			}
-			if e = z.Close(); e != nil {
-				return nil, e
-			}
-			for _, frame := range zipMetadataFrames(entry.ID, buf.Bytes()) {
+			for _, frame := range zipMetadataFrames(entry.ID, archive, c.MetadataZipTypeByte) {
 				if len(frame)+5 > protocol.MaxFrame {
 					return nil, fmt.Errorf("metadata %s exceeds frame limit", entry.File)
 				}
@@ -211,15 +228,7 @@ func loadMetadata(dir string, c config.Config) ([][]byte, error) {
 		if e = json.Unmarshal(b, &boxes); e != nil {
 			return nil, e
 		}
-		w := &protocol.Writer{}
-		w.U8(4)
-		count := 0
-		for _, box := range boxes {
-			for _, rate := range box.Rate {
-				count += len(rate.Items)
-			}
-		}
-		w.U32(count)
+		var pairs []itemBoxPair
 		for _, k := range numericKeys(boxes) {
 			id, _ := strconv.Atoi(k)
 			rates := boxes[k].Rate
@@ -230,18 +239,29 @@ func loadMetadata(dir string, c config.Config) ([][]byte, error) {
 			sort.Strings(keys)
 			for _, key := range keys {
 				for _, item := range rates[key].Items {
-					w.U32(id)
-					w.U32(item)
-					w.U16(65535)
-					w.U16(1)
-					w.Bytes([]byte{3, 0, 1, 0})
-					w.U32(0)
-					w.U16(0)
-					w.U8(0)
-					w.U16(0)
-					w.U8(0)
+					pairs = append(pairs, itemBoxPair{
+						Box:  id,
+						Item: item,
+					})
 				}
 			}
+		}
+		w := &protocol.Writer{}
+		w.U8(4)
+		w.U16(5 + 26*len(pairs))
+		w.U8(0)
+		w.U32(len(pairs))
+		for _, pair := range pairs {
+			w.U32(pair.Box)
+			w.U32(pair.Item)
+			w.U16(65535)
+			w.U16(1)
+			w.Bytes([]byte{3, 0, 1, 0})
+			w.U32(0)
+			w.U16(0)
+			w.U8(0)
+			w.U16(0)
+			w.U8(0)
 		}
 		packets = append(packets, w.Data)
 	}
@@ -261,4 +281,42 @@ func numericKeys[T any](m map[string]T) []string {
 	}
 	sort.Slice(keys, func(i, j int) bool { a, _ := strconv.Atoi(keys[i]); b, _ := strconv.Atoi(keys[j]); return a < b })
 	return keys
+}
+
+// classicZip builds an archive with sizes and CRC in the local header, matching
+// miniz's zip_stream output. Go's streaming zip writer uses a data descriptor,
+// which the client's unzip parser rejects.
+func classicZip(name string, data []byte) ([]byte, error) {
+	var compressed bytes.Buffer
+	fw, err := flate.NewWriter(&compressed, flate.DefaultCompression)
+	if err != nil {
+		return nil, err
+	}
+	if _, err = fw.Write(data); err != nil {
+		return nil, err
+	}
+	if err = fw.Close(); err != nil {
+		return nil, err
+	}
+	header := &zip.FileHeader{
+		Name:               name,
+		Method:             zip.Deflate,
+		CRC32:              crc32.ChecksumIEEE(data),
+		CompressedSize64:   uint64(compressed.Len()),
+		UncompressedSize64: uint64(len(data)),
+	}
+	header.SetModTime(time.Now())
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	w, err := zw.CreateRaw(header)
+	if err != nil {
+		return nil, err
+	}
+	if _, err = w.Write(compressed.Bytes()); err != nil {
+		return nil, err
+	}
+	if err = zw.Close(); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
 }

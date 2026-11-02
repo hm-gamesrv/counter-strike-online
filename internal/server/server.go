@@ -43,11 +43,15 @@ type client struct {
 	localIP        net.IP
 	localPorts     [2]int
 	externalPorts  [2]int
+	log            *slog.Logger
 }
 
 func (c *client) ip() string { h, _, _ := net.SplitHostPort(c.conn.RemoteAddr().String()); return h }
 func (c *client) send(id byte, w *protocol.Writer) {
 	data := append([]byte{}, w.Data...)
+	if c.log != nil {
+		c.log.Debug("send", "id", id, "len", len(data))
+	}
 	select {
 	case c.queue <- outbound{id: id, data: data}:
 	default:
@@ -260,7 +264,7 @@ func (s *Server) Serve(ctx context.Context, tcp net.Listener, udp *net.UDPConn) 
 		if s.tlsConfig != nil {
 			conn = tls.Server(conn, s.tlsConfig)
 		}
-		c := &client{conn: conn, codec: protocol.NewCodec(), queue: make(chan outbound, 512)}
+		c := &client{conn: conn, codec: protocol.NewCodec(), queue: make(chan outbound, 512), log: s.Log}
 		s.mu.Lock()
 		if ctx.Err() != nil {
 			s.mu.Unlock()
