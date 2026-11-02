@@ -84,6 +84,7 @@ type Server struct {
 	modes        map[int]modeDefinition
 	mapMax       map[int]int
 	miniGame     weaponReleaseConfig
+	bingo        bingoDefinition
 	dedicated    []*dedicatedServer
 	mu           sync.Mutex
 	clients      map[*client]bool
@@ -149,6 +150,10 @@ func New(dir string, c config.Config, db *store.Store, log *slog.Logger) (*Serve
 		return nil, e
 	}
 	s.miniGame, e = loadWeaponRelease(c.MiniGames.WeaponRelease)
+	if e != nil {
+		return nil, e
+	}
+	s.bingo, e = loadBingo(c.MiniGames.Bingo)
 	if e != nil {
 		return nil, e
 	}

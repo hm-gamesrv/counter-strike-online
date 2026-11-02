@@ -74,6 +74,12 @@ type MiniGameWeaponRelease struct {
 	Characters []string
 }
 
+type MiniGameBingo struct {
+	Active bool
+	Items  MiniGameItems
+}
+
 type MiniGames struct {
+	Bingo         MiniGameBingo
 	WeaponRelease MiniGameWeaponRelease
 }

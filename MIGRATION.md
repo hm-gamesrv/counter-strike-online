@@ -359,10 +359,18 @@
 
 ## 2026-11-02 剩余缺口复核
 
-- 入口：Bingo `89/0`、Voxel `103`、GM 命令、房间高级设置校验和 SSL 仍缺；房间子项剩 `65/34`、`65/35`、`65/37`、`65/32/33`。
-- 数据库 45 张表中 17 张未引用：Bingo 3 张、封禁 2 张、`UserQuest*` 5 张、`UserRank`/`UserDailyReward`/`UserDailyRewardItems` 3 张、`UserRestore`/`RelationProducts`/`SuspectAction`/`TimeConfig` 4 张。
+- 入口：Voxel `103`、GM 命令、房间高级设置校验和 SSL 仍缺；房间子项剩 `65/34`、`65/35`、`65/37`、`65/32/33`。Bingo 已在后续提交补齐。
+- 数据库 45 张表中 14 张未引用：封禁 2 张、`UserQuest*` 5 张、`UserRank`/`UserDailyReward`/`UserDailyRewardItems` 3 张、`UserRestore`/`RelationProducts`/`SuspectAction`/`TimeConfig` 4 张。
 - 上游桩不计缺口：Rank、Quest 界面、投票踢人、party 聊天、Report、ZBS 奖励/模式统计、每日奖励、组装等。
 - 详见 `GAPS.md`；真实 HLDS、多人实机、模式矩阵和客户端界面回归仍未验收。
+
+## 2026-11-02 Bingo 小游戏
+
+- 读取 `MiniGames.Bingo`，要求激活时至少 12 个奖项；配置默认关闭。
+- 登录事件位增加 `1<<0`，激活时下发 `89/0/0` 桌面；首次访问初始化 25 个不重复数字和 12 个奖项。
+- 接入 `89/0/0,1,3,4`：桌面查询、开格、完成五连线发奖、洗牌（已开格 >11 或已开奖 >1 时拒绝）和重置。上游 open-random 本身被注释，Go 简化为从未开格中随机选择。
+- 新增 `UserMiniGameBingo`、`UserMiniGameBingoSlot`、`UserMiniGameBingoPrizeSlot` 的事务读写；开格、奖项状态和发奖流程已接，发奖失败保留未开格状态。
+- 新增测试覆盖初始化、开格、连线奖项、洗牌、重置和客户端更新包。`go test ./...`、`go vet ./...` 通过；未做实机界面验收。
 
 
 

@@ -8,16 +8,23 @@
 
 - 入口覆盖：上游 33 个入口中 Go 已接 27 个（含 UDP）；未接的 6 个里 5 个在上游是空实现或桩（`15`、`83`、`88`、`90`、`164`），实际功能缺口只有 `103 Voxel`。
 - 业务覆盖：上一版列出的道具养成、军团、武器解放、房间设置校验、称号、屏蔽名单、问卷、重连恢复、结算加成与排名等均已实现（见附录）。
-- 剩余缺口集中在：Bingo 小游戏、Voxel/Studio、GM 管理命令、房间子项（Voxel 房间列表/ZB addon/军团战踢人）、房间高级设置校验与 SSL。
+- 剩余缺口集中在：Voxel/Studio、GM 管理命令、房间子项（Voxel 房间列表/ZB addon/军团战踢人）、房间高级设置校验与 SSL。Bingo 已接基础桌面/开格/洗牌/重置。
 - 规模：C++ 核心约 4.6 万行（不含 GUI/thirdparty/test）；Go 非测试 12,307 行、含测试 18,633 行。
+
+## 〇、默认数据与目标客户端
+
+- 默认嵌入数据已回退到上游 `12644f2` 的 `bin/`，不是 `S:\.temp\CSNZ` 的客户端定制数据。
+- 对比基线，`S:\.temp\CSNZ` 的 `Item.csv` 多 60 个 ID、`MapList.csv` 多 28 个、`GameModeList.csv` 多 8 个；其中 `Item.csv` 的 ID 集合对应上游 2025-02-19 元数据，地图/模式另有私服追加。
+- 当前默认配置的 `Bingo.Active`、`WeaponRelease.Active` 均为 `false`，`MainMenuSkinEvent` 为 0；因此现成默认数据不会暴露这些活动。
+- 目标客户端仍是 `30.12.24`；如果要用它的活动/商店/道具，必须在运行目录替换 `ServerConfig.json` 和 `Data`，或重新制作嵌入数据。默认上游数据与目标客户端存在内容差异，这是部署缺口，不是协议入口缺口。
 
 ## 一、剩余功能缺口
 
-### 1.1 Bingo 小游戏（MiniGame `89/0`）
+### 1.1 Bingo 小游戏（已实现，待实机验收）
 
-上游 `minigamemanager.cpp:51` 处理 Bingo 页面的 update（0）、reset（3）、shuffle（4），open-random（1）为注释状态；状态落在 `UserMiniGameBingo`、`UserMiniGameBingoSlot`、`UserMiniGameBingoPrizeSlot` 三张表。
+上游 `minigamemanager.cpp:51` 的 update（0）、reset（3）、shuffle（4）可用，open-random（1）为注释状态。Go 已接 `89/0/0,1,3,4`：初始化 25 格/12 个奖项，登录下发事件位 `1<<0` 和桌面，支持开格、完成连线发奖、洗牌限制和重置；状态落在三张 Bingo 表。
 
-Go 只处理 `89/6`（武器解放），其余请求仅写 debug 日志，三张表未被引用。
+限制：上游 open-random 本身被注释，Go 采用“从未打开的桌面数字中随机选一个”的简化规则；客户端是否按这个流程刷新、发奖提示和开格动画是否完整，尚未实机验收。
 
 ### 1.2 Voxel / Studio（`103`）
 
@@ -68,9 +75,9 @@ Go 在 `Room.ValidateSettings` 下已校验人数、地图人数上限、胜负/
 
 ## 三、数据库
 
-`internal/store/schema.sql` 与上游一致的 45 张表中，17 张尚未被 Go 代码引用：
+`internal/store/schema.sql` 与上游一致的 45 张表中，14 张尚未被 Go 代码引用：
 
-- 待实现功能：Bingo 3 张（`UserMiniGameBingo`、`UserMiniGameBingoSlot`、`UserMiniGameBingoPrizeSlot`）、封禁 2 张（`HWIDBanList`、`IPBanList`）
+- 待实现功能：封禁 2 张（`HWIDBanList`、`IPBanList`）
 - 设计差异：`UserQuest*` 5 张，Go 使用 `GoQuest*` 扩展表
 - 上游桩或未使用：`UserRank`、`UserDailyReward`、`UserDailyRewardItems`、`UserRestore`、`RelationProducts`、`SuspectAction`、`TimeConfig`
 
@@ -80,18 +87,18 @@ Go 在 `Room.ValidateSettings` 下已校验人数、地图人数上限、胜负/
 
 ## 五、建议顺序
 
-1. **Bingo**：客户端入口可见，涉及 3 张表与 3 个请求，工作量中等。
-2. **Voxel 通路**：登录下发 URL 与 8 个占位回包，改动小。
-3. **GM 命令与封禁管理**：运维需要，可先做 `/ban`、`/ipban`、`/hban`、`/unban`、`/additem`、`/givereward`、`/sendnotice`。
-4. **房间子项**：`65/34,35,37` 与 `65/32,33` 回包。
-5. **SSL**：按部署需要决定。
+1. **Voxel 通路**：登录下发 URL 与 8 个占位回包，改动小。
+2. **GM 命令与封禁管理**：运维需要，可先做 `/ban`、`/ipban`、`/hban`、`/unban`、`/additem`、`/givereward`、`/sendnotice`。
+3. **房间子项**：`65/34,35,37` 与 `65/32,33` 回包。
+4. **SSL**：按部署需要决定。
+5. **Bingo 实机验收**：开格/连线发奖/洗牌/重置的客户端流程。
 6. **验证**：真实 HLDS、多人实机与客户端界面回归。
 
-## 附：上一版缺口在本轮的实现情况
+## 附：已实现能力（本轮复核）
 
 - 道具：解码器开箱、强化（含降级与重置）、分解、涂装、部件、服装与纹身、延期、快捷购买
 - 玩家：昵称/位置/聊天色、屏蔽名单与聊天过滤、Messenger、问卷、Addon、称号、公告、到期与离线奖励通知、会话记录
 - 军团：协议请求、成员与解散规则、仓库转移、军团聊天
-- 小游戏：武器解放
+- 小游戏：武器解放、Bingo 基础桌面/开格/洗牌/重置
 - 房间与对局：房间设置校验、superRoom 踢人、家族战房间、场景道具消耗、掉落箱奖励、断线重连与会话接管、结算道具加成与模式排名
-- 其他：主菜单皮肤事件、客户端配套数据更新
+- 其他：主菜单皮肤事件、军团/武器解放/家族战；默认数据回退到上游基线

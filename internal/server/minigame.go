@@ -65,14 +65,21 @@ func loadWeaponRelease(cfg config.MiniGameWeaponRelease) (weaponReleaseConfig, e
 }
 
 func (s *Server) eventFlags() int {
-	if s.miniGame.Active {
-		return weaponReleaseEventFlag
+	flags := 0
+	if s.bingo.Active {
+		flags |= bingoEventFlag
 	}
-	return 0
+	if s.miniGame.Active {
+		flags |= weaponReleaseEventFlag
+	}
+	return flags
 }
 
 func (s *Server) miniGameRequest(c *client, r *protocol.Reader) error {
 	kind := r.U8()
+	if kind == 0 {
+		return s.bingoRequest(c, r)
+	}
 	if kind != 6 {
 		if s.Log != nil {
 			s.Log.Debug("unsupported mini game", "kind", kind, "user", c.user.ID)

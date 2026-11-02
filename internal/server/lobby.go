@@ -386,6 +386,11 @@ func (s *Server) loginPackets(c *client) error {
 			return e
 		}
 	}
+	if s.bingo.Active {
+		if e := s.sendBingoUpdate(c); e != nil {
+			return e
+		}
+	}
 	if e := s.sendInventory(c); e != nil {
 		return e
 	}
