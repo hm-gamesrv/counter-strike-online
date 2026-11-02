@@ -480,12 +480,7 @@ func (s *Server) endGame(r *room, forced bool) error {
 	for _, stat := range m.stats {
 		stats = append(stats, stat)
 	}
-	sort.Slice(stats, func(i, j int) bool {
-		if stats[i].kills == stats[j].kills {
-			return stats[i].user.user.ID < stats[j].user.user.ID
-		}
-		return stats[i].kills > stats[j].kills
-	})
+	sortMatchStats(stats, m.mode)
 	coef, ok := s.Config.GameMatch.CalcResults.GameModeCoefficient[strconv.Itoa(m.mode)]
 	if !ok {
 		coef = s.Config.GameMatch.CalcResults.GameModeCoefficient["0"]
@@ -508,6 +503,7 @@ func (s *Server) endGame(r *room, forced bool) error {
 		}
 		stat.bonusExp = stat.exp * stat.classExp / 100
 		stat.bonusPoints = stat.points * stat.classPoints / 100
+		s.applyEquipmentBonus(stat)
 		update := m.mode == 0 || m.mode == 1 || m.mode == 2 || m.mode == 6 || m.mode == 22
 		won := stat.user.team == 1 && m.tWins > m.ctWins || stat.user.team == 2 && m.ctWins > m.tWins
 		rewards = append(rewards, store.MatchReward{UserID: stat.user.user.ID, Exp: stat.exp + stat.bonusExp, Points: stat.points + stat.bonusPoints, Kills: stat.kills, Deaths: stat.deaths, UpdateStats: update, QuestMatchEnd: !forced, Won: won, Mode: m.mode, Map: m.mapID, Players: len(stats)})
@@ -671,4 +667,41 @@ func (s *Server) grantDropBox(c *client, rewardID int) {
 	if w := rewardNotice(p.Label, p.NoticeItems, p.Grant); len(w.Data) <= protocol.MaxPayload {
 		c.send(67, w)
 	}
+}
+
+// applyEquipmentBonus adds the configured equipment percentage for active
+// items carried into the match. Upstream had this loop commented out while the
+// configuration and result fields already existed.
+func (s *Server) applyEquipmentBonus(stat *matchStat) {
+	for key, bonus := range s.Config.GameMatch.CalcResults.BonusPercentage.Items {
+		itemID, err := strconv.Atoi(key)
+		if err != nil {
+			continue
+		}
+		for _, item := range stat.items {
+			if item.ID != itemID || item.InUse == 0 || item.Status == 0 {
+				continue
+			}
+			stat.itemExp = bonus.Exp
+			stat.itemPoints = bonus.Points
+			stat.bonusExp += stat.exp * bonus.Exp / 100
+			stat.bonusPoints += stat.points * bonus.Points / 100
+			break
+		}
+	}
+}
+
+// Individual deathmatch modes rank by score before kills; round-based modes
+// keep the upstream kill ordering.
+func sortMatchStats(stats []*matchStat, mode int) {
+	individual := mode == 1 || mode == 4 || mode == 22
+	sort.Slice(stats, func(i, j int) bool {
+		if individual && stats[i].score != stats[j].score {
+			return stats[i].score > stats[j].score
+		}
+		if stats[i].kills == stats[j].kills {
+			return stats[i].user.user.ID < stats[j].user.user.ID
+		}
+		return stats[i].kills > stats[j].kills
+	})
 }

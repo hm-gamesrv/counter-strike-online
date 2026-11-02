@@ -12,7 +12,7 @@
 | `manager/packetmanager.cpp` | `internal/server/{metadata,lobby,rooms,shop}.go` | 随各业务逐项实现出站结构 |
 | `manager/shopmanager.cpp` | `internal/server/shop.go`、`internal/store/purchase.go` | 当前客户端购买、计数堆叠和密码箱计数已实现；完整延期规则、礼包校验仍缺 |
 | `manager/itemmanager.cpp` | `internal/server/{inventory,rewards,reward_claims,reward_random}.go`、`internal/store/{inventory,purchase,rewards,reward_claims,item_extend,paint,part,costume}.go` | 已实现武器/角色启用、选择副本、锁定/解锁、固定/选择/随机奖励与领取去重、开箱、延期、武器涂装、部件、普通服装、ZB 皮肤、强化（含防降级）与删除式分解；仍缺完整合并 |
-| `manager/{host,dedicatedserver}manager.cpp`、`room/gamematch.cpp` | `internal/server/{host,dedicated,catalog}.go`、`internal/store/{match,levels}.go` | 已实现开局、主机背包、计数、存档迁移、专服池、场景道具使用、场景掉落箱奖励与基础结算；尚需真实客户端/HLDS 对局验收、ZBS 名次奖励及特殊模式规则 |
+| `manager/{host,dedicatedserver}manager.cpp`、`room/gamematch.cpp` | `internal/server/{host,dedicated,catalog}.go`、`internal/store/{match,levels}.go` | 已实现开局、主机背包、计数、存档迁移、专服池、场景道具使用、场景掉落箱奖励、装备加成与基础结算；尚需真实客户端/HLDS 对局验收、ZBS 名次奖励及特殊模式规则 |
 | `manager/questmanager.cpp`、`quest/questevent.*` | `internal/server/{quests,title}.go`、`internal/store/{quests,quest_events,title}.go` | 已接活动任务条件与持久化进度、完成奖励，以及 `84` 称号前缀/槽位；尚缺任务界面、每日/荣誉/军团任务及称号解锁、VIP 事件与完整实机验收 |
 | `manager/{clan,rank,minigame,luckyitem,voxel}manager.cpp` | 未实现（仅部分元数据） | 各业务状态与协议完整迁移 |
 
@@ -223,6 +223,14 @@
 - 接入主机事件 34（掉落箱拾取），读取 `rewardID`，仅接受上游范围 `3000–3023`。
 - 按 `ItemRewards.json` 构建奖励，事务发奖，下发背包增量与奖励通知；奖励缺失、背包满或数据库失败只记录日志，不中断对局。
 - 新增测试覆盖奖励领取、背包增量和通知包。`go test ./...`、`go vet ./...` 通过；未做实机界面验收。
+
+## 2026-11-02 结算装备加成
+
+- 结算时读取 `GameMatch.CalcResults.BonusPercentage.Items`，对带入对局且已启用的道具累加经验/积分百分比。
+- 加成写入结果包的 `itemExp`/`itemPoints` 字段，并计入总加成；配置百分比在启动时校验为 0–65535。
+- 个人死亡竞赛模式（1/4/22）按分数优先排序，其余模式保持上游按击杀排序，第一名标记随排序结果。
+- 上游保留该配置和结果字段但循环被注释；本次按配置启用。
+- 新增测试覆盖启用、休眠道具不生效和百分比字段。`go test ./...`、`go vet ./...` 通过；未做实机界面验收。
 
 ## 2026-11-02 重连时接管旧会话
 

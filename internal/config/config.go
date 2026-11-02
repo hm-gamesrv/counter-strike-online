@@ -163,6 +163,11 @@ func Load(path string) (Config, error) {
 			return c, fmt.Errorf("class bonus percentages must be 0..65535")
 		}
 	}
+	for _, bonus := range c.GameMatch.CalcResults.BonusPercentage.Items {
+		if bonus.Exp < 0 || bonus.Exp > 65535 || bonus.Points < 0 || bonus.Points > 65535 {
+			return c, fmt.Errorf("item bonus percentages must be 0..65535")
+		}
+	}
 	if c.SSL {
 		return c, fmt.Errorf("SSL=true is not yet supported; use the upstream default SSL=false")
 	}

@@ -45,15 +45,15 @@ c := &client{user: store.User{ID: 1}, character: store.Character{ID: 1, Name: "D
 
 ```go
 c := &client{
-	user: store.User{
-		ID: 1,
-	},
-	character: store.Character{
-		ID:   1,
-		Name: "DisassembleUser",
-	},
-	version: true,
-	queue:   make(chan outbound, 8),
+    user: store.User{
+        ID: 1,
+    },
+    character: store.Character{
+        ID:   1,
+        Name: "DisassembleUser",
+    },
+    version: true,
+    queue:   make(chan outbound, 8),
 }
 ```
 
