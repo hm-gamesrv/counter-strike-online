@@ -256,12 +256,16 @@ func (s *Server) message(c *client, r *protocol.Reader) error {
 				return nil
 			}
 			return s.loginPackets(c)
-		case "/version":
-			c.chatNotice("CSNZ Go server; client build 30.12.24")
-			return nil
-		default:
+		}
+		if c.user.ID == 0 || c.character.Name == "" {
 			c.chatNotice("Unknown command.")
 			return nil
+		}
+		if c.character.GameMaster {
+			handled, err := s.gmCommand(c, text, args)
+			if handled {
+				return err
+			}
 		}
 	}
 	if c.user.ID == 0 || c.character.Name == "" {

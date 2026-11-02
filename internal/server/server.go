@@ -21,20 +21,25 @@ type outbound struct {
 	crypt *rc4.Cipher
 }
 type client struct {
-	conn                             net.Conn
-	codec                            *protocol.Codec
-	queue                            chan outbound
-	user                             store.User
-	character                        store.Character
-	hwid                             []byte
-	version, loginHandshake, inLobby bool
-	cryptIn                          *rc4.Cipher
-	dedicated                        *dedicatedServer
-	room, team, ready                int
-	playing                          bool
-	questLogin                       bool
-	localIP                          net.IP
-	localPorts, externalPorts        [2]int
+	conn           net.Conn
+	codec          *protocol.Codec
+	queue          chan outbound
+	user           store.User
+	character      store.Character
+	hwid           []byte
+	version        bool
+	loginHandshake bool
+	inLobby        bool
+	cryptIn        *rc4.Cipher
+	dedicated      *dedicatedServer
+	room           int
+	team           int
+	ready          int
+	playing        bool
+	questLogin     bool
+	localIP        net.IP
+	localPorts     [2]int
+	externalPorts  [2]int
 }
 
 func (c *client) ip() string { h, _, _ := net.SplitHostPort(c.conn.RemoteAddr().String()); return h }
@@ -92,6 +97,7 @@ type Server struct {
 	rooms        map[int]*room
 	restore      map[int]reconnectSlot
 	nextRoom     int
+	started      time.Time
 }
 
 func New(dir string, c config.Config, db *store.Store, log *slog.Logger) (*Server, error) {
@@ -108,7 +114,18 @@ func New(dir string, c config.Config, db *store.Store, log *slog.Logger) (*Serve
 	if log == nil {
 		log = slog.Default()
 	}
-	s := &Server{Config: c, Store: db, Log: log, metadata: m, clients: map[*client]bool{}, users: map[int]*client{}, rooms: map[int]*room{}, restore: map[int]reconnectSlot{}, nextRoom: 1}
+	s := &Server{
+		Config:   c,
+		Store:    db,
+		Log:      log,
+		metadata: m,
+		clients:  map[*client]bool{},
+		users:    map[int]*client{},
+		rooms:    map[int]*room{},
+		restore:  map[int]reconnectSlot{},
+		nextRoom: 1,
+		started:  time.Now(),
+	}
 	s.shop, e = loadShop(dir)
 	if e != nil {
 		return nil, e
@@ -215,6 +232,15 @@ func (s *Server) Serve(ctx context.Context, tcp net.Listener, udp *net.UDPConn) 
 			}
 			cancel()
 			return e
+		}
+		if host, _, splitErr := net.SplitHostPort(conn.RemoteAddr().String()); splitErr == nil {
+			banned, banErr := s.Store.IPBanned(host)
+			if banErr != nil {
+				s.Log.Warn("ip ban lookup failed", "ip", host, "error", banErr)
+			} else if banned {
+				conn.Close()
+				continue
+			}
 		}
 		c := &client{conn: conn, codec: protocol.NewCodec(), queue: make(chan outbound, 512)}
 		s.mu.Lock()
@@ -353,6 +379,12 @@ func (s *Server) dispatch(c *client, p protocol.Packet) error {
 			return r.Err
 		}
 		c.hwid = hwid
+		if banned, banErr := s.Store.HWIDBanned(hwid); banErr != nil {
+			return banErr
+		} else if banned {
+			c.conn.Close()
+			return errors.New("banned hwid")
+		}
 		c.loginHandshake = true
 		if s.Config.Crypt {
 			return s.beginCrypt(c)

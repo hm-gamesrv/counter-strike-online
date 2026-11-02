@@ -1,14 +1,14 @@
 # 迁移记录
 
-基准：`.ref@947fee4966381e05a4051cce8e24f23b351f1aaa` → `JusicP/CSNZ_Server@12644f2adc0708e2d8b74f7dd6a4c3c29d3e1140`。
+基准：`.ref/counter-strike-online@947fee4966381e05a4051cce8e24f23b351f1aaa`、`.ref/CSNZ_Server@12644f2adc0708e2d8b74f7dd6a4c3c29d3e1140`（部署形态与协议/数据基线）。
 
 | 上游 | Go 实现 | 剩余工作 |
 | --- | --- | --- |
 | `net/{extendedsocket,sendpacket,receivepacket}.cpp` | `internal/protocol` | SSL、实客户端抓包验证 |
 | `serverconfig.cpp` | `internal/config` | 随业务迁移补齐配置项 |
-| `manager/userdatabase_sqlite.cpp` | `internal/store` | 其余角色字段、会话历史、封禁规则、迁移工具 |
+| `manager/userdatabase_sqlite.cpp` | `internal/store` | 其余角色字段、会话历史、迁移工具；账号封禁与 HWID/IP 封禁已实现 |
 | `manager/usermanager.cpp` | `internal/server/{server,lobby,ban,update_info,messenger,addon,kick}.go` | 完整 UserInfo、装备；改名/位置/聊天色、Messenger、快捷购买与 Addon、superRoom 踢人、登录问卷、全服喇叭已实现，屏蔽名单已实现列表/设置/登录下发及聊天、私聊、房间加入过滤 |
-| `manager/channelmanager.cpp`、`room/roomsettings.cpp` | `internal/server/{rooms,room_defaults,room_social,host}.go` | 已实现邀请、房主踢人及踢出名单，以及 `ValidateSettings` 下的人数/时间/胜负/地图上限校验；仍缺 playlist、zbLimit、投票踢人、特殊模式限制与地图轮换 |
+| `manager/channelmanager.cpp`、`room/roomsettings.cpp` | `internal/server/{rooms,room_defaults,room_social,host,gm}.go` | 已实现邀请、房主踢人及踢出名单，以及 `ValidateSettings` 下的人数/时间/胜负/地图上限校验；仍缺 playlist、zbLimit、投票踢人、特殊模式限制与地图轮换 |
 | `manager/packetmanager.cpp` | `internal/server/{metadata,lobby,rooms,shop}.go` | 随各业务逐项实现出站结构 |
 | `manager/shopmanager.cpp` | `internal/server/shop.go`、`internal/store/purchase.go` | 当前客户端购买、计数堆叠和密码箱计数已实现；完整延期规则、礼包校验仍缺 |
 | `manager/itemmanager.cpp` | `internal/server/{inventory,rewards,reward_claims,reward_random}.go`、`internal/store/{inventory,purchase,rewards,reward_claims,item_extend,paint,part,costume}.go` | 已实现武器/角色启用、选择副本、锁定/解锁、固定/选择/随机奖励与领取去重、开箱、延期、武器涂装、部件、普通服装、ZB 皮肤、强化（含防降级）与删除式分解；仍缺完整合并 |
@@ -379,11 +379,10 @@
 - Voxel/Studio 房间列表 `65/34`、地图 254 的 Studio 房间创建仍未实现；当前只恢复登录 URL 和基础 Voxel 请求通路。
 - 新增测试覆盖 URL 包和 8 个占位回包。`go test ./...`、`go vet ./...` 通过；未做实机界面验收。
 
+## 2026-11-02 GM 命令与封禁
 
-
-
-
-
-
-
-
+- 角色加载新增 `UserCharacterExtended.gameMaster`，聊天命令按该标记鉴权；非 GM 的 `/` 消息仍按普通聊天广播。
+- 实现 `/help`、`/version`、`/disconnect`、`/status`、`/getfreeslots`、`/getuid`、`/addpoints`、`/givepoints`、`/sendnotice`、`/sendgmnotice`、`/ban`、`/hban`、`/ipban`、`/unban`，参数与提示语对照 `channelmanager.cpp:459-1200`。
+- `/ban` 写 `UserBan`（term 按天换算为分钟，0 视为 999999 天），`/hban`、`/ipban` 分别写 `HWIDBanList`、`IPBanList`；三者断开在线目标，`type=1` 向全服广播封禁原因。
+- 拦截点与上游一致：TCP accept 处拒绝 `IPBanList` 来源，登录握手（`U` 类型 3）处拒绝 `HWIDBanList` 中的 HWID；`/unban` 同时删除账号、IP、HWID 封禁。
+- 新增测试覆盖 GM 鉴权、封禁/解封、IP/HWID 拦截与积分修改。`go test ./...`、`go vet ./...` 通过；未做实机界面验收。
