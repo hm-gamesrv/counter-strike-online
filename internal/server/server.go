@@ -81,6 +81,7 @@ type Server struct {
 	enhanceExp   map[int][]int
 	enhanceMax   map[int]enhanceLimit
 	modes        map[int]modeDefinition
+	mapMax       map[int]int
 	dedicated    []*dedicatedServer
 	mu           sync.Mutex
 	clients      map[*client]bool
@@ -121,6 +122,10 @@ func New(dir string, c config.Config, db *store.Store, log *slog.Logger) (*Serve
 		return nil, e
 	}
 	s.modes, e = loadModes(dir)
+	if e != nil {
+		return nil, e
+	}
+	s.mapMax, e = loadMapLimits(dir)
 	if e != nil {
 		return nil, e
 	}

@@ -313,6 +313,10 @@ func (s *Server) roomRequest(c *client, r *protocol.Reader) error {
 			c.notice("Unsupported game mode.")
 			return nil
 		}
+		if err := s.validateRoomSettings(&st, 1); err != nil {
+			c.notice("Invalid room settings.")
+			return nil
+		}
 		if err := validateRoomFrame(st); err != nil {
 			return err
 		}
@@ -432,6 +436,10 @@ func (s *Server) roomRequest(c *client, r *protocol.Reader) error {
 		}
 		if merged.number(70) != 0 || merged.number(7) == 254 {
 			c.notice("Go migration: clan battles and Studio rooms are not implemented yet.")
+			return nil
+		}
+		if err := s.validateRoomSettings(&merged, len(currentRoom.members)); err != nil {
+			c.notice("Invalid room settings.")
 			return nil
 		}
 		if err := validateRoomFrame(merged); err != nil {

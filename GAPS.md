@@ -68,7 +68,7 @@
 | 道具养成 | itemmanager 2,986 行 + luckyitem 396 行 | 开箱、延期、涂装、部件、普通服装、ZB 皮肤与强化（含防降级）已实现；分解仍缺 |
 | 军团 | clanmanager 1,077 行 + 7 张表 | 完全缺失：创建/申请/审批/成员管理/仓库/军团任务/军团聊天 |
 | 小游戏 | minigamemanager 482 行 + 5 张表 | Bingo、武器解放全缺 |
-| 房间设置校验 | roomsettings 2,655 行 | Go 虽读取 `Room.ValidateSettings` 配置项但代码从未使用；上游按模式/地图校验人数、胜负限制、playlist、zbLimit、家族战、superRoom 等 |
+| 房间设置校验 | roomsettings 2,655 行 | 已实现 `Room.ValidateSettings` 开关下的基础校验：人数上下限、地图人数上限、胜负/击杀/时间/回合范围与步长；仍缺 playlist、zbLimit、家族战、superRoom 及模式-地图互斥等上游规则 |
 | 玩家资料与外围 | usermanager 1,541 行 | 缺公告 notices、到期提醒、离线奖励通知、会话历史、断线重连恢复到原房间；改名卡、聊天色、Messenger、快捷购买、Addon、问卷与全服喇叭已接 |
 | 对局结算补全 | gamematch 709 行 | 已有基础结算与等级/职业加成；缺道具加成（`GameMatch.CalcResults.BonusPercentage.Items` 已读未用）、模式统计事件（炸弹/拆弹/人质/怪物/蚊子/风筝）、场景掉落箱奖励（rewardID 3000–3023）、ZBS 名次奖励、第一名计算 |
 | 多频道 | channelmanager | 上游 `channelmanager.cpp:23` 自述 `TODO: Should we implement multi channels?`，不必实现 |
@@ -103,6 +103,6 @@
 ## 七、建议实施顺序
 
 1. **P0 兜底**：未实现子类型补错误回包。当前 78/7 等只写 debug 日志不回包，客户端界面会等待；上游每种失败都有明确回包，照搬即可。
-2. **P1 低成本高收益**：房间设置校验（配置项已预留）。
+2. **P1 低成本高收益**：房间设置校验剩余规则（playlist、zbLimit、家族战、superRoom、模式-地图互斥）。
 3. **P2 道具养成**：分解（78/7）。开箱（78/4）、延期（16）、涂装（17/24）、部件（21）、普通服装、ZB 皮肤、强化类型 0 与防降级类型 2 已接，后续继续复用现有事务与背包同步。
 4. **P3 大件与验收**：军团（71 + 7 表）、小游戏（89 + 5 表）、结算补全（道具加成、模式统计、场景奖励），以及真实 HLDS 与多人验收。

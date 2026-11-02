@@ -8,7 +8,7 @@
 | `serverconfig.cpp` | `internal/config` | 随业务迁移补齐配置项 |
 | `manager/userdatabase_sqlite.cpp` | `internal/store` | 其余角色字段、会话历史、封禁规则、迁移工具 |
 | `manager/usermanager.cpp` | `internal/server/{server,lobby,ban,update_info,messenger,addon,kick}.go` | 完整 UserInfo、装备；改名/位置/聊天色、Messenger、快捷购买与 Addon、superRoom 踢人、登录问卷、全服喇叭已实现，屏蔽名单已实现列表/设置/登录下发及聊天、私聊、房间加入过滤 |
-| `manager/channelmanager.cpp`、`room/roomsettings.cpp` | `internal/server/{rooms,room_defaults,room_social,host}.go` | 已实现邀请、房主踢人及踢出名单；仍缺完整设置校验、投票踢人、特殊模式限制与地图轮换 |
+| `manager/channelmanager.cpp`、`room/roomsettings.cpp` | `internal/server/{rooms,room_defaults,room_social,host}.go` | 已实现邀请、房主踢人及踢出名单，以及 `ValidateSettings` 下的人数/时间/胜负/地图上限校验；仍缺 playlist、zbLimit、投票踢人、特殊模式限制与地图轮换 |
 | `manager/packetmanager.cpp` | `internal/server/{metadata,lobby,rooms,shop}.go` | 随各业务逐项实现出站结构 |
 | `manager/shopmanager.cpp` | `internal/server/shop.go`、`internal/store/purchase.go` | 当前客户端购买、计数堆叠和密码箱计数已实现；完整延期规则、礼包校验仍缺 |
 | `manager/itemmanager.cpp` | `internal/server/{inventory,rewards,reward_claims,reward_random}.go`、`internal/store/{inventory,purchase,rewards,reward_claims,item_extend,paint,part,costume}.go` | 已实现武器/角色启用、选择副本、锁定/解锁、固定/选择/随机奖励与领取去重、开箱、延期、武器涂装、部件、普通服装、ZB 皮肤与强化（含防降级）；仍缺完整合并、分解 |
@@ -203,6 +203,13 @@
 - 道具 5205 清除全部强化，5206–5211 清除对应属性，5250 随机清除一项已有属性；未命中的属性或无法强化时返回系统错误且不消耗材料。
 - 结果分别按 `ENHANCE_LEVELDOWN`（3）和 `ENHANCE_FULLLEVELDOWN`（4）回包，包含材料槽、重算等级和属性索引。
 - 新增测试覆盖单项清除、全部清除、经验保留和空属性拒绝。`go test ./...`、`go vet ./...` 通过；未做实机界面验收。
+
+## 2026-11-02 房间设置校验
+
+- `GameModeList.csv` 现解析 `mode_minplayer`、`mode_create_minplayer` 以及胜负/击杀/时间/回合的 min|max|default|step 范围，不再只取默认值。
+- 新增 `MapList.csv` 的 `max_player` 读取；`Room.ValidateSettings=true` 时在创建和设置更新时校验人数、地图人数上限、模式范围和步长，失败回 `Invalid room settings.` 且不落库。
+- 开关默认关闭，保持现有房间行为不变。
+- 新增测试覆盖合法设置、越界、步长、地图上限、未知地图和关闭开关。`go test ./...`、`go vet ./...` 通过；未做实机界面验收。
 
 ## 2026-11-02 称号
 

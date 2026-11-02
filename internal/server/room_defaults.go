@@ -12,8 +12,23 @@ import (
 	"github.com/hm-gamesrv/cso-server-go/internal/protocol"
 )
 
+type limitRange struct {
+	Min  int
+	Max  int
+	Step int
+}
 type modeDefinition struct {
-	maxPlayers, wins, kills, gameTime, roundTime int
+	MaxPlayers       int
+	MinPlayers       int
+	CreateMinPlayers int
+	Wins             int
+	Kills            int
+	GameTime         int
+	RoundTime        int
+	WinLimit         limitRange
+	KillLimit        limitRange
+	TimeLimit        limitRange
+	RoundTimeLimit   limitRange
 }
 
 // The mode table shipped with the selected client is authoritative. Each limit
@@ -49,27 +64,62 @@ func loadModes(dir string) (map[int]modeDefinition, error) {
 		if err != nil {
 			return nil, err
 		}
-		value := func(name string, limit bool) int {
+		value := func(name string) int {
 			index := columns[name]
 			if index >= len(row) {
 				return 0
 			}
-			cell := row[index]
-			if limit {
-				parts := strings.Split(cell, "|")
-				if len(parts) != 4 {
-					return 0
-				}
-				cell = parts[2]
-			}
-			v, _ := strconv.Atoi(strings.TrimSpace(cell))
+			v, _ := strconv.Atoi(strings.TrimSpace(row[index]))
 			return v
 		}
-		id := value("mode_id", false)
-		if id < 0 || value("mode_maxplayer", false) == 0 {
+		rangeValue := func(name string) limitRange {
+			index := columns[name]
+			if index >= len(row) {
+				return limitRange{}
+			}
+			parts := strings.Split(row[index], "|")
+			if len(parts) != 4 {
+				return limitRange{}
+			}
+			value := func(part string) int {
+				v, _ := strconv.Atoi(strings.TrimSpace(part))
+				return v
+			}
+			r := limitRange{Min: value(parts[0]), Max: value(parts[1]), Step: value(parts[3])}
+			if r.Max < r.Min || r.Min < 0 || r.Step < 0 {
+				return limitRange{}
+			}
+			return r
+		}
+		defaultValue := func(name string) int {
+			index := columns[name]
+			if index >= len(row) {
+				return 0
+			}
+			parts := strings.Split(row[index], "|")
+			if len(parts) != 4 {
+				return 0
+			}
+			v, _ := strconv.Atoi(strings.TrimSpace(parts[2]))
+			return v
+		}
+		id := value("mode_id")
+		if id < 0 || value("mode_maxplayer") == 0 {
 			continue
 		}
-		modes[id] = modeDefinition{value("mode_maxplayer", false), value("mode_win_limit_id", true), value("mode_kill_limit_id", true), value("mode_time_limit_id", true), value("mode_roundtime_id", true)}
+		modes[id] = modeDefinition{
+			MaxPlayers:       value("mode_maxplayer"),
+			MinPlayers:       value("mode_minplayer"),
+			CreateMinPlayers: value("mode_create_minplayer"),
+			Wins:             defaultValue("mode_win_limit_id"),
+			Kills:            defaultValue("mode_kill_limit_id"),
+			GameTime:         defaultValue("mode_time_limit_id"),
+			RoundTime:        defaultValue("mode_roundtime_id"),
+			WinLimit:         rangeValue("mode_win_limit_id"),
+			KillLimit:        rangeValue("mode_kill_limit_id"),
+			TimeLimit:        rangeValue("mode_time_limit_id"),
+			RoundTimeLimit:   rangeValue("mode_roundtime_id"),
+		}
 	}
 	if len(modes) == 0 {
 		return nil, fmt.Errorf("GameModeList.csv has no modes")
@@ -98,16 +148,16 @@ func (s *Server) roomDefaults(st *settings, creating bool) bool {
 		return false
 	}
 	if !creating {
-		st.setNumber(8, d.maxPlayers, 1)
+		st.setNumber(8, d.MaxPlayers, 1)
 	}
 	if !creating || st.number(9) == 0 {
-		st.setNumber(9, d.wins, 1)
+		st.setNumber(9, d.Wins, 1)
 	}
 	if !creating || st.number(10) == 0 {
-		st.setNumber(10, d.kills, 2)
+		st.setNumber(10, d.Kills, 2)
 	}
-	st.setNumber(11, d.gameTime, 1)
-	st.setNumber(12, d.roundTime, 1)
+	st.setNumber(11, d.GameTime, 1)
+	st.setNumber(12, d.RoundTime, 1)
 	weapon := 0
 	if mode == 2 || mode == 5 || mode == 23 {
 		weapon = 9
