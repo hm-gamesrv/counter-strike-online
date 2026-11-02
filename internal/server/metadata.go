@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"compress/flate"
 	"encoding/json"
-	"fmt"
 	"hash/crc32"
 	"log/slog"
 	"os"
@@ -37,29 +36,37 @@ const (
 )
 
 // zipMetadataFrames wraps a zip stream for the metadata packet. The client
-// this server targets reads U8(id)/U16(size)/data, so that is the default. A
-// zipType frame (U8(id)/U8(5)/U16(size)/data, upstream CSNZ_Server's private
-// extension) is only produced when the configuration asks for it: that extra
-// byte is read as the payload length by the public client, which then parses
-// five bytes of the zip and raises a fatal error.
+// this server targets reads U8(id)/U16(size)/data, so that is the default: the
+// metadata header is three bytes, which leaves MaxPayload-3 for the zip itself.
+// A zipType frame (U8(id)/U8(5)/U16(size)/data, the framing CSNZ_Server added in
+// 3b56abf) is only produced when the configuration asks for it: the public
+// client then reads its U16 size at the wrong offset and dies on the garbage.
 func zipMetadataFrames(id int, data []byte, zipType bool) [][]byte {
-	if !zipType && len(data) <= protocol.MaxPayload {
+	if !zipType {
+		if len(data) > protocol.MaxPayload-3 {
+			return nil
+		}
 		w := &protocol.Writer{}
 		w.U8(id)
 		w.U16(len(data))
 		w.Bytes(data)
 		return [][]byte{w.Data}
 	}
-	if len(data) > metadataChunkSize && zipType {
+	// The chunked transfer caps at four 64000-byte chunks; a truncated archive
+	// marked as the last chunk would hand the client an incomplete zip.
+	if len(data) > metadataChunkSize*metadataMaxChunks {
+		return nil
+	}
+	if len(data) > metadataChunkSize {
 		frames := make([][]byte, 0, metadataMaxChunks)
-		for i := 0; i < metadataMaxChunks && len(data) > 0; i++ {
+		for i := 0; len(data) > 0; i++ {
 			n := len(data)
 			if n > metadataChunkSize {
 				n = metadataChunkSize
 			}
 			w := &protocol.Writer{}
 			w.U8(id)
-			if i == metadataMaxChunks-1 || n == len(data) {
+			if n == len(data) {
 				w.U8(metadataMaxChunks)
 			} else {
 				w.U8(i + 1)
@@ -70,10 +77,6 @@ func zipMetadataFrames(id int, data []byte, zipType bool) [][]byte {
 			data = data[n:]
 		}
 		return frames
-	}
-	if !zipType {
-		slog.Warn("metadata payload exceeds the legacy single frame limit; entry skipped", "id", id, "len", len(data))
-		return nil
 	}
 	w := &protocol.Writer{}
 	w.U8(id)
@@ -125,33 +128,94 @@ var metadataFiles = []metadataEntry{
 	{"Unk55", "Metadata_Unk55.bin", 55, true},
 }
 
+// metadataOrder is the dispatch sequence of CSNZ_Server@12644f2's
+// CUserManager::SendMetadata, limited to the types this server implements.
+// Hash (255) stays out: the baseline sender writes an empty payload and the
+// default configuration keeps it disabled.
+var metadataOrder = []string{
+	"Maplist",
+	"ClientTable",
+	"ModeList",
+	"Unk3",
+	"ItemBox",
+	"WeaponPaints",
+	"Unk8",
+	"MatchOption",
+	"ZombieWarWeaponList",
+	"WeaponParts",
+	"MileageShop",
+	"Unk20",
+	"Encyclopedia",
+	"GameModeList",
+	"ProgressUnlock",
+	"ReinforceMaxLvl",
+	"ReinforceMaxEXP",
+	"ReinforceItemsExp",
+	"Unk31",
+	"HonorMoneyShop",
+	"ItemExpireTime",
+	"ScenarioTX_Common",
+	"ScenarioTX_Dedi",
+	"ShopItemList_Dedi",
+	"ZBCompetitive",
+	"Unk43",
+	"Unk49",
+	"PPSystem",
+	"Item",
+	"CodisData",
+	"WeaponProp",
+	"RandomWeaponList",
+	"ModeEvent",
+	"EventShop",
+	"FamilyTotalWarMap",
+	"FamilyTotalWar",
+	"Unk54",
+	"Unk55",
+}
+
+// metadataTypeIDs holds the type byte of the entries built in code instead of
+// being read from a file.
+var metadataTypeIDs = map[string]int{
+	"ItemBox":             4,
+	"WeaponPaints":        6,
+	"ZombieWarWeaponList": 15,
+	"RandomWeaponList":    16,
+}
+
 func loadMetadata(dir string, c config.Config) ([][]byte, error) {
-	var packets [][]byte
+	// byName holds the frames of every enabled entry; packets are emitted in
+	// metadataOrder afterwards so the sequence matches the baseline dispatcher.
+	byName := map[string][][]byte{}
 	for _, entry := range metadataFiles {
 		if !c.Metadata[entry.Name] {
 			continue
 		}
 		b, e := os.ReadFile(filepath.Join(dir, "Data", entry.File))
 		if e != nil {
-			return nil, e
-		}
-		if !entry.Raw {
-			archive, e := classicZip(entry.File, b)
-			if e != nil {
-				return nil, e
-			}
-			for _, frame := range zipMetadataFrames(entry.ID, archive, c.MetadataZipTypeByte) {
-				if len(frame)+5 > protocol.MaxFrame {
-					return nil, fmt.Errorf("metadata %s exceeds frame limit", entry.File)
-				}
-				packets = append(packets, frame)
-			}
+			// Baseline senders return early when a data file is missing; mirror
+			// that instead of refusing to start, so a trimmed Data directory only
+			// loses the corresponding metadata.
+			slog.Warn("metadata file missing; entry skipped", "file", entry.File, "error", e)
 			continue
 		}
-		if len(b)+5 > protocol.MaxFrame {
-			return nil, fmt.Errorf("metadata %s exceeds frame limit", entry.File)
+		if entry.Raw {
+			if len(b)+5 > protocol.MaxFrame {
+				slog.Warn("metadata payload exceeds the frame limit; entry skipped", "file", entry.File, "len", len(b))
+				continue
+			}
+			byName[entry.Name] = [][]byte{b}
+			continue
 		}
-		packets = append(packets, b)
+		archive, e := classicZip(entry.File, b)
+		if e != nil {
+			return nil, e
+		}
+		frames := zipMetadataFrames(entry.ID, archive, c.MetadataZipTypeByte)
+		if len(frames) == 0 {
+			slog.Warn("metadata zip exceeds the frame budget; entry skipped", "file", entry.File, "zip", len(archive))
+			continue
+		}
+		byName[entry.Name] = frames
 	}
 	if c.Metadata["WeaponPaints"] {
 		var paints map[string]json.RawMessage
@@ -174,7 +238,7 @@ func loadMetadata(dir string, c config.Config) ([][]byte, error) {
 				w.U16(v)
 			}
 		}
-		packets = append(packets, w.Data)
+		byName["WeaponPaints"] = [][]byte{w.Data}
 	}
 	if c.Metadata["ZombieWarWeaponList"] {
 		var p struct{ Weapons []int }
@@ -187,7 +251,7 @@ func loadMetadata(dir string, c config.Config) ([][]byte, error) {
 		for _, v := range p.Weapons {
 			w.U32(v)
 		}
-		packets = append(packets, w.Data)
+		byName["ZombieWarWeaponList"] = [][]byte{w.Data}
 	}
 	if c.Metadata["RandomWeaponList"] {
 		var p map[string]json.RawMessage
@@ -214,7 +278,7 @@ func loadMetadata(dir string, c config.Config) ([][]byte, error) {
 				w.U32(modes[m].EnhanceProbability)
 			}
 		}
-		packets = append(packets, w.Data)
+		byName["RandomWeaponList"] = [][]byte{w.Data}
 	}
 	if c.Metadata["ItemBox"] {
 		var boxes map[string]struct {
@@ -250,9 +314,9 @@ func loadMetadata(dir string, c config.Config) ([][]byte, error) {
 				}
 			}
 		}
-		// CSNZ_Server@12644f2 writes U8(type)/U32(count)/entries: no "unknown"
-		// byte and no length prefix. The later private build added both, which is
-		// what made this packet crash the client.
+		// CSNZ_Server@12644f2 writes U8(type)/U32(count)/entries. The later build
+		// only inserted a U8(0) marker before the count, which shifts the count
+		// the client reads and makes this packet crash it.
 		w := &protocol.Writer{}
 		w.U8(4)
 		w.U32(len(pairs))
@@ -268,12 +332,11 @@ func loadMetadata(dir string, c config.Config) ([][]byte, error) {
 			w.U16(0)
 			w.U8(0)
 		}
-		packets = append(packets, w.Data)
+		byName["ItemBox"] = [][]byte{w.Data}
 	}
-	for _, b := range packets {
-		if len(b)+5 > protocol.MaxFrame {
-			return nil, fmt.Errorf("metadata payload exceeds frame limit: %d", len(b))
-		}
+	var packets [][]byte
+	for _, name := range metadataOrder {
+		packets = append(packets, byName[name]...)
 	}
 	return packets, nil
 }

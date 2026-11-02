@@ -62,12 +62,80 @@ func TestMetadataZipFrames(t *testing.T) {
 		t.Fatalf("chunk payload %d, want %d", rest, len(payload))
 	}
 
-	tooBig := bytes.Repeat([]byte("y"), metadataChunkSize*5)
-	if chunks = zipMetadataFrames(33, tooBig, true); len(chunks) != metadataMaxChunks {
-		t.Fatalf("truncated chunks %d", len(chunks))
+	// A payload beyond four chunks must not be sent as a truncated archive.
+	tooBig := bytes.Repeat([]byte("y"), metadataChunkSize*metadataMaxChunks+1)
+	if chunks = zipMetadataFrames(33, tooBig, true); chunks != nil {
+		t.Fatalf("chunked framing truncated an oversized payload into %d frames", len(chunks))
 	}
 	if frames = zipMetadataFrames(33, tooBig, false); frames != nil {
 		t.Fatalf("legacy framing accepted an oversized payload: %d frames", len(frames))
+	}
+
+	// The metadata header costs three bytes, so the single-frame zip budget is
+	// MaxPayload-3 (65528 for the current transport).
+	exact := bytes.Repeat([]byte("z"), protocol.MaxPayload-3)
+	if frames = zipMetadataFrames(34, exact, false); len(frames) != 1 {
+		t.Fatalf("boundary payload rejected: %d frames", len(frames))
+	}
+	over := bytes.Repeat([]byte("z"), protocol.MaxPayload-2)
+	if frames = zipMetadataFrames(34, over, false); frames != nil {
+		t.Fatalf("payload over the frame budget accepted: %d bytes", len(frames[0]))
+	}
+}
+
+func TestMetadataDispatchOrder(t *testing.T) {
+	dir := t.TempDir()
+	if err := assets.Init(dir); err != nil {
+		t.Fatal(err)
+	}
+	enabled := map[string]bool{}
+	for _, entry := range metadataFiles {
+		enabled[entry.Name] = true
+	}
+	for name := range metadataTypeIDs {
+		enabled[name] = true
+	}
+	packets, err := loadMetadata(dir, config.Config{Metadata: enabled})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(packets) < 20 {
+		t.Fatalf("packets %d", len(packets))
+	}
+	order := map[int]int{}
+	for i, name := range metadataOrder {
+		if id, ok := metadataTypeIDs[name]; ok {
+			order[id] = i
+			continue
+		}
+		for _, entry := range metadataFiles {
+			if entry.Name == name {
+				order[entry.ID] = i
+				break
+			}
+		}
+	}
+	previous := -1
+	seen := map[int]bool{}
+	for _, packet := range packets {
+		id := int(packet[0])
+		position, ok := order[id]
+		if !ok {
+			t.Fatalf("metadata type %d is not in metadataOrder", id)
+		}
+		if position <= previous {
+			t.Fatalf("metadata type %d arrives out of the baseline order", id)
+		}
+		previous = position
+		seen[id] = true
+	}
+	// Spot-check the relations the previous implementation got wrong: the built
+	// packets sat at the end of the stream instead of their baseline slots.
+	if !seen[4] || !seen[6] || !seen[15] || !seen[16] {
+		t.Fatalf("built metadata types missing: %v", seen)
+	}
+	if order[4] > order[8] || order[6] > order[8] || order[16] < order[42] {
+		t.Fatal("built metadata types are not in their baseline slots")
 	}
 }
 
