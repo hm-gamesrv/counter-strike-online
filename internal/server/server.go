@@ -449,6 +449,8 @@ func (s *Server) dispatch(c *client, p protocol.Packet) error {
 			return s.surveyRequest(c, r)
 		case 89:
 			return s.miniGameRequest(c, r)
+		case 103:
+			return s.voxelRequest(c, r)
 		case 93:
 			return s.messengerRequest(c, r)
 		case 115:

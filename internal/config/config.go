@@ -85,6 +85,13 @@ type DefaultUser struct {
 	Loadouts           map[string]map[string]int
 	BuyMenu            map[string]map[string]int
 }
+type Voxel struct {
+	VoxelHTTPIP   string
+	VoxelHTTPPort string
+	VoxelVxlURL   string
+	VoxelVmgURL   string
+}
+
 type Config struct {
 	HostName               string
 	Description            string
@@ -129,6 +136,7 @@ type Config struct {
 	Surveys                  map[string]Survey
 	Notices                  map[string]Notice
 	MiniGames                MiniGames
+	Voxel                    Voxel
 }
 
 func Load(path string) (Config, error) {

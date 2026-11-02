@@ -381,6 +381,7 @@ func (s *Server) loginPackets(c *client) error {
 	w.U32(s.eventFlags())
 	c.send(159, w)
 	s.sendMainMenuSkin(c)
+	s.sendVoxelURLs(c)
 	if s.miniGame.Active {
 		if e := s.sendWeaponReleaseUpdate(c); e != nil {
 			return e

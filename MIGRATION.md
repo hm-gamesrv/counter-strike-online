@@ -14,7 +14,7 @@
 | `manager/itemmanager.cpp` | `internal/server/{inventory,rewards,reward_claims,reward_random}.go`、`internal/store/{inventory,purchase,rewards,reward_claims,item_extend,paint,part,costume}.go` | 已实现武器/角色启用、选择副本、锁定/解锁、固定/选择/随机奖励与领取去重、开箱、延期、武器涂装、部件、普通服装、ZB 皮肤、强化（含防降级）与删除式分解；仍缺完整合并 |
 | `manager/{host,dedicatedserver}manager.cpp`、`room/gamematch.cpp` | `internal/server/{host,dedicated,catalog}.go`、`internal/store/{match,levels}.go` | 已实现开局、主机背包、计数、存档迁移、专服池、场景道具使用、场景掉落箱奖励、装备加成与基础结算；尚需真实客户端/HLDS 对局验收、ZBS 名次奖励及特殊模式规则 |
 | `manager/questmanager.cpp`、`quest/questevent.*` | `internal/server/{quests,title}.go`、`internal/store/{quests,quest_events,title}.go` | 已接活动任务条件与持久化进度、完成奖励，以及 `84` 称号前缀/槽位；尚缺任务界面、每日/荣誉/军团任务及称号解锁、VIP 事件与完整实机验收 |
-| `manager/{clan,rank,minigame,luckyitem,voxel}manager.cpp` | `internal/server/{clan,minigame,bingo}.go`、`internal/store/{clan,clan_storage,weapon_release,bingo}.go` | 军团 7 张表、协议与仓库已接；武器解放与 Bingo 基础流程已接；仍缺军团任务、军团战踢人、排行、抽奖与 Voxel |
+| `manager/{clan,rank,minigame,luckyitem,voxel}manager.cpp` | `internal/server/{clan,minigame,bingo}.go`、`internal/store/{clan,clan_storage,weapon_release,bingo}.go` | 军团 7 张表、协议与仓库已接；武器解放与 Bingo 基础流程已接；仍缺军团任务、军团战踢人、排行、抽奖、Voxel 房间列表与 Studio 房间 |
 
 当前已跑通真实客户端机器人对局、正常结算和返回房间。后续优先级按用户要求执行下表；每项应以原版出入站协议样本、当前客户端和数据库前后快照校验。
 
@@ -371,6 +371,13 @@
 - 接入 `89/0/0,1,3,4`：桌面查询、开格、完成五连线发奖、洗牌（已开格 >11 或已开奖 >1 时拒绝）和重置。上游 open-random 本身被注释，Go 简化为从未开格中随机选择。
 - 新增 `UserMiniGameBingo`、`UserMiniGameBingoSlot`、`UserMiniGameBingoPrizeSlot` 的事务读写；开格、奖项状态和发奖流程已接，发奖失败保留未开格状态。
 - 新增测试覆盖初始化、开格、连线奖项、洗牌、重置和客户端更新包。`go test ./...`、`go vet ./...` 通过；未做实机界面验收。
+
+## 2026-11-02 Voxel 基础通路
+
+- 配置新增 `Voxel` 段；登录下发 `103/20` 的 `VoxelVxlURL` 和 `VoxelVmgURL`。
+- 接入 `103` 的 `4/8/9/10/38/46/47/58` 固定占位回包，与上游一致。
+- Voxel/Studio 房间列表 `65/34`、地图 254 的 Studio 房间创建仍未实现；当前只恢复登录 URL 和基础 Voxel 请求通路。
+- 新增测试覆盖 URL 包和 8 个占位回包。`go test ./...`、`go vet ./...` 通过；未做实机界面验收。
 
 
 
