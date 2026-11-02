@@ -644,28 +644,8 @@ func (s *Server) migrateHost(r *room) {
 
 // grantDropBox awards the scene drop box prize carried by host game event 34.
 func (s *Server) grantDropBox(c *client, rewardID int) {
-	p, err := s.buildCatalogReward(rewardID, 1)
-	if err != nil {
-		if s.Log != nil {
-			s.Log.Warn("drop box reward unavailable", "user", c.user.ID, "reward", rewardID, "error", err)
-		}
-		return
-	}
-	changed, err := s.Store.GrantReward(c.user.ID, p.Grant, s.Config.InventorySlotMax, len(s.Config.DefaultUser.DefaultItems))
-	if err != nil {
-		if s.Log != nil {
-			s.Log.Warn("drop box grant failed", "user", c.user.ID, "reward", rewardID, "error", err)
-		}
-		return
-	}
-	if err = s.sendInventoryItems(c, changed); err != nil {
-		if s.Log != nil {
-			s.Log.Warn("drop box inventory update failed", "user", c.user.ID, "error", err)
-		}
-		return
-	}
-	if w := rewardNotice(p.Label, p.NoticeItems, p.Grant); len(w.Data) <= protocol.MaxPayload {
-		c.send(67, w)
+	if err := s.grantCatalogReward(c, rewardID); err != nil && s.Log != nil {
+		s.Log.Warn("drop box grant failed", "user", c.user.ID, "reward", rewardID, "error", err)
 	}
 }
 

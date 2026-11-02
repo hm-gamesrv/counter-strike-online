@@ -370,17 +370,7 @@ func (s *Server) loginPackets(c *client) error {
 		return e
 	}
 	s.sendShop(c)
-	w = &protocol.Writer{}
-	w.U8(0)
-	w.U8(5)
-	for i := 0; i < 5; i++ {
-		w.U8(i)
-		w.U8(1)
-		w.U16(1)
-		w.U8(5)
-		w.U32(0)
-	}
-	c.send(180, w)
+	s.sendLeague(c)
 	s.joinLobby(c)
 	c.send(69, &protocol.Writer{Data: []byte{11}})
 	if s.Config.WelcomeMessage != "" {
@@ -390,6 +380,12 @@ func (s *Server) loginPackets(c *client) error {
 		return e
 	}
 	s.sendNotices(c)
+	if e := s.grantRewardNotices(c); e != nil {
+		return e
+	}
+	if e := s.sendExpiryNotices(c); e != nil {
+		return e
+	}
 	if !c.questLogin {
 		if err := s.applyQuestEvent(c, nil, nil, questEvent{Kind: 3}); err != nil {
 			return err
@@ -647,4 +643,17 @@ func (s *Server) setLoadoutItem(c *client, kind int, r *protocol.Reader) error {
 	}
 	_, err := s.Store.DB.Exec("UPDATE UserLoadout SET slot"+strconv.Itoa(slot)+"=? WHERE userID=? AND loadoutID=?", item, c.user.ID, current)
 	return err
+}
+func (s *Server) sendLeague(c *client) {
+	w := &protocol.Writer{}
+	w.U8(0)
+	w.U8(5)
+	for i := 0; i < 5; i++ {
+		w.U8(i)
+		w.U8(1)
+		w.U16(1)
+		w.U8(5)
+		w.U32(0)
+	}
+	c.send(180, w)
 }

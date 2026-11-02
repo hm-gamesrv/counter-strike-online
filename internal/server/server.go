@@ -432,6 +432,11 @@ func (s *Server) dispatch(c *client, p protocol.Packet) error {
 			return s.messengerRequest(c, r)
 		case 115:
 			return s.addonRequest(c)
+		case 180:
+			if r.U8() == 0 {
+				s.sendLeague(c)
+			}
+			return r.Err
 		case 112:
 			return s.kickRequest(c, r)
 		case 16:
