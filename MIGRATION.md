@@ -511,6 +511,6 @@
 - `loadMetadata` 改为"先按名字收集帧、再按 `metadataOrder` 发射"。`metadataOrder` 就是基线 `CUserManager::SendMetadata` 的调度顺序（`Hash` 保持不实现、默认关闭）；此前 ItemBox/WeaponPaints/ZombieWar/RandomWeapon 被追加在表尾，与基线不符。
 - 单帧预算修正为 `protocol.MaxPayload-3`（元数据头 `U8(type)+U16(size)` 占 3 字节），65528/65529 边界由测试覆盖。`MetadataZipTypeByte` 的 64000×4 分块在超限时直接跳过并告警，不再发送被截断却标记为末块的 zip。
 - 缺少数据文件的条目跳过并 `Warn`（对应基线 sender 文件缺失即 return），不再让 `New` 失败。
-- 后续路线：`e5721ed` 之后的 8 个提交才开始动协议，按顺序逐个过渡——`4859a6e`（数据）、`3b56abf`（引入 `ZIPMETADATA_FULL_ZIP` 帧与 64000 分块，需要把 `MetadataZipTypeByte` 打开）、`6e5275c`（ItemBox 增加 `U8(0)`）、`90bc74a`/`293c9dc`（Voxel 多服务器、voxelhttp 主机名）、`a6e0bf0`/`a2f0026`/`3aac2d2`（typo、content-length、P2P 换图）。`3b56abf` 起的帧本客户端不接受，只有客户端升级后才应切换默认帧。
+- 后续路线：`e5721ed` 是 PR #45 的分支头；`4859a6e` 是它的合并提交（`git diff e5721ed 4859a6e` 为空，内容相同，master 上取它等价）。此后共 7 个提交才动协议，按顺序逐个过渡——`3b56abf`（引入 `ZIPMETADATA_FULL_ZIP` 帧与 64000 分块，需要把 `MetadataZipTypeByte` 打开）、`6e5275c`（ItemBox 增加 `U8(0)`）、`90bc74a`/`293c9dc`（Voxel 多服务器、voxelhttp 主机名）、`a6e0bf0`/`a2f0026`/`3aac2d2`（typo、content-length、P2P 换图）。`3b56abf` 起的帧本客户端不接受，只有客户端升级后才应切换默认帧。
 - 验证：`go build`、`go vet`、`go test ./...` 全绿；全开配置 + 新基线数据（地图 322、模式 51、道具 3020）下真实客户端登录不闪退。
 
