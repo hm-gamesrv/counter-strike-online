@@ -31,12 +31,20 @@ func validateServer() *Server {
 				TimeLimit:        limitRange{Min: 150, Max: 150},
 				RoundTimeLimit:   limitRange{Min: 2, Max: 3, Step: 1},
 			},
+			3: {
+				MaxPlayers:       16,
+				CreateMinPlayers: 1,
+			},
 			9: {
 				MaxPlayers:       16,
 				CreateMinPlayers: 1,
 			},
 			15: {
 				MaxPlayers:       8,
+				CreateMinPlayers: 1,
+			},
+			16: {
+				MaxPlayers:       16,
 				CreateMinPlayers: 1,
 			},
 		},
@@ -61,6 +69,18 @@ func validateServer() *Server {
 			5: {
 				MaxPlayer: 16,
 				Values:    map[string]int{"map_id": 5, "map_zombi_expand": 1},
+			},
+			6: {
+				MaxPlayer: 16,
+				Values:    map[string]int{"map_id": 6, "map_original": 1, "weapon_restrict_deault": 5},
+			},
+			7: {
+				MaxPlayer: 16,
+				Values:    map[string]int{"map_id": 7, "map_bot_original": 1, "ball_max": 2},
+			},
+			8: {
+				MaxPlayer: 16,
+				Values:    map[string]int{"map_id": 8, "map_FunMode": 1, "Fun_Subtype(1)": 16, "ball_max": 2},
 			},
 		},
 	}
@@ -305,5 +325,73 @@ func TestSanitizeOptionalRoomFields(t *testing.T) {
 	}
 	if len(st.fields[28]) != 1 || st.fields[28][0] != 0x01 {
 		t.Fatalf("view flags not cleaned: %v", st.fields[28])
+	}
+
+	st = validRoomSettings()
+	st.fields[34] = []byte{5, 4, 5, 0, 1}
+	st.flags[1] |= 1 << 2
+	if err := s.validateRoomSettings(&st, 1); err != nil {
+		t.Fatal(err)
+	}
+	if st.hasField(34) {
+		t.Fatal("bot settings kept for a mode without bots")
+	}
+	st = validRoomSettings()
+	st.setNumber(6, 3, 1)
+	st.setNumber(7, 7, 2)
+	st.fields[34] = []byte{9, 20, 0, 0, 1}
+	st.flags[1] |= 1 << 2
+	if err := s.validateRoomSettings(&st, 1); err != nil {
+		t.Fatal(err)
+	}
+	if got := st.fields[34]; len(got) != 5 || got[0] != 7 || got[1] != 15 || got[2] != 1 {
+		t.Fatalf("bot clamp %v", got)
+	}
+	st = validRoomSettings()
+	st.setNumber(6, 3, 1)
+	st.setNumber(7, 7, 2)
+	st.setNumber(38, 3, 1)
+	if err := s.validateRoomSettings(&st, 1); err != nil {
+		t.Fatal(err)
+	}
+	if st.hasField(38) {
+		t.Fatal("ball number kept for a mode without football")
+	}
+	st = validRoomSettings()
+	st.setNumber(6, 16, 1)
+	st.setNumber(7, 8, 2)
+	st.setNumber(38, 1, 1)
+	if err := s.validateRoomSettings(&st, 1); err != nil {
+		t.Fatal(err)
+	}
+	if !st.hasField(38) {
+		t.Fatal("valid ball number was dropped")
+	}
+	st = validRoomSettings()
+	st.setNumber(6, 16, 1)
+	st.setNumber(7, 8, 2)
+	st.setNumber(38, 3, 1)
+	if err := s.validateRoomSettings(&st, 1); err != nil {
+		t.Fatal(err)
+	}
+	if st.hasField(38) {
+		t.Fatal("ball number above the map limit was kept")
+	}
+	st = validRoomSettings()
+	st.setNumber(69, 20, 1)
+	st.flags[2] |= 1 << 5
+	if err := s.validateRoomSettings(&st, 1); err != nil {
+		t.Fatal(err)
+	}
+	if st.number(69) != 13 {
+		t.Fatalf("weapon restriction clamp %d", st.number(69))
+	}
+	st = validRoomSettings()
+	st.setNumber(7, 6, 2)
+	if err := s.validateRoomSettings(&st, 1); err != nil {
+		t.Fatal(err)
+	}
+	if st.number(69) != 5 {
+		t.Fatalf("map default weapon restriction %d", st.number(69))
 	}
 }

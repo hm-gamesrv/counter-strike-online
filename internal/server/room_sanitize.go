@@ -169,6 +169,40 @@ func defaultFriendlyFire(mode int) int {
 	return 0
 }
 
+func defaultFriendlyBots(mode int) int {
+	switch mode {
+	case 3, 4, 5:
+		return 4
+	case 24, 57:
+		return 5
+	case 22:
+		return 7
+	case 14, 45, 54, 58:
+		return 8
+	}
+	return 0
+}
+
+func defaultEnemyBots(mode int) int {
+	switch mode {
+	case 3, 4, 5:
+		return 5
+	case 24, 57:
+		return 6
+	case 14, 22, 45, 54, 58:
+		return 8
+	}
+	return 0
+}
+
+func defaultBotAdd(mode int) int {
+	switch mode {
+	case 3, 4, 5, 14, 22, 24, 45, 54, 57, 58:
+		return 1
+	}
+	return 0
+}
+
 func (s *Server) sanitizeRoomSettings(st *settings, mode, mapID int) {
 	// Fields upstream always drops or clamps on a room update.
 	for _, index := range []int{1, 4, 5, 19, 22, 23, 24, 25, 26, 27, 30} {
@@ -217,6 +251,48 @@ func (s *Server) sanitizeRoomSettings(st *settings, mode, mapID int) {
 	}
 	if st.hasField(28) && len(st.fields[28]) == 1 { // view flags
 		st.fields[28][0] &^= 1<<1 | 1<<2 | 1<<3 | 1<<4
+	}
+	if st.hasField(34) { // bots: difficulty, friendly, enemy, balance, add
+		b := st.fields[34]
+		if len(b) != 5 {
+			st.clearField(34)
+		} else if defaultBotAdd(mode) == 0 {
+			st.clearField(34)
+		} else if mode == 3 || mode == 4 || mode == 5 || mode == 24 {
+			if b[0] > 7 {
+				b[0] = 7
+			}
+			if b[1] > 15 {
+				b[1] = 15
+			}
+			if b[2] < 1 {
+				b[2] = 1
+			}
+			if b[2] > 16 {
+				b[2] = 16
+			}
+		} else if int(b[1]) != defaultFriendlyBots(mode) || int(b[2]) != defaultEnemyBots(mode) || int(b[3]) != defaultBotAdd(mode) {
+			st.clearField(34)
+		} else if b[0] > 2 {
+			b[0] = 2
+		}
+	}
+	if st.hasField(38) { // ball number
+		if mode != 16 && st.number(38) != 0 {
+			st.clearField(38)
+		} else if row, ok := s.maps[mapID]; ok {
+			if max := row.value("ball_max"); max > 0 && st.number(38) > max {
+				st.clearField(38)
+			}
+		}
+	}
+	if st.hasField(69) { // weapon restriction
+		st.clampField(69, 13)
+	}
+	if row, ok := s.maps[mapID]; ok {
+		if restriction := row.value("weapon_restrict_deault"); restriction != 0 {
+			st.setNumber(69, restriction, 1)
+		}
 	}
 
 	// Studio settings only exist on the Voxel map.

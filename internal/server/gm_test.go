@@ -38,15 +38,7 @@ func startGMTestServer(t *testing.T, gameMaster bool) (string, *store.Store, *Se
 	if e != nil {
 		t.Fatal(e)
 	}
-	tcp, e := net.Listen("tcp4", "127.0.0.1:0")
-	if e != nil {
-		t.Fatal(e)
-	}
-	addr, _ := net.ResolveUDPAddr("udp4", tcp.Addr().String())
-	udp, e := net.ListenUDP("udp4", addr)
-	if e != nil {
-		t.Fatal(e)
-	}
+	tcp, udp := listenTestPair(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() { done <- srv.Serve(ctx, tcp, udp) }()

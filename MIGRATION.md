@@ -447,3 +447,11 @@
 - `refreshSuperRoom` 扩展为 `refreshHostRoomItems`：`superRoom`（8357）、`sd` 大头事件（439）、`c4Timer` 音效（112）都按房主实际持有道具决定；`sd` 只在模式 3/4/5/15/24 生效，其余模式清除。
 - 补充 `LoadNewSettings` 的低层清洗：`buyTime`/`startingCash` 取值校验，`teamBalance`/`friendlyFire` 默认值比对，`viewFlag` 位清理，`displayNickname`/`hostageKillLimit`/`freezeTime`/`flashLight`/`voiceChat` 夹紧，以及 `levelLimit`/`status` 等上游固定丢弃的字段。
 - 测试覆盖房主道具应用与清除、buyTime/startingCash、teamBalance、viewFlag。`go test ./...`、`go vet ./...` 通过；未做实机界面验收。
+
+## 2026-11-02 bot/ballNumber/武器限制字段
+
+- 房间清洗补充 bot 块（5 字节：难度/友方/敌方/平衡/追加）：模式 3/4/5/24 夹紧难度 ≤7、友方 ≤15、敌方 1..16；其他模式与默认值不一致时整块清除，难度 ≤2。
+- `ballNumber` 只在地图 16（足球）模式保留，且不超过地图 `ball_max`。
+- `weaponRestrict` 夹紧到 13；地图带 `weapon_restrict_deault` 时按地图默认值覆盖下发。
+- 新增测试覆盖 bot 清除/夹紧、ballNumber 合法与超限、weaponRestrict 夹紧和地图默认限制。
+- 测试基础设施：新增 `listenTestPair` 重试同一端口的 TCP/UDP 绑定，规避 Windows 偶发拒绝 UDP 端口的问题。`go test ./...`、`go vet ./...` 通过；未做实机界面验收。

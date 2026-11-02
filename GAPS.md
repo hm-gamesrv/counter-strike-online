@@ -9,7 +9,7 @@
 - 入口覆盖：上游 33 个入口中 Go 已接 28 个（含 UDP）；未接的 5 个在上游是空实现或桩（`15`、`83`、`88`、`90`、`164`）；`103 Voxel` 已接登录 URL 与占位回包。
 - 业务覆盖：上一版列出的道具养成、军团、武器解放、房间设置校验、称号、屏蔽名单、问卷、重连恢复、结算加成与排名等均已实现（见附录）。
 - 剩余缺口集中在：Studio 房间创建（依赖 Voxel 槽位 HTTP 服务）、少数 GM 命令、可选房间字段的模式清洗与 SSL。Bingo 与 Voxel `103` 基础通路已接。
-- 规模：C++ 核心约 4.6 万行（不含 GUI/thirdparty/test）；Go 非测试 15,057 行、含测试 22,950 行。
+- 规模：C++ 核心约 4.6 万行（不含 GUI/thirdparty/test）；Go 非测试 15,133 行、含测试 23,126 行。
 
 ## 〇、默认数据与目标客户端
 
@@ -66,7 +66,7 @@ Go 在 `Room.ValidateSettings` 下已校验人数、地图人数上限、胜负/
 
 房主道具相关设置也已接：`superRoom`（道具 8357）、`sd` 大头事件（道具 439）、`c4Timer` 音效（道具 112）；`buyTime`/`startingCash` 取值校验、`teamBalance`/`friendlyFire` 默认值比对、`viewFlag` 位清理、`displayNickname`/`hostageKillLimit`/`freezeTime`/`flashLight`/`voiceChat` 夹紧，以及上游固定丢弃的 `levelLimit`/`status` 等字段。
 
-仍缺：bot 数量与难度夹紧、`ballNumber` 模式/地图校验、`weaponRestrict` 夹紧和地图默认武器限制下发。`ValidateSettings` 关闭时这些字段仍按客户端原样保留（与上游一致）。
+bot 数量/难度夹紧（模式 3/4/5/24 上限、其他模式默认值比对）、`ballNumber` 模式与地图上限校验、`weaponRestrict` 夹紧和地图默认武器限制下发也已接。房间设置校验到这里已基本对齐，剩余只有 Studio 房间（依赖 Voxel 槽位服务）和实机验收。`ValidateSettings` 关闭时这些字段仍按客户端原样保留（与上游一致）。
 
 ### 1.6 SSL
 
