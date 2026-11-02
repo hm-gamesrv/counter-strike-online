@@ -87,6 +87,7 @@ type Server struct {
 	clients      map[*client]bool
 	users        map[int]*client
 	rooms        map[int]*room
+	restore      map[int]reconnectSlot
 	nextRoom     int
 }
 
@@ -104,7 +105,7 @@ func New(dir string, c config.Config, db *store.Store, log *slog.Logger) (*Serve
 	if log == nil {
 		log = slog.Default()
 	}
-	s := &Server{Config: c, Store: db, Log: log, metadata: m, clients: map[*client]bool{}, users: map[int]*client{}, rooms: map[int]*room{}, nextRoom: 1}
+	s := &Server{Config: c, Store: db, Log: log, metadata: m, clients: map[*client]bool{}, users: map[int]*client{}, rooms: map[int]*room{}, restore: map[int]reconnectSlot{}, nextRoom: 1}
 	s.shop, e = loadShop(dir)
 	if e != nil {
 		return nil, e
@@ -185,6 +186,7 @@ func (s *Server) Serve(ctx context.Context, tcp net.Listener, udp *net.UDPConn) 
 			case now := <-ticker.C:
 				s.mu.Lock()
 				s.tickQuestTime(now)
+				s.pruneRestore(now)
 				s.mu.Unlock()
 			}
 		}
@@ -222,6 +224,7 @@ func (s *Server) serveClient(ctx context.Context, c *client) {
 		c.conn.Close()
 		s.mu.Lock()
 		delete(s.clients, c)
+		s.stashReconnect(c)
 		s.removeDedicated(c)
 		s.leaveRoom(c)
 		if c.user.ID != 0 {
@@ -508,6 +511,11 @@ func (s *Server) endSession(id int) {
 	if old == nil {
 		return
 	}
+	// Keep the old room slot available before the connection is closed so the
+	// login currently taking over can restore it. Leaving synchronously also
+	// migrates the host and frees the capacity slot for the new session.
+	s.stashReconnect(old)
+	s.leaveRoom(old)
 	if old.conn != nil {
 		old.conn.Close()
 	}

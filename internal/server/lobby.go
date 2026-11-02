@@ -395,7 +395,11 @@ func (s *Server) loginPackets(c *client) error {
 		}
 		c.questLogin = true
 	}
-	return s.resumeQuestRewards(c)
+	if e := s.resumeQuestRewards(c); e != nil {
+		return e
+	}
+	s.restoreSession(c)
+	return nil
 }
 func writeItem(w *protocol.Writer, i store.Item, slot, disassemble int) {
 	w.U16(slot)

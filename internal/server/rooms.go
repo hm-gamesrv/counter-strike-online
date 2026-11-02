@@ -492,6 +492,23 @@ func (s *Server) leaveRoom(c *client) {
 	if r == nil {
 		return
 	}
+	if c.user.ID != 0 && s.users[c.user.ID] != nil && s.users[c.user.ID] != c {
+		// The old connection lost its session to a reconnect. Remove its stale
+		// membership silently; the new client adds itself when restoring.
+		for i, u := range r.members {
+			if u == c {
+				r.members = append(r.members[:i], r.members[i+1:]...)
+				break
+			}
+		}
+		if r.match != nil {
+			if stat := r.match.stats[c.user.ID]; stat != nil && stat.user == c {
+				delete(r.match.stats, c.user.ID)
+			}
+		}
+		c.room = 0
+		return
+	}
 	if c.playing {
 		c.send(65, &protocol.Writer{Data: []byte{10}})
 	}
