@@ -217,6 +217,47 @@ func (s *Server) roomList(c *client) {
 	c.send(151, w)
 }
 
+// rotateRoomMap advances the map playlist after a match, mirroring
+// CRoom::EndGame. Forced ends restart at the first map.
+func (s *Server) rotateRoomMap(r *room, forced bool) bool {
+	playlist := r.settings.playlist()
+	if len(playlist) == 0 {
+		return false
+	}
+	next := 0
+	index := 1
+	if !forced {
+		current := r.settings.number(7)
+		found := false
+		for i, id := range playlist {
+			if id == current {
+				next = (i + 1) % len(playlist)
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+		index = next + 1
+	}
+	mapID := playlist[next]
+	r.settings.setNumber(7, mapID, 2)
+	r.settings.setNumber(48, mapID, 2)
+	r.settings.setNumber(42, index, 1)
+	w := &protocol.Writer{}
+	w.U8(4)
+	w.U32(1 << 7)
+	w.U32(1<<10 | 1<<16)
+	w.U32(0)
+	w.U32(0)
+	w.U16(mapID)
+	w.U8(index)
+	w.U16(mapID)
+	r.broadcast(65, w)
+	return true
+}
+
 // writeRoomListEntry writes the per-room block shared by the full room list
 // and the Voxel room list.
 func writeRoomListEntry(w *protocol.Writer, room *room) {

@@ -551,7 +551,10 @@ func (s *Server) endGame(r *room, forced bool) error {
 		u.ready = 0
 	}
 	r.match = nil
-	releaseDedicated(r)
+	rotated := s.rotateRoomMap(r, forced)
+	if !rotated || s.Config.Room.HostConnectingMethod != 1 || r.settings.number(42) == 1 {
+		releaseDedicated(r)
+	}
 	s.broadcastReady(r)
 	s.refreshRooms()
 	s.Log.Info("match settled", "room", r.id, "match", m.id, "participants", len(stats), "forced", forced)

@@ -9,7 +9,7 @@
 - 入口覆盖：上游 33 个入口中 Go 已接 28 个（含 UDP）；未接的 5 个在上游是空实现或桩（`15`、`83`、`88`、`90`、`164`）；`103 Voxel` 已接登录 URL 与占位回包。
 - 业务覆盖：上一版列出的道具养成、军团、武器解放、房间设置校验、称号、屏蔽名单、问卷、重连恢复、结算加成与排名等均已实现（见附录）。
 - 剩余缺口集中在：Studio 房间创建（依赖 Voxel 槽位 HTTP 服务）、少数 GM 命令、可选房间字段的模式清洗与 SSL。Bingo 与 Voxel `103` 基础通路已接。
-- 规模：C++ 核心约 4.6 万行（不含 GUI/thirdparty/test）；Go 非测试 14,599 行、含测试 22,363 行。
+- 规模：C++ 核心约 4.6 万行（不含 GUI/thirdparty/test）；Go 非测试 14,940 行、含测试 22,762 行。
 
 ## 〇、默认数据与目标客户端
 
@@ -62,7 +62,9 @@ Go 在 `Room.ValidateSettings` 下已校验人数、地图人数上限、胜负/
 
 在 `ValidateSettings` 开启时还按上游 `LoadNewSettings` 做可选字段清洗：`voxel` 块（非地图 254 清除）、`fireBomb`、`mutationRestrict`/`mutationLimit`、`zbLimit`（模式白名单、去重、道具存在性、标志夹紧）、`teamSwitch`、`zbRespawn`/`zbBalance`、`gameRule`、`zbAutoHunting`、`integratedTeam`、`enhanceRestrict`、`floatingDamageSkin`、`playerOneTeam`、`weaponBuyCoolTime`、`zbRebalance`、`changeShot`/`zombieReviveZHC`、`kdRule`/`mannerLimit`、`leagueRule`、`statusSymbol`/`movingShot`/`mapPlaylistIndex`。
 
-仍缺：依赖道具或玩家状态的清洗（`sd` 大头事件、`c4Timer` 音效、`startingCash`/`buyTime` 校验、bot 数量夹紧、`viewFlag`/`teamBalance`/`friendlyFire` 默认值比对），以及地图轮换。`ValidateSettings` 关闭时这些字段仍按客户端原样保留（与上游一致）。
+对局结束后按 `mapPlaylist` 轮换地图（`CRoom::EndGame`）：非强制结束切到下一张并回绕，强制结束回到第一张，同时更新 `mapId`/`mapId2`/`mapPlaylistIndex` 并广播设置更新；专用服务器模式下轮换未回到第一张时保留专服。
+
+仍缺：依赖道具或玩家状态的清洗（`sd` 大头事件、`c4Timer` 音效、`startingCash`/`buyTime` 校验、bot 数量夹紧、`viewFlag`/`teamBalance`/`friendlyFire` 默认值比对）。`ValidateSettings` 关闭时这些字段仍按客户端原样保留（与上游一致）。
 
 ### 1.6 SSL
 
