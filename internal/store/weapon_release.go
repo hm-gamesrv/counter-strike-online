@@ -1,6 +1,9 @@
 package store
 
-import "database/sql"
+import (
+	"database/sql"
+	"errors"
+)
 
 type WeaponReleaseRow struct {
 	ItemID   int
@@ -51,6 +54,26 @@ func (s *Store) WeaponReleaseCharacters(userID int) ([]WeaponReleaseCharacter, i
 		total += count
 	}
 	return result, total, rows.Err()
+}
+
+// AddWeaponReleaseCharacter adds letters to the minigame pool; used by the GM
+// /addwpnreleasechar command.
+func (s *Store) AddWeaponReleaseCharacter(userID int, character byte, count int) error {
+	if count < 1 {
+		return errors.New("character count must be positive")
+	}
+	letter := string(rune(character))
+	result, err := s.DB.Exec("UPDATE UserMiniGameWeaponReleaseCharacters SET count=count+? WHERE userID=? AND character=?", count, userID, letter)
+	if err != nil {
+		return err
+	}
+	if n, err := result.RowsAffected(); err != nil {
+		return err
+	} else if n > 0 {
+		return nil
+	}
+	_, err = s.DB.Exec("INSERT INTO UserMiniGameWeaponReleaseCharacters(userID,character,count) VALUES(?,?,?)", userID, letter, count)
+	return err
 }
 
 // SetWeaponReleaseCharacter consumes one letter and sets one progress bit.

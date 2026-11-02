@@ -364,3 +364,15 @@ func TestGMSetItemFieldsAndAllItems(t *testing.T) {
 		t.Fatalf("addallitems inventory %d -> %d", before, after)
 	}
 }
+
+func TestGMAddWeaponReleaseCharacter(t *testing.T) {
+	addr, db, _ := startGMTestServer(t, true)
+	admin := gmJoin(t, addr, "admin", []byte("aaaaaaaaaaaaaaaa"))
+	admin.command("/addwpnreleasechar B 4")
+	admin.command("/register x y")
+	gmNotice(t, admin, 10, "Already logged in.")
+	letters, total, err := db.WeaponReleaseCharacters(1)
+	if err != nil || total != 4 || len(letters) != 1 || letters[0].Character != 'B' || letters[0].Count != 4 {
+		t.Fatalf("letters %+v total %d, %v", letters, total, err)
+	}
+}

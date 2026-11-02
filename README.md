@@ -60,7 +60,7 @@ UPDATE UserCharacterExtended SET gameMaster=1 WHERE userID=1;
 | 网络 | 原版 `~SERVERCONNECTED` 欢迎消息、`U` 数据帧、长度限制、拆包/粘包、序号循环、读写超时、有界发送队列、退出清理 |
 | 加密 | 可选原版 HWID/MD5 派生 RC4 双向流与切换时机；不支持 SSL |
 | 账号 | `/register`、`/login`、重复登录时关闭旧会话，并在 5 分钟内恢复原房间/对局、注册 IP 限额、账号封禁检查、角色创建 |
-| GM 命令 | 按 `UserCharacterExtended.gameMaster` 鉴权；`/help`、`/version`、`/disconnect`、`/status`、`/getfreeslots`、`/getuid`、`/addpoints`、`/givepoints`、`/addexp`、`/sendnotice`、`/sendgmnotice`、`/additem`、`/giveitem`、`/removeitem`、`/addallitems`、`/setitemstatus`、`/setiteminuse`、`/givereward`、`/giverewardtoall`、`/ban`、`/hban`、`/ipban`、`/unban`；IP 封禁在连接入口、HWID 封禁在登录握手处拦截，封禁会断开在线目标 |
+| GM 命令 | 按 `UserCharacterExtended.gameMaster` 鉴权；`/help`、`/version`、`/disconnect`、`/status`、`/getfreeslots`、`/getuid`、`/addpoints`、`/givepoints`、`/addexp`、`/sendnotice`、`/sendgmnotice`、`/additem`、`/giveitem`、`/removeitem`、`/addallitems`、`/setitemstatus`、`/setiteminuse`、`/givereward`、`/giverewardtoall`、`/addwpnreleasechar`、`/ban`、`/hban`、`/ipban`、`/unban`；`/bingo`、`/weaponrelease` 对所有玩家开放；IP 封禁在连接入口、HWID 封禁在登录握手处拦截，封禁会断开在线目标 |
 | 数据 | SQLite v4 表结构、PBKDF2 密码摘要、玩家设置、背包读取、登录会话与历史；账号/背包/封禁日期按客户端的分钟时间戳保存 |
 | 元数据 | CSV/JSON ZIP 与原始 bin、武器皮肤、随机武器、僵尸武器、ItemBox 列表；按配置开关下发 |
 | 大厅 | 单服务器/单频道、玩家进出通知、聊天与私聊、房间列表；`67/6` 全服喇叭消耗道具 204 并向所有在线玩家广播 |
@@ -93,7 +93,7 @@ UPDATE UserCharacterExtended SET gameMaster=1 WHERE userID=1;
 | 收藏 | 读取配装/购买菜单/书签，保存购买菜单/书签/当前配装编号、武器配装和大厅背景角色；校验物品持有、有效期、类别及当前配装 |
 | 快捷购买 | `77/1` 保存 5 组、每组 11 个商品的快捷购买预设，按槽位更新或插入 |
 | 附加内容 | `115 Addon` 从 `UserAddon` 下发附加内容列表，空列表也返回计数 0 |
-| 尚未迁移 | 完整任务界面/每日/荣誉/军团任务、排行、Studio 房间创建、`/addwpnreleasechar` 等剩余 GM 命令、其他道具使用/装饰装备、其他活动、管理 GUI、SSL；zbLimit/fireBomb 等可选字段的模式清洗、地图轮换也未完成 |
+| 尚未迁移 | 完整任务界面/每日/荣誉/军团任务、排行、Studio 房间创建、其他道具使用/装饰装备、其他活动、管理 GUI、SSL；zbLimit/fireBomb 等可选字段的模式清洗、地图轮换也未完成 |
 
 以用户提供的 `30.12.24` 客户端为唯一目标，不保留旧客户端协议分支。已跑通圣诞大厦的虚拟个人决战（模式 4、地图 277）：机器人入场、击杀、死亡/复活、达到 20 次击杀后正常结束、结果窗口及返回房间。首局实际发放 230 经验和 200 积分，数据库仅有一条对应结算记录。新角色的初始 MP5 也已在真实地图中验证。其他模式、多人网络环境和真实 HLDS 仍需逐项验收。
 

@@ -23,7 +23,7 @@ func (s *Server) gmCommand(c *client, text string, args []string) (bool, error) 
 		c.chatNotice("/sendnotice, /sendgmnotice, /addpoints, /givepoints, /addexp")
 		c.chatNotice("/additem, /giveitem, /removeitem, /addallitems, /setitemstatus, /setiteminuse")
 		c.chatNotice("/givereward, /giverewardtoall")
-		c.chatNotice("/ban, /hban, /ipban, /unban")
+		c.chatNotice("/addwpnreleasechar, /ban, /hban, /ipban, /unban")
 	case "/version":
 		c.chatNotice("CSNZ Go server; client build 30.12.24")
 	case "/disconnect":
@@ -260,6 +260,15 @@ func (s *Server) gmCommand(c *client, text string, args []string) (bool, error) 
 			sent++
 		}
 		c.chatNotice(fmt.Sprintf("Reward %d sent to %d users.", rewardID, sent))
+	case "/addwpnreleasechar":
+		count, ok := atoiArg(args, 2)
+		if len(args) < 3 || !ok || count < 1 || len(args[1]) == 0 {
+			c.chatNotice("/addwpnreleasechar usage: /addwpnreleasechar <char> <count>")
+			return true, nil
+		}
+		if err := s.Store.AddWeaponReleaseCharacter(c.user.ID, args[1][0], count); err != nil {
+			return true, err
+		}
 	case "/setitemstatus":
 		slot, okSlot := atoiArg(args, 1)
 		status, okStatus := atoiArg(args, 2)

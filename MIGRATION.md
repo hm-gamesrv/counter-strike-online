@@ -421,3 +421,9 @@
 - 新增 `mapPlaylist`（2..5 张、去重、首图一致、每张地图合法且无默认武器限制）、`randomMap` 模式限制与夹紧、ZS 难度上限、家族战模式白名单。
 - `superRoom` 改为由房主持有的道具 8357 决定（对应 `CRoom::CheckForHostItems`），不再信任客户端字段。
 - 新增 `room_validate_test.go` 覆盖矩阵、playlist、随机图、ZS 难度、家族战；`room_superroom_test.go` 覆盖 superRoom 覆盖逻辑。`go test ./...`、`go vet ./...` 通过；未做实机界面验收。
+
+## 2026-11-02 GM 武器解放字母与活动刷新命令
+
+- 新增 `Store.AddWeaponReleaseCharacter`（累加 `UserMiniGameWeaponReleaseCharacters`），接入 GM `/addwpnreleasechar <char> <count>`。
+- 按上游把 `/bingo`、`/weaponrelease` 作为所有玩家可用的刷新命令：对应活动开启时重发 `89/0` 更新或武器解放进度，未开启时静默返回。
+- 测试覆盖字母累加与 GM 命令；`go test ./...`、`go vet ./...` 通过；未做实机界面验收。

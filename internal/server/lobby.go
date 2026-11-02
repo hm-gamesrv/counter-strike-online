@@ -267,6 +267,19 @@ func (s *Server) message(c *client, r *protocol.Reader) error {
 				return err
 			}
 		}
+		// Upstream exposes these two activity refresh commands to every user.
+		if args[0] == "/weaponrelease" {
+			if s.miniGame.Active {
+				return s.sendWeaponReleaseUpdate(c)
+			}
+			return nil
+		}
+		if args[0] == "/bingo" {
+			if s.bingo.Active {
+				return s.sendBingoUpdate(c)
+			}
+			return nil
+		}
 	}
 	if c.user.ID == 0 || c.character.Name == "" {
 		c.chatNotice("Enter /login <username> <password> or /register <username> <password>.")

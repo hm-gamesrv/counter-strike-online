@@ -38,6 +38,20 @@ func TestGMUsersBansAndPoints(t *testing.T) {
 		t.Fatalf("last HWID %x, %v", got, err)
 	}
 
+	if err := s.AddWeaponReleaseCharacter(1, 'A', 3); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.AddWeaponReleaseCharacter(1, 'A', 2); err != nil {
+		t.Fatal(err)
+	}
+	letters, total, err := s.WeaponReleaseCharacters(1)
+	if err != nil || total != 5 || len(letters) != 1 || letters[0].Count != 5 {
+		t.Fatalf("weapon release letters %+v total %d, %v", letters, total, err)
+	}
+	if err := s.AddWeaponReleaseCharacter(1, 'A', 0); err == nil {
+		t.Fatal("zero character count accepted")
+	}
+
 	if points, err := s.AddPoints(1, 250); err != nil || points != 250 {
 		t.Fatalf("points %d, %v", points, err)
 	}

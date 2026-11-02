@@ -9,7 +9,7 @@
 - 入口覆盖：上游 33 个入口中 Go 已接 28 个（含 UDP）；未接的 5 个在上游是空实现或桩（`15`、`83`、`88`、`90`、`164`）；`103 Voxel` 已接登录 URL 与占位回包。
 - 业务覆盖：上一版列出的道具养成、军团、武器解放、房间设置校验、称号、屏蔽名单、问卷、重连恢复、结算加成与排名等均已实现（见附录）。
 - 剩余缺口集中在：Studio 房间创建（依赖 Voxel 槽位 HTTP 服务）、少数 GM 命令、可选房间字段的模式清洗与 SSL。Bingo 与 Voxel `103` 基础通路已接。
-- 规模：C++ 核心约 4.6 万行（不含 GUI/thirdparty/test）；Go 非测试 14,553 行、含测试 22,151 行。
+- 规模：C++ 核心约 4.6 万行（不含 GUI/thirdparty/test）；Go 非测试 14,598 行、含测试 22,269 行。
 
 ## 〇、默认数据与目标客户端
 
@@ -36,9 +36,9 @@ Studio 房间创建（地图 254）仍拒绝：上游 `CRoomSettings::CheckSetti
 
 上游 `channelmanager.cpp:372` 起实现 31 个聊天命令：`/ban`、`/ipban`、`/hban`、`/unban`、`/additem`、`/giveitem`、`/removeitem`、`/addpoints`、`/givepoints`、`/addexp`、`/addallitems`、`/givereward`、`/giverewardtoall`、`/addgroom`、`/addwpnreleasechar`、`/sendnotice`、`/sendgmnotice`、`/bingo`、`/weaponrelease`、`/setiteminuse`、`/setitemstatus`、`/status`、`/getuid`、`/getfreeslots`、`/disconnect`、`/reqsnapshot`、`/tournament`、`/help` 等。
 
-Go 已按 `UserCharacterExtended.gameMaster` 鉴权，实现 `/help`、`/version`、`/disconnect`、`/status`、`/getfreeslots`、`/getuid`、`/addpoints`、`/givepoints`、`/addexp`、`/sendnotice`、`/sendgmnotice`、`/additem`、`/giveitem`、`/removeitem`、`/addallitems`、`/setitemstatus`、`/setiteminuse`、`/givereward`、`/giverewardtoall`、`/ban`、`/hban`、`/ipban`、`/unban`。IP 封禁在 TCP accept、HWID 封禁在登录握手（`U` 类型 3）处拦截；三者都会断开在线目标，`/ban type=1` 向全服广播封禁原因。
+Go 已按 `UserCharacterExtended.gameMaster` 鉴权，实现 `/help`、`/version`、`/disconnect`、`/status`、`/getfreeslots`、`/getuid`、`/addpoints`、`/givepoints`、`/addexp`、`/sendnotice`、`/sendgmnotice`、`/additem`、`/giveitem`、`/removeitem`、`/addallitems`、`/setitemstatus`、`/setiteminuse`、`/givereward`、`/giverewardtoall`、`/addwpnreleasechar`、`/ban`、`/hban`、`/ipban`、`/unban`；`/bingo`、`/weaponrelease` 按上游对全部玩家开放。IP 封禁在 TCP accept、HWID 封禁在登录握手（`U` 类型 3）处拦截；三者都会断开在线目标，`/ban type=1` 向全服广播封禁原因。
 
-仍缺 `/addwpnreleasechar`，以及 `PUBLIC_RELEASE` 之外的管理命令（`/addgroom`、`/reqsnapshot`、`/tournament`）。GM 发奖复用 `ItemRewards.json` 目录奖励，选择型奖励仍需要客户端选择 UI；上游的 Qt 管理 GUI（账号/角色/封禁编辑）也未迁移。
+剩余只有 `PUBLIC_RELEASE` 之外的管理命令（`/addgroom`、`/reqsnapshot`、`/tournament`）。GM 发奖复用 `ItemRewards.json` 目录奖励，选择型奖励仍需要客户端选择 UI；上游的 Qt 管理 GUI（账号/角色/封禁编辑）也未迁移。
 
 ### 1.4 房间子项（`65`）
 
@@ -92,10 +92,10 @@ Go 在 `Room.ValidateSettings` 下已校验人数、地图人数上限、胜负/
 
 ## 五、建议顺序
 
-1. **GM 剩余命令**：`/addwpnreleasechar`；常用命令已接。
-2. **房间子项**：`65/34,35,37` 与 `65/32,33` 回包；`65/34` 决定 Voxel 房间列表能否使用。
+1. **可选房间字段清洗**：`zbLimit`/`fireBomb`/`mutation` 等按模式静默清除或夹紧，对齐上游 `LoadNewSettings`。
+2. **Studio 房间创建**：接入 Voxel 槽位 HTTP 服务后放开地图 254。
 3. **SSL**：按部署需要决定。
-4. **Bingo/Voxel 实机验收**：开格/连线发奖/洗牌/重置和 Voxel 占位回包的客户端流程。
+4. **Bingo/Voxel/GM/房间校验实机验收**：开格与发奖、Voxel 列表、GM 封禁与发奖、`Room.ValidateSettings` 开启后的建房流程。
 5. **验证**：真实 HLDS、多人实机与客户端界面回归。
 
 ## 附：已实现能力（本轮复核）
@@ -104,5 +104,5 @@ Go 在 `Room.ValidateSettings` 下已校验人数、地图人数上限、胜负/
 - 玩家：昵称/位置/聊天色、屏蔽名单与聊天过滤、Messenger、问卷、Addon、称号、公告、到期与离线奖励通知、会话记录
 - 军团：协议请求、成员与解散规则、仓库转移、军团聊天
 - 小游戏：武器解放、Bingo 基础桌面/开格/洗牌/重置
-- 房间与对局：房间设置校验、superRoom 踢人、家族战房间、场景道具消耗、掉落箱奖励、断线重连与会话接管、结算道具加成与模式排名
+- 房间与对局：模式/地图矩阵、playlist、ZS 难度、家族战模式与 superRoom 校验、superRoom 踢人、家族战房间、场景道具消耗、掉落箱奖励、断线重连与会话接管、结算道具加成与模式排名
 - 其他：主菜单皮肤事件、军团/武器解放/家族战；默认数据回退到上游基线
