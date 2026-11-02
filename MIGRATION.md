@@ -413,3 +413,11 @@
 - 新增 `/addallitems`、`/setitemstatus`、`/setiteminuse`。
 - `/addallitems` 按 `Item.csv` 全量发放，跳过默认/伪默认道具；`/setitemstatus`、`/setiteminuse` 直接改背包行的 status/inUse 并回单条背包更新，对应上游 `UpdateInventoryItem` 的两个字段分支。
 - 新增 `Store.SetItemStatus`、`Store.SetItemInUse`（越界校验、槽位不存在返回 `ErrItemUnavailable`）；测试覆盖字段修改与全量发放。`go test ./...`、`go vet ./...` 通过；未做实机界面验收。
+
+## 2026-11-02 房间高级设置校验
+
+- `MapList.csv` 改为整行加载（`mapRow`），保留模式列、`max_player`、`ZSmaxDifficulty`、`playroom_modeID`、`weapon_restrict_deault` 等字段。
+- 新增模式/地图矩阵校验（`mapAllowsMode`，对应 `IsMapValid`）：按 `GetGameModeNameByID` 的列名查表，`map_FunMode` 额外比对 `Fun_Subtype`，`playroom` 比对 `playroom_modeID`。
+- 新增 `mapPlaylist`（2..5 张、去重、首图一致、每张地图合法且无默认武器限制）、`randomMap` 模式限制与夹紧、ZS 难度上限、家族战模式白名单。
+- `superRoom` 改为由房主持有的道具 8357 决定（对应 `CRoom::CheckForHostItems`），不再信任客户端字段。
+- 新增 `room_validate_test.go` 覆盖矩阵、playlist、随机图、ZS 难度、家族战；`room_superroom_test.go` 覆盖 superRoom 覆盖逻辑。`go test ./...`、`go vet ./...` 通过；未做实机界面验收。

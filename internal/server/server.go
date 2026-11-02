@@ -87,7 +87,7 @@ type Server struct {
 	enhanceExp   map[int][]int
 	enhanceMax   map[int]enhanceLimit
 	modes        map[int]modeDefinition
-	mapMax       map[int]int
+	maps         map[int]mapRow
 	miniGame     weaponReleaseConfig
 	bingo        bingoDefinition
 	dedicated    []*dedicatedServer
@@ -146,7 +146,7 @@ func New(dir string, c config.Config, db *store.Store, log *slog.Logger) (*Serve
 	if e != nil {
 		return nil, e
 	}
-	s.mapMax, e = loadMapLimits(dir)
+	s.maps, e = loadMapRows(dir)
 	if e != nil {
 		return nil, e
 	}

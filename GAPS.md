@@ -8,8 +8,8 @@
 
 - 入口覆盖：上游 33 个入口中 Go 已接 28 个（含 UDP）；未接的 5 个在上游是空实现或桩（`15`、`83`、`88`、`90`、`164`）；`103 Voxel` 已接登录 URL 与占位回包。
 - 业务覆盖：上一版列出的道具养成、军团、武器解放、房间设置校验、称号、屏蔽名单、问卷、重连恢复、结算加成与排名等均已实现（见附录）。
-- 剩余缺口集中在：Studio 房间创建（依赖 Voxel 槽位 HTTP 服务）、少数 GM 命令、房间高级设置校验与 SSL。Bingo 与 Voxel `103` 基础通路已接。
-- 规模：C++ 核心约 4.6 万行（不含 GUI/thirdparty/test）；Go 非测试 14,252 行、含测试 21,743 行。
+- 剩余缺口集中在：Studio 房间创建（依赖 Voxel 槽位 HTTP 服务）、少数 GM 命令、可选房间字段的模式清洗与 SSL。Bingo 与 Voxel `103` 基础通路已接。
+- 规模：C++ 核心约 4.6 万行（不含 GUI/thirdparty/test）；Go 非测试 14,553 行、含测试 22,151 行。
 
 ## 〇、默认数据与目标客户端
 
@@ -51,14 +51,16 @@ Go 已按 `UserCharacterExtended.gameMaster` 鉴权，实现 `/help`、`/version
 
 ### 1.5 房间高级设置校验
 
-Go 在 `Room.ValidateSettings` 下已校验人数、地图人数上限、胜负/击杀/时间/回合范围与步长；家族战已支持双军团建房/加入/开局与 `116` 通知。仍缺：
+Go 在 `Room.ValidateSettings` 下已校验人数、地图人数上限、胜负/击杀/时间/回合范围与步长，并补齐：
 
-- `mapPlaylist` 数量、重复、首图、地图合法性与模式互斥
-- `zbLimit` 与 `fireBomb` 的联动
-- `superRoom` 标记校验
-- ZS 难度上限、模式专属必填项
-- 家族战踢人（`65/37`）和更完整的家族战人数/准备校验
-- 地图是否允许该模式的完整矩阵
+- 模式/地图矩阵：按 `MapList.csv` 的模式列（`map_original`、`map_zombi`、`map_Zombie_Exterminate` 等）与 `map_FunMode`/`playroom_modeID` 判定
+- `mapPlaylist`：2..5 张、禁止重复、首图必须是房间地图、每张地图合法且无默认武器限制、模式允许 playlist
+- `randomMap` 的模式限制与大于 2 时夹紧
+- ZS 难度：模式 15 必须有难度字段，且不超过地图 `ZSmaxDifficulty`
+- 家族战：仅限上游允许的模式
+- `superRoom`：改由房主持有的道具 8357 决定，不再信任客户端字段
+
+仍缺：上游 `LoadNewSettings` 对 `zbLimit`/`fireBomb`/`mutation`/`teamSwitch` 等可选字段的“按模式静默清除或夹紧”逻辑；Go 目前不校验这些字段，客户端传什么就保留什么（`ValidateSettings` 关闭时更是如此）。
 
 ### 1.6 SSL
 
