@@ -1,6 +1,9 @@
 package store
 
-import "database/sql"
+import (
+	"database/sql"
+	"errors"
+)
 
 // clearItemReference drops persisted selections that point at a removed item.
 // The reference stays only when another copy of the same ID is still selected
@@ -30,4 +33,27 @@ func clearItemReference(tx *sql.Tx, userID, itemID int) error {
 	}
 	_, err = tx.Exec("DELETE FROM UserZBCostumeLoadout WHERE userID=? AND itemID=?", userID, itemID)
 	return err
+}
+
+// promoteItemSelection hands the selected flag to a remaining live copy after the
+// selected one disappeared. Every removal entry point must call it once the rows
+// are gone, otherwise hostInventory skips a weapon whose only selected copy left.
+func promoteItemSelection(tx *sql.Tx, userID int, removed []Item) error {
+	for _, item := range removed {
+		if item.Status == 0 {
+			continue
+		}
+		var slot int
+		err := tx.QueryRow("SELECT slot FROM UserInventory WHERE userID=? AND itemID=? AND count>0 AND inUse<>0 AND "+liveItemSQL+" ORDER BY slot LIMIT 1", userID, item.ID, nowMinutes()).Scan(&slot)
+		if errors.Is(err, sql.ErrNoRows) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		if _, err = tx.Exec("UPDATE UserInventory SET status=1 WHERE userID=? AND slot=?", userID, slot); err != nil {
+			return err
+		}
+	}
+	return nil
 }

@@ -611,7 +611,7 @@ func (s *Server) endSession(id int) {
 	}
 }
 func (s *Server) expireItems(now time.Time) {
-	removed, err := s.Store.ExpireItems(int(now.Unix() / 60))
+	removed, users, err := s.Store.ExpireItemsWithUsers(int(now.Unix() / 60))
 	if err != nil {
 		if s.Log != nil {
 			s.Log.Warn("expired item sweep failed", "error", err)
@@ -624,9 +624,16 @@ func (s *Server) expireItems(now time.Time) {
 	if s.Log != nil {
 		s.Log.Info("expired items removed", "count", removed)
 	}
-	// Expired cosmetics drop their selections; make online clients see it now
-	// instead of waiting for the next login.
-	for _, c := range s.users {
+	// Expiry drops selections and may hand a weapon's selection to a remaining
+	// copy; push the new bag and character to everyone who lost an item.
+	for _, id := range users {
+		c := s.users[id]
+		if c == nil {
+			continue
+		}
 		s.refreshCharacterCache(c)
+		if err := s.sendInventory(c); err != nil && s.Log != nil {
+			s.Log.Warn("expired inventory refresh failed", "user", id, "error", err)
+		}
 	}
 }

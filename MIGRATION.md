@@ -590,3 +590,11 @@
 - **删除选中的武器副本后没有接替选择**：`DeleteItems` 在整批删除完成后，对每个被删且 `status=1` 的副本，找同 ID、`inUse<>0`、仍有效的副本置 `status=1`（对应基线 `RemoveItem`），并随返回值一起下发给客户端；`hostInventory` 不再漏掉这把武器。
 
 测试：新增 `internal/store/references_promote_test.go`（接替选择、休眠副本不占位）与 `internal/server/review_overall_test.go::TestRemovalRefreshesCharacterCache`。`go vet`、`go test ./...` 全绿，六批 overlay 探针全部通过。
+
+
+## 2026-11-03 处理 3e6fa14 复核与整体检查（2 项）
+
+- **GM 删除背景没同步在线缓存**（P3）：`/removeitem` 在 `DeleteItems` 之后同样调用 `refreshCharacterCache`，与分解路径一致。
+- **自然到期不接替选中的武器副本**（P2）：把 `DeleteItems` 里的接替逻辑抽成 `promoteItemSelection`，`ExpireItems` 在整批删除之后按用户清理引用并接替选择；新增 `ExpireItemsWithUsers` 返回受影响用户，在线会话会收到刷新后的 154 背包与 157 角色信息（`ExpireItems` 保留原两返回值签名，兼容既有调用）。
+
+测试：新增 `internal/store/references_promote_test.go::TestExpiryPromotesRemainingWeapon` 与 `internal/server/review_overall_test.go::TestGMRemoveItemRefreshesCache`。`go vet`、`go test ./...` 全绿，七批 overlay 探针全部通过。

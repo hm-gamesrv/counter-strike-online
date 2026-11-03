@@ -190,6 +190,9 @@ func (s *Server) gmCommand(c *client, text string, args []string) (bool, error) 
 		if err != nil {
 			return true, err
 		}
+		// Removal may clear a cosmetic selection in the database; refresh the
+		// cached character before the next user-info broadcast.
+		s.refreshCharacterCache(c)
 		if err = s.sendInventoryItems(c, changed); err != nil {
 			return true, err
 		}
