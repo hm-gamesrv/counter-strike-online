@@ -70,7 +70,10 @@ func FuzzItemRequest(f *testing.F) {
 			ID:   1,
 			Name: "FuzzUser",
 		},
-		queue: make(chan outbound, 64),
+		// Large enough that an accepted request cannot fill it: client.send closes
+		// the connection on overflow, and this fixture has none, so a full queue
+		// would surface as a nil-interface panic instead of a real finding.
+		queue: make(chan outbound, 8192),
 	}
 	// Seeds cover the kinds with the most varied field layouts.
 	f.Add([]byte{0, 0, 1, 0, 0, 1, 0})

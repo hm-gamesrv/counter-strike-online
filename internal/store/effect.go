@@ -16,8 +16,11 @@ var effectColumns = map[string]bool{
 // dormant copy stores a relative day count, which must become an absolute
 // timestamp before the item can count as live.
 func activateExpiry(tx *sql.Tx, id, slot int) (int, error) {
+	// The liveness predicate matters here: without it an expired row could be
+	// switched on, selected in UserCharacter.nameplateID and announced to the
+	// room while readInventory already hides it from the bag.
 	var status, expiry int
-	err := tx.QueryRow("SELECT coalesce(status,0),coalesce(expiryDate,0) FROM UserInventory WHERE userID=? AND slot=?", id, slot).Scan(&status, &expiry)
+	err := tx.QueryRow("SELECT coalesce(status,0),coalesce(expiryDate,0) FROM UserInventory WHERE userID=? AND slot=? AND count>0 AND "+liveItemSQL, id, slot, nowMinutes()).Scan(&status, &expiry)
 	if errors.Is(err, sql.ErrNoRows) {
 		return 0, ErrItemUnavailable
 	}

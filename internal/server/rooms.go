@@ -21,6 +21,18 @@ type settings struct {
 	truncatedAt int
 }
 
+// parseSettings decodes the 128-bit settings frame. Three properties matter when
+// changing it:
+//
+//   - Flag bits the reference does not model (group 2 bits 10..31, group 3 bits
+//     0..30) consume no bytes. They are kept verbatim and re-emitted, which is
+//     what the reference does too: WriteSettings copies the raw flag words and
+//     then walks a fixed field list, so an unmodeled bit travels as a flag with
+//     no payload on both sides.
+//   - This parser is not its own inverse. Field 45 (the scenario difficulty) is
+//     one byte in and nine bytes out, so re-reading a frame this server wrote
+//     shifts the following fields.
+//   - A truncated frame is reported through truncated, not as an error.
 func parseSettings(r *protocol.Reader) (settings, error) {
 	var s settings
 	for i := range s.flags {

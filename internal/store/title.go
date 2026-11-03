@@ -52,8 +52,17 @@ func (s *Store) SetTitle(id, slot, title int) error {
 	if slot < 0 || slot >= TitleSlots {
 		return ErrTitleSlot
 	}
+	// The column holds all slots in one string, so this is a read-modify-write.
+	// Two autocommit statements would let a second writer (a reconnect taking
+	// over the account, or a concurrent GM command) overwrite the slot this
+	// call just wrote; the transaction keeps the whole update atomic.
+	tx, err := s.DB.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
 	var serialized string
-	if err := s.DB.QueryRow("SELECT titles FROM UserCharacter WHERE userID=?", id).Scan(&serialized); err != nil {
+	if err = tx.QueryRow("SELECT titles FROM UserCharacter WHERE userID=?", id).Scan(&serialized); err != nil {
 		return err
 	}
 	values, err := parseIntList(serialized)
@@ -63,6 +72,8 @@ func (s *Store) SetTitle(id, slot, title int) error {
 	var titles [TitleSlots]int
 	copy(titles[:], values)
 	titles[slot] = title
-	_, err = s.DB.Exec("UPDATE UserCharacter SET titles=? WHERE userID=?", serializeTitles(titles), id)
-	return err
+	if _, err = tx.Exec("UPDATE UserCharacter SET titles=? WHERE userID=?", serializeTitles(titles), id); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
