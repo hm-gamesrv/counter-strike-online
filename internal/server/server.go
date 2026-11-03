@@ -611,7 +611,17 @@ func (s *Server) endSession(id int) {
 	}
 }
 func (s *Server) expireItems(now time.Time) {
-	removed, users, err := s.Store.ExpireItemsWithUsers(int(now.Unix() / 60))
+	s.sweepExpiredItems(now, 0)
+}
+
+// sweepExpiredItems removes expired rows and pushes the resulting bag changes.
+// skip is the account whose login is still initializing: loginPackets sends
+// UserStart 150 and then the full inventory itself, so pushing bag updates to it
+// here would reach the client before the login handshake finished. Every other
+// online session still receives the tombstones of its deleted slots followed by
+// the remaining copies, exactly like the other removal paths.
+func (s *Server) sweepExpiredItems(now time.Time, skip int) {
+	removed, users, err := s.Store.ExpireItemsChanged(int(now.Unix() / 60))
 	if err != nil {
 		if s.Log != nil {
 			s.Log.Warn("expired item sweep failed", "error", err)
@@ -625,15 +635,19 @@ func (s *Server) expireItems(now time.Time) {
 		s.Log.Info("expired items removed", "count", removed)
 	}
 	// Expiry drops selections and may hand a weapon's selection to a remaining
-	// copy; push the new bag and character to everyone who lost an item.
-	for _, id := range users {
-		c := s.users[id]
+	// copy; refresh the character and push the bag patch to everyone who lost an
+	// item except the session that is still logging in.
+	for _, user := range users {
+		if user.UserID == skip {
+			continue
+		}
+		c := s.users[user.UserID]
 		if c == nil {
 			continue
 		}
 		s.refreshCharacterCache(c)
-		if err := s.sendInventory(c); err != nil && s.Log != nil {
-			s.Log.Warn("expired inventory refresh failed", "user", id, "error", err)
+		if err := s.sendInventoryItems(c, user.Items); err != nil && s.Log != nil {
+			s.Log.Warn("expired inventory refresh failed", "user", user.UserID, "error", err)
 		}
 	}
 }

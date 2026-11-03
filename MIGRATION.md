@@ -598,3 +598,13 @@
 - **自然到期不接替选中的武器副本**（P2）：把 `DeleteItems` 里的接替逻辑抽成 `promoteItemSelection`，`ExpireItems` 在整批删除之后按用户清理引用并接替选择；新增 `ExpireItemsWithUsers` 返回受影响用户，在线会话会收到刷新后的 154 背包与 157 角色信息（`ExpireItems` 保留原两返回值签名，兼容既有调用）。
 
 测试：新增 `internal/store/references_promote_test.go::TestExpiryPromotesRemainingWeapon` 与 `internal/server/review_overall_test.go::TestGMRemoveItemRefreshesCache`。`go vet`、`go test ./...` 全绿，七批 overlay 探针全部通过。
+
+## 2026-11-03 处理 9d33c2d 复核与整体检查（2 项）
+
+- **到期同步缺少已删除槽位的清除记录**（P2）：`Store.ExpireItemsChanged` 为每个受影响账号返回一份 `Items`：先是被删槽位的墓碑（`ID=0`，编码成 `U16(slot)+U8(0)`），再是剩余库存，与分解、消耗等路径的 154 增量补丁同形。服务端改用 `sendInventoryItems` 下发这份补丁，不再重发 152 与“剩余库存”——按槽位的增量帧无法靠“没提到”表达删除。`ExpireItems` 与 `ExpireItemsWithUsers` 保留为薄包装。
+- **登录中的到期扫描提前发送背包**（P2，9d33c2d 引入的顺序回归）：`expireItems` 拆成 `sweepExpiredItems(now, skip)`。`loginPackets` 传入正在登录的账号 ID：数据库清理照常执行，其他已完成初始化的在线会话照常收到补丁，但正在登录的账号不再收到 152/154，其背包由登录链后面的正常初始化下发，UserStart 150 重新排在最前。重连走同一条 `/login` → `loginPackets` 路径，同样受保护。
+
+测试：新增 `internal/server/expiry_sync_test.go`：`TestExpiryPushClearsDeletedSlot`（到期补丁含 slot 墓碑与存活行）、`TestLoginSweepKeepsInventoryAfterUserStart`（登录包序 + 其他在线会话仍收到到期补丁）。
+
+九批 overlay 探针复跑时，`review-b4cc191` 的 `TestReviewBonusRetryPercent` 仍会在未打开 `ItemBonusEnabled` 时看到 `itemExp=0`。该探针写于 R6（装备加成默认关闭，对齐基线里被注释掉的循环）之前，与 5bc14c8 起的既定行为冲突，不是本轮回归；重试幂等由打开开关的 `TestEquipmentBonusRetryIsIdempotent` 覆盖。
+

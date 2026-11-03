@@ -345,7 +345,10 @@ func (s *Server) message(c *client, r *protocol.Reader) error {
 	return nil
 }
 func (s *Server) loginPackets(c *client) error {
-	s.expireItems(time.Now())
+	// The sweep still runs so this account starts from current data, but the
+	// login chain initializes the inventory itself further down; pushing a bag
+	// update here would put 154 in front of UserStart 150.
+	s.sweepExpiredItems(time.Now(), c.user.ID)
 	w := &protocol.Writer{}
 	w.U32(c.user.ID)
 	w.String(c.user.Name)
