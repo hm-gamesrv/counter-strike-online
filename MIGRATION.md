@@ -523,3 +523,23 @@
 - `Hash`（255）元数据：基线的 `SendMetadataHash` 只发头部、数据写入被注释，所以开启时下发一个**空 payload** 的 `91` 包，位置在 `WeaponProp` 与 `RandomWeaponList` 之间（`usermanager.cpp:705`）。`metadataOrder` 增加 `Hash`，`loadMetadata` 在开关打开时放入空切片。
 - 测试：`TestGMTournamentToggle`（DB 值 + `userInfo` bit13 与字节）、`TestGMRequestSnapshotAndGhostRoom`（两条命令行为、房间名）、`TestMetadataHashPacketIsEmpty`（空包 + 顺序）。`go build`、`go vet`、`go test ./...` 全绿。
 
+
+
+## 2026-11-03 处理 b4cc191 审查（R1–R7）
+
+审查报告把 7 项 P1 都做了可复现的隔离测试（`.dist/review-b4cc191/`）。逐条处理：
+
+- **R1 装饰装备没有激活休眠道具**：`ToggleCostume` 的两条路径（普通装饰 / 僵尸皮肤）在装备时改为 `inUse=1, status=1`，并把休眠道具保存的相对天数（`expiryDate` 为天数）换算成绝对分钟，与基线 `OnCostumeEquip` 的 `ConvertDurationToExpiryDate` 一致；被替换掉的旧装饰按基线保留 `status=1`、只清 `inUse`。
+- **R2 限时新装饰无法自动装备**：`AutoEquipCostume` 的选择条件改为和 `readInventory` 相同的口径（`expiryDate=0`、已过期但仍是休眠相对天数、或未过期），激活时同样做绝对时间换算。
+- **R3 ZombieSkin=0 被拒**：槽位范围改为基线的 `0..17`（`ZB_COSTUME_SLOT_COUNT_MAX=18`），此前 `<=0` 会拒掉 5 件 `ZombieSkin=0` 的合法装扮，又放行 18 以上。
+- **R4 基础奖励先封顶再算加成**：`matchBaseReward` 改为返回未封顶的系数乘积（带溢出保护），职业加成与装备加成用它计算，最后才把 `exp/points` 截到 9999——与基线 `CalculateGameResult` 的顺序一致。系数 100、200 击杀、50% 职业加成现在入账 `9999+10000=19999`（此前 14998）。
+- **R5 结算重试时加成百分比累加**：`endGame` 每轮先把 `bonusExp/bonusPoints/classExp/classPoints/itemExp/itemPoints` 全部清零再计算，事务失败重试不再翻倍。
+- **R6 默认启用了基线注释掉的装备加成**：新增 `GameMatch.CalcResults.ItemBonusEnabled`（默认 `false`）。基线里那段循环是注释状态，开启属于经确认的扩展，需在配置里显式打开；顺带把百分比累加改为按 itemID 排序，避免 map 顺序影响展示值。
+- **R7 重连把离线时间补成对局分钟**：`restoreSession` 重建 `started` 锚点为 `now - questMinutes`，`tickQuestTime` 只累计真实在线时间。
+
+另外两处按审查建议收紧：
+
+- **房间设置截断**：解析越界时不再"保留前半包"继续建房/改设置，改为记日志并回 `Unable to create a room due to incorrect settings`，避免服务端与客户端从第一个错位字段开始整体分歧；尾部多余字节仍只记日志。（单字节难度字段仍按`输入 1 / 输出 9`精确处理。）
+- **僵尸皮肤卸下报错**：`toggleZombieSkinCostume` 在 `UserZBCostumeLoadout` 没有对应行时会把 `sql.ErrNoRows` 原样返回，导致卸下一件未装备的皮肤报 "sql: no rows in result set"；现在与普通装饰路径一致，视为"无旧行"继续。
+
+测试：新增 `internal/store/costume_dormant_test.go`（R1/R2/R3）、`internal/server/reward_review_test.go`（R4/R5/R7）、`TestTruncatedRoomSettingsAreRejected`；更新 `TestZombieSkinCostumeToggle`（0 号槽合法、18 号拒绝）与 `TestApplyEquipmentBonus`（默认关闭、显式开启后生效）。审查者 overlay 里 R5 的探针在未打开 `ItemBonusEnabled` 时会看到 `itemExp=0`（R6 的预期结果），开启开关后的重试幂等由 `TestEquipmentBonusRetryIsIdempotent` 覆盖。

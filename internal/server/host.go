@@ -491,12 +491,18 @@ func (s *Server) endGame(r *room, forced bool) error {
 	}
 	rewards := make([]store.MatchReward, 0, len(stats))
 	for _, stat := range stats {
-		stat.exp = matchBaseReward(coef.Exp, stat.kills)
-		stat.points = matchBaseReward(coef.Points, stat.kills)
+		// Every derived value is rebuilt from the raw counters so a retried
+		// settlement after a failed transaction cannot accumulate percentages.
 		stat.bonusExp = 0
 		stat.bonusPoints = 0
 		stat.classExp = 0
 		stat.classPoints = 0
+		stat.itemExp = 0
+		stat.itemPoints = 0
+		// The reference computes bonuses from the uncapped coefficient product
+		// and only clamps the displayed base afterwards.
+		rawExp := matchBaseReward(coef.Exp, stat.kills)
+		rawPoints := matchBaseReward(coef.Points, stat.kills)
 		classBonus := s.Config.GameMatch.CalcResults.BonusPercentage.Classes[strconv.Itoa(stat.class)]
 		for _, item := range stat.items {
 			if item.ID == stat.class && item.InUse != 0 && item.Status != 0 {
@@ -505,10 +511,12 @@ func (s *Server) endGame(r *room, forced bool) error {
 				break
 			}
 		}
-		stat.bonusExp = stat.exp * stat.classExp / 100
-		stat.bonusPoints = stat.points * stat.classPoints / 100
-		s.applyEquipmentBonus(stat)
-		s.Log.Info("match reward", "user", stat.user.user.ID, "mode", m.mode, "kills", stat.kills, "base", stat.exp, "class", stat.classExp, "item", stat.itemExp, "bonus", stat.bonusExp, "total", stat.exp+stat.bonusExp, "points", stat.points, "pointsBonus", stat.bonusPoints)
+		stat.bonusExp = rawExp * stat.classExp / 100
+		stat.bonusPoints = rawPoints * stat.classPoints / 100
+		s.applyEquipmentBonus(stat, rawExp, rawPoints)
+		stat.exp = min(rawExp, 9999)
+		stat.points = min(rawPoints, 9999)
+		s.Log.Info("match reward", "user", stat.user.user.ID, "mode", m.mode, "kills", stat.kills, "base", stat.exp, "raw", rawExp, "class", stat.classExp, "item", stat.itemExp, "bonus", stat.bonusExp, "total", stat.exp+stat.bonusExp, "points", stat.points, "pointsBonus", stat.bonusPoints)
 		update := m.mode == 0 || m.mode == 1 || m.mode == 2 || m.mode == 6 || m.mode == 22
 		won := stat.user.team == 1 && m.tWins > m.ctWins || stat.user.team == 2 && m.ctWins > m.tWins
 		rewards = append(rewards, store.MatchReward{UserID: stat.user.user.ID, Exp: stat.exp + stat.bonusExp, Points: stat.points + stat.bonusPoints, Kills: stat.kills, Deaths: stat.deaths, UpdateStats: update, QuestMatchEnd: !forced, Won: won, Mode: m.mode, Map: m.mapID, Players: len(stats)})
@@ -601,13 +609,16 @@ func matchResult(m *gameMatch, stats []*matchStat) *protocol.Writer {
 	return w
 }
 
+// matchBaseReward returns the uncapped coefficient product. The reference caps
+// it at 9999 only after bonuses are computed from the raw value.
 func matchBaseReward(coefficient, kills int) int {
 	if coefficient <= 0 {
 		return 0
 	}
 	kills = max(kills, 1)
-	if coefficient >= 9999 || kills > 9999/coefficient {
-		return 9999
+	const ceiling = 1 << 40
+	if kills > ceiling/coefficient {
+		return ceiling
 	}
 	return coefficient * kills
 }
@@ -660,9 +671,12 @@ func (s *Server) grantDropBox(c *client, rewardID int) {
 }
 
 // applyEquipmentBonus adds the configured equipment percentage for active
-// items carried into the match. Upstream had this loop commented out while the
-// configuration and result fields already existed.
-func (s *Server) applyEquipmentBonus(stat *matchStat) {
+// items carried into the match. The reference keeps this loop commented out, so
+// it only runs when ItemBonusEnabled is set explicitly.
+func (s *Server) applyEquipmentBonus(stat *matchStat, baseExp, basePoints int) {
+	if !s.Config.GameMatch.CalcResults.ItemBonusEnabled {
+		return
+	}
 	// Iterate the configured items in a stable order: map iteration used to make
 	// the awarded bonus depend on Go's random order when several were active.
 	keys := make([]int, 0, len(s.Config.GameMatch.CalcResults.BonusPercentage.Items))
@@ -682,8 +696,8 @@ func (s *Server) applyEquipmentBonus(stat *matchStat) {
 			}
 			stat.itemExp += bonus.Exp
 			stat.itemPoints += bonus.Points
-			stat.bonusExp += stat.exp * bonus.Exp / 100
-			stat.bonusPoints += stat.points * bonus.Points / 100
+			stat.bonusExp += baseExp * bonus.Exp / 100
+			stat.bonusPoints += basePoints * bonus.Points / 100
 			break
 		}
 	}

@@ -10,6 +10,10 @@ type costumeField struct {
 	column string
 }
 
+// zbCostumeSlots mirrors ZB_COSTUME_SLOT_COUNT_MAX from the reference: zombie
+// skin costumes are keyed by the ZombieSkin column, which starts at zero.
+const zbCostumeSlots = 18
+
 var costumeFields = map[string]costumeField{
 	"HeadCostume":   {0, "head"},
 	"BackCostume":   {1, "back"},
@@ -23,7 +27,7 @@ var costumeFields = map[string]costumeField{
 func (s *Store) ToggleCostume(id, slot int, className string, zombieSkin int) ([]Item, error) {
 	field, regular := costumeFields[className]
 	zombie := className == "ZombieSkinCostume"
-	if !regular && !zombie || zombie && (zombieSkin <= 0 || zombieSkin > 255) {
+	if !regular && !zombie || zombie && (zombieSkin < 0 || zombieSkin >= zbCostumeSlots) {
 		return nil, ErrItemUnavailable
 	}
 	tx, err := s.DB.Begin()
@@ -66,6 +70,7 @@ func toggleRegularCostume(tx *sql.Tx, id int, items []Item, target Item, field i
 	err := tx.QueryRow("SELECT head,back,arm,pelvis,face,tattoo,pet FROM UserCostumeLoadout WHERE userID=?", id).Scan(&loadout[0], &loadout[1], &loadout[2], &loadout[3], &loadout[4], &loadout[5], &loadout[6])
 	if errors.Is(err, sql.ErrNoRows) {
 		exists = false
+		err = nil
 	} else if err != nil {
 		return nil, err
 	}
@@ -76,10 +81,13 @@ func toggleRegularCostume(tx *sql.Tx, id int, items []Item, target Item, field i
 		if oldID != 0 && oldID != target.ID {
 			for _, item := range items {
 				if item.ID == oldID && item.InUse == 1 {
-					if _, err = tx.Exec("UPDATE UserInventory SET inUse=0 WHERE userID=? AND slot=?", id, item.Slot); err != nil {
+					// The reference keeps the replaced costume active (status 1)
+					// and only clears its inUse flag.
+					if _, err = tx.Exec("UPDATE UserInventory SET inUse=0,status=1 WHERE userID=? AND slot=?", id, item.Slot); err != nil {
 						return nil, err
 					}
 					item.InUse = 0
+					item.Status = 1
 					changed = append(changed, item)
 					break
 				}
@@ -89,7 +97,19 @@ func toggleRegularCostume(tx *sql.Tx, id int, items []Item, target Item, field i
 	} else if loadout[field] == target.ID {
 		loadout[field] = 0
 	}
-	if _, err = tx.Exec("UPDATE UserInventory SET inUse=? WHERE userID=? AND slot=?", newInUse, id, target.Slot); err != nil {
+	if newInUse == 1 {
+		// Equipping activates a dormant copy: the reference converts the stored
+		// relative duration into an absolute expiry date and sets status 1.
+		if target.Status == 0 {
+			if target.Expiry > 0 {
+				target.Expiry = nowMinutes() + target.Expiry*1440
+			}
+			target.Status = 1
+		}
+		if _, err = tx.Exec("UPDATE UserInventory SET inUse=1,status=?,expiryDate=? WHERE userID=? AND slot=?", target.Status, target.Expiry, id, target.Slot); err != nil {
+			return nil, err
+		}
+	} else if _, err = tx.Exec("UPDATE UserInventory SET inUse=0 WHERE userID=? AND slot=?", id, target.Slot); err != nil {
 		return nil, err
 	}
 	target.InUse = newInUse
@@ -113,6 +133,7 @@ func toggleZombieSkinCostume(tx *sql.Tx, id int, items []Item, target Item, skin
 	exists := true
 	if errors.Is(err, sql.ErrNoRows) {
 		exists = false
+		err = nil
 	} else if err != nil {
 		return nil, err
 	}
@@ -122,10 +143,11 @@ func toggleZombieSkinCostume(tx *sql.Tx, id int, items []Item, target Item, skin
 		if exists && current != 0 && current != target.ID {
 			for _, item := range items {
 				if item.ID == current && item.InUse == 1 {
-					if _, err = tx.Exec("UPDATE UserInventory SET inUse=0 WHERE userID=? AND slot=?", id, item.Slot); err != nil {
+					if _, err = tx.Exec("UPDATE UserInventory SET inUse=0,status=1 WHERE userID=? AND slot=?", id, item.Slot); err != nil {
 						return nil, err
 					}
 					item.InUse = 0
+					item.Status = 1
 					changed = append(changed, item)
 					break
 				}
@@ -142,7 +164,17 @@ func toggleZombieSkinCostume(tx *sql.Tx, id int, items []Item, target Item, skin
 	if err != nil {
 		return nil, err
 	}
-	if _, err = tx.Exec("UPDATE UserInventory SET inUse=? WHERE userID=? AND slot=?", newInUse, id, target.Slot); err != nil {
+	if newInUse == 1 {
+		if target.Status == 0 {
+			if target.Expiry > 0 {
+				target.Expiry = nowMinutes() + target.Expiry*1440
+			}
+			target.Status = 1
+		}
+		if _, err = tx.Exec("UPDATE UserInventory SET inUse=1,status=?,expiryDate=? WHERE userID=? AND slot=?", target.Status, target.Expiry, id, target.Slot); err != nil {
+			return nil, err
+		}
+	} else if _, err = tx.Exec("UPDATE UserInventory SET inUse=0 WHERE userID=? AND slot=?", id, target.Slot); err != nil {
 		return nil, err
 	}
 	target.InUse = newInUse
@@ -158,7 +190,7 @@ func IsCostumeClass(className string) bool {
 func (s *Store) AutoEquipCostume(id, itemID int, className string, zombieSkin int) (bool, error) {
 	field, regular := costumeFields[className]
 	zombie := className == "ZombieSkinCostume"
-	if !regular && !zombie || zombie && (zombieSkin <= 0 || zombieSkin > 255) {
+	if !regular && !zombie || zombie && (zombieSkin < 0 || zombieSkin >= zbCostumeSlots) {
 		return false, nil
 	}
 	tx, err := s.DB.Begin()
@@ -166,8 +198,10 @@ func (s *Store) AutoEquipCostume(id, itemID int, className string, zombieSkin in
 		return false, err
 	}
 	defer tx.Rollback()
-	var slot int
-	err = tx.QueryRow("SELECT slot FROM UserInventory WHERE userID=? AND itemID=? AND inUse=0 AND status=0 AND (expiryDate=0 OR expiryDate>?) ORDER BY slot LIMIT 1", id, itemID, nowMinutes()).Scan(&slot)
+	var slot, status, expiry int
+	// A dormant copy keeps its duration as a relative day count, so it is not
+	// "expired"; the absolute check only rejects items that already ran out.
+	err = tx.QueryRow("SELECT slot,status,expiryDate FROM UserInventory WHERE userID=? AND itemID=? AND inUse=0 AND status=0 AND (expiryDate=0 OR expiryDate>? OR expiryDate BETWEEN 1 AND 36500) ORDER BY slot LIMIT 1", id, itemID, nowMinutes()).Scan(&slot, &status, &expiry)
 	if errors.Is(err, sql.ErrNoRows) {
 		return false, nil
 	}
@@ -206,7 +240,13 @@ func (s *Store) AutoEquipCostume(id, itemID int, className string, zombieSkin in
 	if err != nil {
 		return false, err
 	}
-	if _, err = tx.Exec("UPDATE UserInventory SET inUse=1,status=1 WHERE userID=? AND slot=?", id, slot); err != nil {
+	if status == 0 {
+		if expiry > 0 {
+			expiry = nowMinutes() + expiry*1440
+		}
+		status = 1
+	}
+	if _, err = tx.Exec("UPDATE UserInventory SET inUse=1,status=?,expiryDate=? WHERE userID=? AND slot=?", status, expiry, id, slot); err != nil {
 		return false, err
 	}
 	if err = tx.Commit(); err != nil {

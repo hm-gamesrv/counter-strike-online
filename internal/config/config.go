@@ -116,6 +116,9 @@ type Config struct {
 	}
 	GameMatch struct {
 		CalcResults struct {
+			// ItemBonusEnabled applies BonusPercentage.Items. The reference keeps
+			// that loop commented out, so the default is off.
+			ItemBonusEnabled    bool
 			GameModeCoefficient map[string]struct {
 				Exp    int
 				Points int

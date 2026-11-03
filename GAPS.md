@@ -113,6 +113,6 @@ bot 数量/难度夹紧（模式 3/4/5/24 上限、其他模式默认值比对�
 - 玩家：昵称/位置/聊天色、屏蔽名单与聊天过滤、Messenger、问卷、Addon、称号、公告、到期与离线奖励通知、会话记录
 - 军团：协议请求、成员与解散规则、仓库转移、军团聊天
 - 小游戏：武器解放、Bingo 基础桌面/开格/洗牌/重置
-- 房间与对局：模式/地图矩阵、playlist、ZS 难度、家族战模式与 superRoom 校验、superRoom 踢人、家族战房间、场景道具消耗、掉落箱奖励、断线重连与会话接管、结算道具加成与模式排名
+- 房间与对局：模式/地图矩阵、playlist、ZS 难度、家族战模式与 superRoom 校验、superRoom 踢人、家族战房间、场景道具消耗、掉落箱奖励、断线重连与会话接管、结算与模式排名（装备加成默认关闭，需在配置里打开 `GameMatch.CalcResults.ItemBonusEnabled`）
 - 装饰：`LobbyBG` 名片、`zbRespawnEffect`、`CombatInfoItem` 的状态切换与持久化；名片按上游在 `157` 中加 `UFLAG_LOW_NAMEPLATE` 块（`U8(0)+U32(nameplateID)`），未持有名片时布局不变
 - 其他：主菜单皮肤事件、军团/武器解放/家族战；默认数据回退到上游基线

@@ -4,10 +4,13 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/hex"
+	"io"
+	"log/slog"
 	"testing"
 
 	"github.com/hm-gamesrv/cso-server-go/assets"
 	"github.com/hm-gamesrv/cso-server-go/internal/protocol"
+	"github.com/hm-gamesrv/cso-server-go/internal/store"
 )
 
 // TestRoomSettingsScenarioCreatePayload replays the bytes the client sends when
@@ -93,6 +96,37 @@ func TestRoomSettingsTruncatedPayload(t *testing.T) {
 	}
 	if !st.truncated || st.truncatedAt != 31 || r.Pos != len(w.Data) || r.Err != nil {
 		t.Fatalf("truncation not recorded: truncated=%v at=%d pos=%d err=%v", st.truncated, st.truncatedAt, r.Pos, r.Err)
+	}
+}
+
+// TestTruncatedRoomSettingsAreRejected: a short settings packet must not create
+// a room, because every following field would be read from the wrong offset.
+func TestTruncatedRoomSettingsAreRejected(t *testing.T) {
+	c := &client{
+		queue:   make(chan outbound, 8),
+		inLobby: true,
+		user:    store.User{ID: 1},
+	}
+	s := &Server{
+		rooms: map[int]*room{},
+		Log:   slog.New(slog.NewTextHandler(io.Discard, nil)),
+	}
+	w := &protocol.Writer{}
+	w.U8(0)
+	w.U32(1 << 31) // lowFlag bit 31 announces 35 bytes that never arrive
+	w.U32(0)
+	w.U32(0)
+	w.U32(0)
+	w.Bytes([]byte{1, 2, 3})
+	if err := s.roomRequest(c, &protocol.Reader{Data: w.Data}); err != nil {
+		t.Fatal(err)
+	}
+	msg := <-c.queue
+	if msg.id != 67 || len(msg.data) == 0 || msg.data[0] != 10 {
+		t.Fatalf("expected a notice, got id=%d data=%v", msg.id, msg.data)
+	}
+	if len(s.rooms) != 0 {
+		t.Fatal("truncated settings created a room")
 	}
 }
 

@@ -111,6 +111,8 @@ func (s *Server) restoreSession(c *client) {
 	if r.match != nil {
 		c.playing = slot.playing
 		if slot.hasStat {
+			// Re-anchor the play-time clock at the minutes already counted, so the
+			// offline gap is not replayed as match time by tickQuestTime.
 			stat := &matchStat{
 				user:         c,
 				kills:        slot.stat.kills,
@@ -119,7 +121,7 @@ func (s *Server) restoreSession(c *client) {
 				class:        slot.stat.class,
 				questMinutes: slot.stat.questMinutes,
 				items:        append([]store.Item{}, slot.stat.items...),
-				started:      slot.stat.started,
+				started:      time.Now().Add(-time.Duration(slot.stat.questMinutes) * time.Minute),
 				questStreaks: map[[3]int]int{},
 			}
 			for key, value := range slot.stat.questStreaks {

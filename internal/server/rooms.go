@@ -434,7 +434,11 @@ func (s *Server) roomRequest(c *client, r *protocol.Reader) error {
 			return nil
 		}
 		if st.truncated {
+			// Applying half a settings packet would leave the server and client
+			// disagreeing about every following field, so the request is refused.
 			s.Log.Warn("room settings truncated", "kind", kind, "at", st.truncatedAt, "len", len(r.Data), "hex", hex.EncodeToString(r.Data), "layout", st.layout())
+			c.notice("Unable to create a room due to incorrect settings")
+			return nil
 		}
 		if r.Pos != len(r.Data) {
 			s.Log.Debug("room settings tail", "kind", kind, "len", len(r.Data), "pos", r.Pos, "hex", hex.EncodeToString(r.Data))
@@ -605,6 +609,8 @@ func (s *Server) roomRequest(c *client, r *protocol.Reader) error {
 		}
 		if st.truncated {
 			s.Log.Warn("room settings truncated", "kind", kind, "at", st.truncatedAt, "len", len(r.Data), "hex", hex.EncodeToString(r.Data), "layout", st.layout())
+			c.notice("Unable to create a room due to incorrect settings")
+			return nil
 		}
 		s.Log.Debug("room settings", "kind", kind, "len", len(r.Data), "flags", st.flags, "layout", st.layout())
 		merged := currentRoom.settings

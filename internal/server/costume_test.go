@@ -253,18 +253,30 @@ func TestZombieSkinCostumeToggle(t *testing.T) {
 		t.Fatalf("zombie skin row still present %d", rows)
 	}
 
-	// An item without a ZombieSkin column cannot be equipped as a skin.
+	// ZombieSkin 0 is a real slot (the reference allows 0..17), so an item
+	// without the column equips into slot 0 instead of being rejected.
 	if err = s.dispatch(c, protocol.Packet{ID: 78, Data: []byte{15, 4, 0}}); err != nil {
 		t.Fatal(err)
 	}
-	if msg := <-c.queue; msg.id != 67 {
-		t.Fatalf("missing rejection notice, got %d", msg.id)
+	if msg := <-c.queue; msg.id != 154 {
+		t.Fatalf("missing zombie skin update for slot 0, got %d", msg.id)
 	}
-	if err = db.DB.QueryRow("SELECT count(*) FROM UserZBCostumeLoadout WHERE userID=1 AND slot=0").Scan(&rows); err != nil {
+	if err = db.DB.QueryRow("SELECT itemID FROM UserZBCostumeLoadout WHERE userID=1 AND slot=0").Scan(&skin); err != nil {
 		t.Fatal(err)
 	}
-	if rows != 0 {
-		t.Fatalf("invalid skin wrote loadout rows %d", rows)
+	if skin != 502 {
+		t.Fatalf("equipped slot 0 skin %d", skin)
+	}
+	// Slot 18 is outside ZB_COSTUME_SLOT_COUNT_MAX and must be rejected.
+	s.items[503] = itemDefinition{ClassName: "ZombieSkinCostume", ZombieSkin: 18}
+	if _, err = db.DB.Exec("INSERT INTO UserInventory(userID,slot,itemID,count,status,inUse,obtainDate,expiryDate,isClanItem,enhancementLevel,enhancementExp,enhanceValue,paintID,partSlot1,partSlot2,lockStatus) VALUES(1,5,503,1,1,0,?,0,0,0,0,0,0,0,0,0)", now); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.dispatch(c, protocol.Packet{ID: 78, Data: []byte{15, 5, 0}}); err != nil {
+		t.Fatal(err)
+	}
+	if msg := <-c.queue; msg.id != 67 {
+		t.Fatalf("missing rejection notice for skin 18, got %d", msg.id)
 	}
 }
 func TestAutoEquipCostumesHelper(t *testing.T) {

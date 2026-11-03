@@ -54,11 +54,15 @@ func TestCommandsRequireVersionHandshake(t *testing.T) {
 }
 
 func TestMatchRewardDoesNotOverflowBeforeCap(t *testing.T) {
-	if got := matchBaseReward(math.MaxInt, 1000000); got != 9999 {
+	if got := min(matchBaseReward(math.MaxInt, 1000000), 9999); got != 9999 {
 		t.Fatal("reward overflowed before cap", got)
 	}
 	if got := matchBaseReward(10, 0); got != 10 {
 		t.Fatal("zero-kill minimum changed", got)
+	}
+	// Bonuses are computed from the uncapped value, so it must stay above 9999.
+	if got := matchBaseReward(100, 200); got != 20000 {
+		t.Fatalf("raw reward %d, want 20000", got)
 	}
 }
 

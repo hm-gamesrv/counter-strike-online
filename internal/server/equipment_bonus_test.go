@@ -18,8 +18,6 @@ func TestApplyEquipmentBonus(t *testing.T) {
 		},
 	}
 	stat := &matchStat{
-		exp:    100,
-		points: 200,
 		items: []store.Item{
 			{
 				ID:     73,
@@ -28,7 +26,14 @@ func TestApplyEquipmentBonus(t *testing.T) {
 			},
 		},
 	}
-	s.applyEquipmentBonus(stat)
+	// The reference keeps this loop commented out, so the default is off.
+	s.applyEquipmentBonus(stat, 100, 200)
+	if stat.bonusExp != 0 || stat.bonusPoints != 0 {
+		t.Fatalf("item bonus applied without opting in: %d/%d", stat.bonusExp, stat.bonusPoints)
+	}
+
+	s.Config.GameMatch.CalcResults.ItemBonusEnabled = true
+	s.applyEquipmentBonus(stat, 100, 200)
 	if stat.itemExp != 50 || stat.itemPoints != 25 {
 		t.Fatalf("item percentages exp=%d points=%d", stat.itemExp, stat.itemPoints)
 	}
@@ -37,8 +42,6 @@ func TestApplyEquipmentBonus(t *testing.T) {
 	}
 
 	inactive := &matchStat{
-		exp:    100,
-		points: 200,
 		items: []store.Item{
 			{
 				ID:    73,
@@ -46,7 +49,7 @@ func TestApplyEquipmentBonus(t *testing.T) {
 			},
 		},
 	}
-	s.applyEquipmentBonus(inactive)
+	s.applyEquipmentBonus(inactive, 100, 200)
 	if inactive.bonusExp != 0 || inactive.bonusPoints != 0 {
 		t.Fatalf("inactive item applied bonus %d/%d", inactive.bonusExp, inactive.bonusPoints)
 	}
