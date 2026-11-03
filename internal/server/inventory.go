@@ -584,6 +584,9 @@ func (s *Server) disassembleRequest(c *client, p *protocol.Reader) error {
 	if err != nil {
 		return err
 	}
+	// Deleting a selected cosmetic clears its character reference in the store;
+	// the online cache has to follow before the next user-info broadcast.
+	s.refreshCharacterCache(c)
 	if len(changed) == 0 {
 		return nil
 	}

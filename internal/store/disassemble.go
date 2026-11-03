@@ -1,6 +1,10 @@
 package store
 
-import "slices"
+import (
+	"database/sql"
+	"errors"
+	"slices"
+)
 
 // DeleteItems removes the selected inventory rows. The upstream disassemble
 // handler removes whole items and does not grant any reward, so this mirrors it.
@@ -38,6 +42,19 @@ func (s *Store) DeleteItems(id int, slots []int, protected []int) ([]Item, error
 	for _, item := range removed {
 		if err = clearItemReference(tx, id, item.ID); err != nil {
 			return nil, err
+		}
+		// Removing the selected copy must hand the selection to another live copy,
+		// as CRoomInventory::RemoveItem does; hostInventory ignores status 0.
+		if item.Status != 0 {
+			var slot int
+			err = tx.QueryRow("SELECT slot FROM UserInventory WHERE userID=? AND itemID=? AND count>0 AND inUse<>0 AND "+liveItemSQL+" ORDER BY slot LIMIT 1", id, item.ID, nowMinutes()).Scan(&slot)
+			if errors.Is(err, sql.ErrNoRows) {
+				err = nil
+			} else if err != nil {
+				return nil, err
+			} else if _, err = tx.Exec("UPDATE UserInventory SET status=1 WHERE userID=? AND slot=?", id, slot); err != nil {
+				return nil, err
+			}
 		}
 	}
 	items, err = readInventory(tx, id)

@@ -581,3 +581,12 @@
 - **审批入队申请可突破战队人数上限**：申请不预占名额，`ApproveClanJoin` 现在在事务内、删除申请与插入成员之前重查 `memberCount < maxMemberCount`；满员返回 `-6` 并保留申请，服务端映射为 `CSO_CLAN_JOIN_MAX_MEMBER`。
 
 测试：新增 `internal/store/references_test.go`（删除清选择、过期不挡自动装备、审批限容）与 `internal/server/review_overall_test.go` 的 `TestRepeatedAddonIDConsumesOneUnit`。`go vet`、`go test ./...` 全绿，五批 overlay 探针全部通过。
+
+
+## 2026-11-03 处理 33e9ec6 复核与整体检查（3 项）
+
+- **数据库清了引用但在线缓存没刷新**：新增 `refreshCharacterCache`（重读 `Store.Character`，`nameplateID` 变化时 `broadcastUserInfo`）。分解入口在 `DeleteItems` 之后调用；到期扫描在 `removed>0` 时对全部在线会话重读，避免继续用缓存下发已删除的背景。
+- **同款休眠副本仍占着装备引用**：`clearItemReference` 与 `AutoEquipCostume` 的"槽位是否被占用"判定改为"存在 `inUse<>0` 且仍有效的副本"，休眠/过期残留不再占位；合法接替仍靠真实装备的副本。
+- **删除选中的武器副本后没有接替选择**：`DeleteItems` 在整批删除完成后，对每个被删且 `status=1` 的副本，找同 ID、`inUse<>0`、仍有效的副本置 `status=1`（对应基线 `RemoveItem`），并随返回值一起下发给客户端；`hostInventory` 不再漏掉这把武器。
+
+测试：新增 `internal/store/references_promote_test.go`（接替选择、休眠副本不占位）与 `internal/server/review_overall_test.go::TestRemovalRefreshesCharacterCache`。`go vet`、`go test ./...` 全绿，六批 overlay 探针全部通过。

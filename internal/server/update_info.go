@@ -34,6 +34,26 @@ func (s *Server) nicknameReply(c *client, code int) {
 	c.send(69, w)
 }
 
+// refreshCharacterCache reloads the persisted character after an inventory
+// removal and republishes the user info when a cosmetic selection changed.
+func (s *Server) refreshCharacterCache(c *client) {
+	if c == nil || c.user.ID == 0 {
+		return
+	}
+	character, err := s.Store.Character(c.user.ID)
+	if err != nil {
+		if s.Log != nil {
+			s.Log.Warn("character refresh failed", "user", c.user.ID, "error", err)
+		}
+		return
+	}
+	changed := character.NameplateID != c.character.NameplateID
+	c.character = character
+	if changed {
+		s.broadcastUserInfo(c)
+	}
+}
+
 func (s *Server) broadcastUserInfo(c *client) {
 	w := &protocol.Writer{}
 	w.U32(c.user.ID)

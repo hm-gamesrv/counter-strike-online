@@ -618,7 +618,15 @@ func (s *Server) expireItems(now time.Time) {
 		}
 		return
 	}
-	if removed > 0 && s.Log != nil {
+	if removed == 0 {
+		return
+	}
+	if s.Log != nil {
 		s.Log.Info("expired items removed", "count", removed)
+	}
+	// Expired cosmetics drop their selections; make online clients see it now
+	// instead of waiting for the next login.
+	for _, c := range s.users {
+		s.refreshCharacterCache(c)
 	}
 }

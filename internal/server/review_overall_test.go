@@ -328,3 +328,35 @@ func TestRepeatedAddonIDConsumesOneUnit(t *testing.T) {
 		t.Fatalf("one owned unit paid for %d addon entries: %v", len(addons), addons)
 	}
 }
+
+// TestRemovalRefreshesCharacterCache: deleting a selected cosmetic clears the
+// stored reference, and the online cache must follow immediately.
+func TestRemovalRefreshesCharacterCache(t *testing.T) {
+	s, c, db := newLoginExtraServer(t)
+	if _, err := db.GrantReward(1, store.Grant{Items: []store.Reward{{
+		ID:      7001,
+		Count:   1,
+		Dormant: true,
+	}}}, 100, 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.toggleNameplate(c, store.Item{
+		ID:   7001,
+		Slot: 2,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.itemRequest(c, &protocol.Reader{Data: []byte{7, 1, 0, 0, 2, 0, 0, 0, 0, 0}}); err != nil {
+		t.Fatal(err)
+	}
+	fresh, err := db.Character(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fresh.NameplateID != 0 {
+		t.Fatal("database cleanup failed")
+	}
+	if c.character.NameplateID != fresh.NameplateID {
+		t.Fatalf("cache still advertises deleted background %d, database=%d", c.character.NameplateID, fresh.NameplateID)
+	}
+}
