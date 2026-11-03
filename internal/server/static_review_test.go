@@ -91,7 +91,22 @@ func TestRoomSettingsReserveSpaceForEveryMember(t *testing.T) {
 	conn, peer := net.Pipe()
 	defer conn.Close()
 	defer peer.Close()
-	c := &client{conn: conn, user: store.User{Name: strings.Repeat("X", store.MaxUsernameLength)}, character: store.Character{Name: strings.Repeat("X", store.MaxCharacterNameLength)}}
+	// The member budget assumes the worst-case user info, so the fixture must be
+	// that worst case too: longest names with every optional section present.
+	c := &client{
+		conn: conn,
+		user: store.User{
+			Name: strings.Repeat("X", store.MaxUsernameLength),
+		},
+		character: store.Character{
+			Name:        strings.Repeat("X", store.MaxCharacterNameLength),
+			NameplateID: 1,
+			ClanID:      1,
+			ClanMarkID:  1,
+			ClanName:    strings.Repeat("X", maxClanNameLength),
+			Tournament:  1,
+		},
+	}
 	member := &protocol.Writer{}
 	roomUser(member, c)
 	budget := protocol.MaxPayload - 14 - 6 - maxRoomMembers*len(member.Data)

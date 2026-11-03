@@ -1,0 +1,21 @@
+fix(server,store): apply the 4308aae review findings
+
+N1: host message 100 went straight to ConsumeItem, so a host packet could delete
+a player's selected weapon. The reference routes it through
+CItemManager::UseItem: CanUseItem refuses a selected or exhausted item, and the
+class dispatch decides what using it means. This message carries no additional
+argument, so the LotteryKeyItem, Requirement/RewardItem/NicknameChange and 676
+branches consume nothing here; only an item in a usable category is activated.
+The 68/100 reply is still sent whenever the item exists, as in the reference.
+
+N2: maxUserInfoSize budgeted a bare character, so the lobby cap was accepted at
+a size whose real frame overflows (202 players produced a 69693-byte 153 frame
+against a 65531-byte payload). It now encodes the worst case: longest name plus
+nameplate, clan id/mark/name and tournament. The cap drops to 181, which still
+covers the shipped MaxPlayers=100, and the joined-room budget inherits the same
+figure.
+
+N3: GiveClanItem promoted a remaining copy after a deposit but returned only the
+tombstone, so the client kept the old selection. The patch now carries the
+tombstone followed by the remaining bag, the same shape as disassembly and
+expiry.

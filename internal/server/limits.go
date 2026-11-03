@@ -13,9 +13,24 @@ const maxRoomMembers = 32
 const networkInfoSize = 20
 const hostItemMaxSize = 20 // Fixed 14 bytes plus two three-byte parts.
 
+// maxClanNameLength is the reference's upper bound on a clan name (clanmanager
+// rejects anything longer than 20 bytes when the clan is created).
+const maxClanNameLength = 20
+
+// maxUserInfoSize is the worst-case encoded size of one lobby entry's user info:
+// the longest name with every optional section present. Budgeting only a bare
+// character used to accept a player count whose real frame overflows.
 func maxUserInfoSize() int {
+	character := store.Character{
+		Name:        strings.Repeat("X", store.MaxCharacterNameLength),
+		NameplateID: 1,
+		ClanID:      1,
+		ClanMarkID:  1,
+		ClanName:    strings.Repeat("X", maxClanNameLength),
+		Tournament:  1,
+	}
 	w := &protocol.Writer{}
-	userInfo(w, store.Character{Name: strings.Repeat("X", store.MaxCharacterNameLength)})
+	userInfo(w, character)
 	return len(w.Data)
 }
 

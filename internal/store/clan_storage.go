@@ -131,10 +131,19 @@ func (s *Store) GiveClanItem(userID, pageID, slot int) ([]Item, int, error) {
 	}}); err != nil {
 		return nil, 0, err
 	}
+	// The patch must describe what changed, not only what left: the promoted copy
+	// keeps its new selection with the client, exactly like the disassemble path.
+	remaining, err := readInventory(tx, userID)
+	if err != nil {
+		return nil, 0, err
+	}
+	changed := make([]Item, 0, len(remaining)+1)
+	changed = append(changed, Item{Slot: slot})
+	changed = append(changed, remaining...)
 	if err = tx.Commit(); err != nil {
 		return nil, 0, err
 	}
-	return []Item{{Slot: slot}}, 1, nil
+	return changed, 1, nil
 }
 
 // TakeClanItem moves one storage stack into the player's inventory. Result

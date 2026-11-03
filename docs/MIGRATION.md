@@ -636,7 +636,16 @@ WSL 里的 30003 实例确认是**原版 C++ 基线**（仓库 `~/repos/hm-games
 
 测试：`internal/server/metadata_test.go::TestMetadataKeepsFileOrder`（夹具刻意让文件序、数字序、字典序三者互不相同）。
 
-仍待处理的包序差异（74/76 顺序、103 位置、151 条数、180 位置、153 长度、72 内容、67 条数、157 flag 策略）记录在 `.tmp/review-request.md` §5 P0-6。
+仍待处理的包序差异（74/76 顺序、103 位置、151 条数、180 位置、153 长度、72 内容、67 条数、157 flag 策略）记录在 `.code-review/review-request.md` §5 P0-6。
+
+## 2026-11-03 处理 4308aae 审查（1 P1 + 2 P2）
+
+- **host 场景消耗入口能删除已选中的武器**（N1，P1）：基线的 `OnUseInGameItem` 走 `CItemManager::UseItem` 而不是直接消耗：先 `CanUseItem`（`count<>0 && status==0`）拒绝选中/耗尽的道具，再按 ClassName 与 Category 分派。`hostRequest` kind 100 现在按这个顺序处理：`LotteryKeyItem`、`Requirement`/`RewardItem`/`NicknameChange`、676 在这条消息里都不消耗（消息不带 additionalArg，`OnItemUse` 的 count 是 0），只有 `Category<9 || ==11` 会走 `ChangeItem(ActivateItem)`；道具存在时始终回 `68/100`。
+- **大厅人数预算漏算可选字段**（N2，P2）：`maxUserInfoSize` 之前按“无战队、无背景、无 tournament”的角色计算，`maxLobbyPlayers` 因此高估到 202+，实测 202 人会生成 69693 字节的 153 包。现在按最坏角色计算（最长角色名 + nameplate 5B + clan 8B+20B 名+3B + tournament 1B + 固定 titles），上限降到 **181**（`maxUserInfoSize=341`），`validateRoomFrame` 复用同一预算。`MaxPlayers=100` 的配置不受影响。
+- **公仓存入后的接替副本未下发**（N3，P2）：`GiveClanItem` 在 `promoteItemSelection` 之后重读库存，返回“墓碑 + 剩余库存”，与分解/到期路径同形，客户端能看到接替副本的新选中状态。
+
+测试：`TestHostScenarioItemUse` 按基线改写（refuse / activation / unknown 三个分支）；`TestClanStorageGiveTakeDeleteAndAccess` 的补丁断言改为“首条墓碑 + 不再含该槽位有效条目”；`TestRoomSettingsReserveSpaceForEveryMember` 的夹具改为最坏角色，与预算同源。审查者的 `review-4308aae` 三条探针全过。
+
 
 
 

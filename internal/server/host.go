@@ -426,8 +426,11 @@ func (s *Server) hostRequest(c *client, p *protocol.Reader) error {
 			p.U8()
 		}
 	case 100:
+		// The reference routes this through CItemManager::UseItem rather than
+		// consuming the item directly, so a selected or exhausted item is refused
+		// and only the class dispatch may change anything.
 		userID, itemID := p.U32(), p.U16()
-		p.U16() // The reference implementation always consumes one item.
+		p.U16() // Read but unused: the dispatch below decides what is consumed.
 		if p.Err != nil {
 			return p.Err
 		}
@@ -438,17 +441,29 @@ func (s *Server) hostRequest(c *client, p *protocol.Reader) error {
 		if target == nil || target.room != r.id {
 			return nil
 		}
-		protected := append([]int{}, s.Config.DefaultUser.DefaultItems...)
-		protected = append(protected, s.Config.DefaultUser.PseudoDefaultItems...)
-		changed, err := s.Store.ConsumeItem(target.user.ID, itemID, protected)
-		if errors.Is(err, store.ErrItemUnavailable) || errors.Is(err, store.ErrItemProtected) {
-			return nil
-		}
+		items, err := s.Store.Inventory(target.user.ID)
 		if err != nil {
 			return err
 		}
-		if err = s.sendInventoryItems(target, changed); err != nil {
+		var used store.Item
+		for _, item := range items {
+			if item.ID == itemID {
+				used = item
+				break
+			}
+		}
+		if used.ID == 0 {
+			// GetInventoryItemsByID found no row: the handler returns without reply.
+			return nil
+		}
+		changed, err := s.useInGameItem(target, used)
+		if err != nil {
 			return err
+		}
+		if len(changed) != 0 {
+			if err = s.sendInventoryItems(target, changed); err != nil {
+				return err
+			}
 		}
 		w := &protocol.Writer{}
 		w.U8(100)
@@ -482,6 +497,40 @@ func (s *Server) hostRequest(c *client, p *protocol.Reader) error {
 	}
 	return p.Err
 }
+
+// itemExtendID is the extension coupon: using it needs a target slot and a day
+// count that the host "scenario item" message does not carry.
+const itemExtendID = 676
+
+// useInGameItem mirrors CItemManager::UseItem as reached from the host scenario
+// item message. The message carries no additional argument, so the classes that
+// would consume through OnItemUse consume nothing here; only the activation
+// branch may change the inventory.
+func (s *Server) useInGameItem(c *client, item store.Item) ([]store.Item, error) {
+	// CanUseItem: an exhausted or already selected item is refused outright.
+	if item.Count <= 0 || item.Status != 0 {
+		return nil, nil
+	}
+	definition := s.items[item.ID]
+	switch definition.ClassName {
+	case "LotteryKeyItem":
+		// Opening a box needs an amount; the host message carries none.
+		return nil, nil
+	case "Requirement", "RewardItem", "NicknameChange":
+		// OnItemUse runs with count 0 on this path, so nothing is consumed.
+		return nil, nil
+	}
+	switch {
+	case item.ID == itemExtendID:
+		return nil, nil
+	case definition.Category < 9 || definition.Category == 11:
+		return s.Store.ChangeItem(c.user.ID, item.Slot, store.ActivateItem, nil)
+	default:
+		// Outside the usable categories the reference only logs a warning.
+		return nil, nil
+	}
+}
+
 func (s *Server) endGame(r *room, forced bool) error {
 	m := r.match
 	if m == nil {

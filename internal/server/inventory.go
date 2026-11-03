@@ -191,7 +191,7 @@ func (s *Server) extendItem(c *client, gameSlot, days int) error {
 		c.notice("Item unavailable.")
 		return nil
 	}
-	changed, err := s.Store.ExtendItem(c.user.ID, slot, 676, days)
+	changed, err := s.Store.ExtendItem(c.user.ID, slot, itemExtendID, days)
 	if errors.Is(err, store.ErrItemUnavailable) {
 		c.notice("Item unavailable.")
 		return nil

@@ -41,8 +41,15 @@ func TestClanStorageGiveTakeDeleteAndAccess(t *testing.T) {
 	}
 	addClanInventoryItem(t, s, master, 40, 270, 0)
 	changed, code, err := s.GiveClanItem(master, 0, 40)
-	if err != nil || code != 1 || len(changed) != 1 || changed[0].Slot != 40 || changed[0].ID != 0 {
+	// The patch starts with the tombstone of the deposited slot and then carries
+	// the remaining bag, so a promoted copy reaches the client too.
+	if err != nil || code != 1 || len(changed) == 0 || changed[0].Slot != 40 || changed[0].ID != 0 {
 		t.Fatalf("give item %+v %d, %v", changed, code, err)
+	}
+	for _, item := range changed[1:] {
+		if item.Slot == 40 && item.ID != 0 {
+			t.Fatalf("deposited slot still present in the patch: %+v", item)
+		}
 	}
 	var count int
 	if err = s.DB.QueryRow("SELECT count(*) FROM UserInventory WHERE userID=? AND slot=40", master).Scan(&count); err != nil || count != 0 {
