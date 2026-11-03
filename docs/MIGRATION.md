@@ -627,5 +627,17 @@
 
 测试：新增 `internal/server/review_a0_fixes_test.go`（R1/R2/R3/R4/R5 各一组）；`rewardMatch` 夹具改为把职业物品写成 `status=1,inUse=1` 的数据库行，因为加成现在按基线查库。九批 overlay 探针通过；`review-b4cc191` 的两条 server 探针仍红，它们用纯内存 `stat.items` 证明职业加成、并期待装备加成默认开启，两个前提都已被 R3/R6 取代，见该轮说明。
 
+## 2026-11-03 黑盒对比与元数据条目顺序
+
+WSL 里的 30003 实例确认是**原版 C++ 基线**（仓库 `~/repos/hm-gamesrv/counter-strike-online`，容器 `cso-baseline` 跑 `/app/csnz-server`，由 `scripts/start-baseline.sh` 先 `rsync -a --delete .data/ .data-test/` 再挂载启动）。逐文件 sha256 对比：`.data` 与容器 `/data` 的 45 个文件完全相同，配置亦然——两边差异全部是代码差异。
+
+- **新增 `blackbox/`**（Python，仅用标准库与 socket）：`cso_proto.py` 帧编解码、`cso_client.py` 握手与登录、`test_smoke.py` 5 个冒烟用例、`trace.py` 包序列导出、`metadata.py` 解压后比元数据内容。同一套脚本可打 30002（Go 实现）与 30003（基线）。
+- **元数据条目顺序偏差**：`ItemBox`(4)、`WeaponPaints`(6)、`RandomWeaponList`(16) 的条目集合相同但顺序不同。基线按 **JSON 文件顺序**遍历，Go 版解码进 map 后按数字排序（类型 16 从 item 1 开始而基线从 8330 开始）。新增 `internal/server/jsonorder.go`：流式 decoder 保序解析，并复用 `config.StripComments` 处理注释与 BOM；三个 builder 改为按文件顺序遍历，嵌套的 `Rate`/`mode` 对象同样保序。`metadata.py` 复验 32/32 类型内容一致。
+
+测试：`internal/server/metadata_test.go::TestMetadataKeepsFileOrder`（夹具刻意让文件序、数字序、字典序三者互不相同）。
+
+仍待处理的包序差异（74/76 顺序、103 位置、151 条数、180 位置、153 长度、72 内容、67 条数、157 flag 策略）记录在 `.tmp/review-request.md` §5 P0-6。
+
+
 
 
