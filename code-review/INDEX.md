@@ -88,6 +88,6 @@ Get-ChildItem code-review/probes -Directory | ForEach-Object {
 
 ## 当前状态
 
-- `go vet` / `go test ./...` 全绿，197 个 Test/Fuzz/Benchmark。
+- `go vet` / `go test ./...` 全绿，199 个 Test/Fuzz/Benchmark。
 - `blackbox/`（Python，纯 socket，**在仓库里**）5 个冒烟用例在自建服务端与基线实例上均通过；32 个元数据类型解压后内容一致。
-- 未完成：`FuzzItemRequest`/`FuzzMetadata`、全模式结果包逐字段金标准、`zsDifficulty` 值/编码职责拆分、等级表口径、完整事务调用图，以及 `review-request.md` §5 P0-6 的 8 条黑盒差异（`74`/`76` 顺序、`103` 位置、`151` 条数、`180` 位置、`153` 长度、`72` 内容、`67` 条数、`157` flag 策略）。
+- 未完成：全模式结果包逐字段金标准、`zsDifficulty` 值/编码职责拆分、等级表口径、完整事务调用图，以及 `review-request.md` §5 P0-6 的 8 条黑盒差异（`74`/`76` 顺序、`103` 位置、`151` 条数、`180` 位置、`153` 长度、`72` 内容、`67` 条数、`157` flag 策略）。

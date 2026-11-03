@@ -1,7 +1,8 @@
 # CSO 主服务端 Go 重写：审查请求
 
 > 写给审查者（人或其他模型）。
-> 仓库：`hm-gamesrv/counter-strike-online`，分支 `go-rewrite`，当前 HEAD **`b908064`**（2026-11-03；相对要审的代码 `8fa33d5` 只多一个文档搬迁提交）。
+> 仓库：`hm-gamesrv/counter-strike-online`，分支 `go-rewrite`，当前 HEAD **`4cf6859`**（2026-11-03）。
+> 注意：`code-review/` 已纳入版本库，审查报告与逐条响应都在里面，按轮次归档在 `code-review/reports-responses/<时间戳>-<短哈希>/`。
 > 作者自述：这套代码是按 C++ 参考实现逐函数翻译 + 实机抓包校对写出来的，
 > 因此**最可能的错误形态是“照抄时表抄错了一位”和“异常路径没照抄”**，请优先从这里下手。
 
@@ -44,7 +45,7 @@ pwsh scripts/check-ref.ps1        # 必须输出“参照仓库已在基线”
 $env:GOTOOLCHAIN = "local"        # 本机 Go 1.27.2；auto 会联网解析工具链
 go build ./...
 go vet ./...
-go test ./...                     # 197 个 Test/Fuzz/Benchmark，约 20s
+go test ./...                     # 199 个 Test/Fuzz/Benchmark，约 25s
 ```
 
 规模：`cmd/` + `internal/` 约 25.6k 行 Go，其中测试 10.0k 行。
@@ -111,7 +112,7 @@ go test -overlay code-review/probes/review-<短哈希>/overlay.json ./internal/s
 ## 3. 审查范围
 
 - 全部：`cmd/` + `internal/`。
-- 最近一段 `915782c..b908064`：**34 个提交，96 文件 +5883/−1048**，是最需要看的部分：
+- 最近一段 `915782c..4cf6859`：**43 个提交，178 文件 +10959/−1108**，是最需要看的部分（其中 `code-review/` 归档占了不少文件数，业务改动集中在 `internal/`）。
 
 ```
 b908064 docs: move GAPS.md into docs and record the black-box round
@@ -185,7 +186,7 @@ msg="room settings" kind=0 len=49 flags="[1993 8448 0 0]" layout="0:22 3:1 6:1 7
 ### 4.3 测试
 
 - 191 个 `Test/Fuzz/Benchmark`。单元测试覆盖包编解码、房间设置、背包、装饰、结算、任务、公会、快捷购买、到期与通知；集成测试用 `net.Pipe` 起真实 `serveClient`（`internal/server/server_test.go` 的 `TestLoginRoomUDPAndShutdown`），覆盖登录→大厅→建房→开局→结算→房主迁移→关服整条链。
-- fuzz：`FuzzFrame`、`FuzzRoomSettings`。**缺 `FuzzItemRequest`、`FuzzMetadata`**，仍列为待补。
+- fuzz：`FuzzFrame`、`FuzzRoomSettings`、`FuzzItemRequest`（`internal/server/fuzz_test.go`，对道具分发器喂任意载荷，跑在真实 Store 上）、`FuzzMetadataFrames`（校验每个 91 帧的长度字段自洽、不超 `MaxPayload`、分块拼起来等于原档案）。日常 `go test` 会跑种子；要真正变异需要 `go test -run '^$' -fuzz '^FuzzItemRequest$' -fuzztime 25s`。
 - 测试里有“钉行为”的用例，改逻辑时会红，例如 `TestHostLeaveForfeitsReward`（中途退不给奖励）、`TestRoomSettingsScenarioCreatePayload`（大灾变建房包逐字节回放）、`TestExpiryPushClearsDeletedSlot`（到期必须发墓碑）。
 
 ### 4.4 黑盒对比（`blackbox/`，Python）
@@ -320,7 +321,7 @@ python blackbox\metadata.py --a 30002 --b 30003     # 32 个 91 类型，解压�
 
 ### P1-7 解析健壮性
 
-`parseSettings`（`n*3`、`n*2`）、`parseVoxel`（U32 计数上限 4096）、`hostRequest` 的 `Bytes(n)`、`itemRequest` 的 `Bytes(n)`：检查每处上界是否在**分配/循环之前**，并建议补 `FuzzItemRequest`、`FuzzMetadata`。
+`parseSettings`（`n*3`、`n*2`）、`parseVoxel`（U32 计数上限 4096）、`hostRequest` 的 `Bytes(n)`、`itemRequest` 的 `Bytes(n)`：检查每处上界是否在**分配/循环之前**。`FuzzItemRequest`/`FuzzMetadataFrames` 已补，但种子覆盖有限——新增分支时请同时加种子。
 
 ### P2-1 文档与代码一致性
 
