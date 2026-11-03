@@ -64,6 +64,21 @@ func (c *client) notice(text string) {
 	w.String(text)
 	c.send(67, w)
 }
+
+// systemReply sends UMsg's red system reply, which carries the message key and
+// the strings the client substitutes into it. The reference uses it for every
+// whisper rejection.
+func (c *client) systemReply(text string, args ...string) {
+	w := &protocol.Writer{}
+	w.U8(20)
+	w.String(text)
+	w.U8(len(args))
+	for _, arg := range args {
+		w.String(arg)
+	}
+	c.send(67, w)
+}
+
 func (c *client) chatNotice(text string) {
 	w := &protocol.Writer{}
 	w.U8(11)

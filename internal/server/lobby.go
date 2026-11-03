@@ -307,12 +307,16 @@ func (s *Server) message(c *client, r *protocol.Reader) error {
 			}
 		}
 		if to == nil {
-			c.notice("MSG_TELL_USER_NOT_FOUND")
+			c.systemReply("MSG_TELL_USER_NOT_FOUND", target)
+			return nil
+		}
+		if to == c {
+			c.chatNotice("You can't send whisper to yourself.")
 			return nil
 		}
 		if reason, denied := s.whisperDenied(c, to); denied {
 			if reason != "" {
-				c.notice(reason)
+				c.systemReply(reason)
 			}
 			return nil
 		}
