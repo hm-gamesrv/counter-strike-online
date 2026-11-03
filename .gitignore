@@ -3,6 +3,7 @@
 /.data/
 /.data-upstream/
 /.data-test/
+/.code-review/
 /.dist/
 *.exe
 *.test
