@@ -1,0 +1,9 @@
+clan.go JoinClan -> joinClanTx
+clan.go ApproveClanJoin -> clanMembership, joinClanTx
+clan.go LeaveClan -> clanMembership
+clan.go InviteToClan -> clanMembership
+clan.go SetClanGrade -> clanMembership
+clan.go KickClanMember -> clanMembership
+clan.go SetClanMark -> clanMembership
+clan.go DissolveClan -> clanMembership
+clan.go DelegateClanMaster -> clanMembership

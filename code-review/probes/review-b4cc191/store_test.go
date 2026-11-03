@@ -1,0 +1,7 @@
+package store
+import("path/filepath";"testing";"github.com/hm-gamesrv/cso-server-go/internal/config")
+func reviewDB(t *testing.T)*Store{t.Helper();s,e:=Open(filepath.Join(t.TempDir(),"review.db3"));if e!=nil{t.Fatal(e)};t.Cleanup(func(){s.Close()});if e=s.Register("review","secret1","127.0.0.1",0);e!=nil{t.Fatal(e)};if e=s.CreateCharacter(1,"Review",config.DefaultUser{Level:1});e!=nil{t.Fatal(e)};return s}
+func TestReviewDormantCostume(t *testing.T){s:=reviewDB(t);_,e:=s.GrantReward(1,Grant{Items:[]Reward{{ID:471,Count:1,Duration:3,Dormant:true}}},100,0);if e!=nil{t.Fatal(e)};_,e=s.ToggleCostume(1,2,"HeadCostume",0);if e!=nil{t.Fatal(e)};var status,expiry int;s.DB.QueryRow("SELECT status,expiryDate FROM UserInventory WHERE userID=1 AND slot=2").Scan(&status,&expiry);items,_:=s.Inventory(1);if status!=1||expiry<=nowMinutes(){t.Fatalf("equipped dormant costume: status=%d expiry=%d visibleItems=%d; want status=1 and expiry=now+4320",status,expiry,len(items))}}
+func TestReviewTimedAutoCostume(t *testing.T){s:=reviewDB(t);_,e:=s.GrantReward(1,Grant{Items:[]Reward{{ID:471,Count:1,Duration:3,Dormant:true}}},100,0);if e!=nil{t.Fatal(e)};ok,e:=s.AutoEquipCostume(1,471,"HeadCostume",0);if e!=nil{t.Fatal(e)};if !ok{t.Fatal("first timed costume was not auto-equipped")}}
+
+func TestReviewZombieSkinZero(t *testing.T){s:=reviewDB(t);_,e:=s.GrantReward(1,Grant{Items:[]Reward{{ID:8009,Count:1,Dormant:true}}},100,0);if e!=nil{t.Fatal(e)};_,e=s.ToggleCostume(1,2,"ZombieSkinCostume",0);if e!=nil{t.Fatalf("valid ZombieSkin=0 costume 8009 rejected: %v",e)}}

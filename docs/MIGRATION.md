@@ -527,7 +527,7 @@
 
 ## 2026-11-03 处理 b4cc191 审查（R1–R7）
 
-审查报告把 7 项 P1 都做了可复现的隔离测试（`.code-review/probes/review-b4cc191/`）。逐条处理：
+审查报告把 7 项 P1 都做了可复现的隔离测试（`code-review/probes/review-b4cc191/`）。逐条处理：
 
 - **R1 装饰装备没有激活休眠道具**：`ToggleCostume` 的两条路径（普通装饰 / 僵尸皮肤）在装备时改为 `inUse=1, status=1`，并把休眠道具保存的相对天数（`expiryDate` 为天数）换算成绝对分钟，与基线 `OnCostumeEquip` 的 `ConvertDurationToExpiryDate` 一致；被替换掉的旧装饰按基线保留 `status=1`、只清 `inUse`。
 - **R2 限时新装饰无法自动装备**：`AutoEquipCostume` 的选择条件改为和 `readInventory` 相同的口径（`expiryDate=0`、已过期但仍是休眠相对天数、或未过期），激活时同样做绝对时间换算。
@@ -636,7 +636,7 @@ WSL 里的 30003 实例确认是**原版 C++ 基线**（仓库 `~/repos/hm-games
 
 测试：`internal/server/metadata_test.go::TestMetadataKeepsFileOrder`（夹具刻意让文件序、数字序、字典序三者互不相同）。
 
-仍待处理的包序差异（74/76 顺序、103 位置、151 条数、180 位置、153 长度、72 内容、67 条数、157 flag 策略）记录在 `.code-review/review-request.md` §5 P0-6。
+仍待处理的包序差异（74/76 顺序、103 位置、151 条数、180 位置、153 长度、72 内容、67 条数、157 flag 策略）记录在 `code-review/review-request.md` §5 P0-6。
 
 ## 2026-11-03 处理 4308aae 审查（1 P1 + 2 P2）
 
