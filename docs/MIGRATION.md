@@ -670,3 +670,17 @@ WSL 里的 30003 实例确认是**原版 C++ 基线**（仓库 `~/repos/hm-games
 
 
 
+
+
+## 2026-11-04 处理 21801e6 审查（3 P1 + 5 P2）
+
+- **扭蛋奖品绕过目录规则**（1，P1）：`Store.TickGachapon` 之前直接塞裸 `Reward`，5101 落成 `status=1` 且重复中奖多开一行。新增 `Store.ItemRule` 目录钩子（服务端在 `loadItems` 后安装），按 `AddItem` 规则落库；返回的补丁从「整个背包」改为「实际受影响的行」。
+- **扭蛋 166 不刷缓存不发 157**（5，P2）：166 按密码箱处理，提交后 `reloadCharacter` + `broadcastUserInfo`，对应 `UpdatePasswordBoxes` → `UpdateClientUserInfo`。
+- **家族战对局中允许非参战者加入**（2，P1）：加入路径新增 `familyBattleParticipant`，以 `match.stats` 为参战名单（重连保留），不在名单者回 `You are not participating in this Family Battle.`。
+- **家族战启用被拒不给房主回退**（4，P2）：新增 `familyBattleSettings`（缺军团成员 / >2 军团 / 人数超上限）与 `revertRoomSettings`（65/4 + 全零掩码），并按基线发 `ROOM_SETTING_FAILED_*`。
+- **换地图不加载地图派生设置**（3，P1）：新增 `applyMapDefaults`，复刻 `ROOM_LOW_MAPID` 块（容量、地图默认武器限制、`ball_default`、`isZbCompetitive`、`mapId2`、`MAPPLAYLIST` 位），不受 `ValidateSettings` 门控；`writeUpdate` 增加 `added` 掩码让服务器补位的字段也进广播。
+- **被拒绝的设置值删掉房间原值**（6，P2）：新增 `settings.restoreRejected`，请求带过、清洗后消失、房间原本有值的字段恢复旧值（基线只清更新位）；`sd` 在模式不适用时改为写 0 而非删字段。
+- **掉落箱缺场景模式白名单**（7，P2）：`grantDropBox` 先判 15/17/26/28。
+- **Bingo 洗牌拆散号码与已开状态**（8，P2）：改为整槽交换。
+
+测试：`review-21801e6` 十条探针 6 条通过；其余 4 条为探针缺陷（扭蛋两条断言库存只有一行，但夹具含默认道具 1001；地图两条断言来自 `MapList.csv` 的值，但夹具未加载地图表），已在响应文档说明并单独验证实现正确（map 5 → 32、map 30 → 20/7）。夹具调整：掉落箱用例改场景模式 15；sd 不使用时期望字段存在且为 0。
