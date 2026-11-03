@@ -281,8 +281,10 @@ func (s *Server) applyQuestEvent(c *client, m *gameMatch, stat *matchStat, e que
 				if stat.questStreaks == nil {
 					stat.questStreaks = map[[3]int]int{}
 				}
+				// The reference compares "continuous <= counter" after incrementing,
+				// so a 2-kill streak pays out on the third kill, not the second.
 				stat.questStreaks[key]++
-				if stat.questStreaks[key] < cond.Continuous {
+				if stat.questStreaks[key] <= cond.Continuous {
 					continue
 				}
 				delete(stat.questStreaks, key)
@@ -303,15 +305,35 @@ func (s *Server) applyQuestEvent(c *client, m *gameMatch, stat *matchStat, e que
 				s.Log.Warn("quest reward unavailable; completion will be retained", "quest", task.QuestID, "task", task.TaskID, "error", err)
 			}
 		}
-		progress, err := s.Store.RecordQuestProgressOnce(c.user.ID, task.QuestID, task.TaskID, task.Goal, delta, task.RewardID, payload, e.Key)
-		if err != nil {
+		if _, err := s.Store.RecordQuestProgressOnce(c.user.ID, task.QuestID, task.TaskID, task.Goal, delta, task.RewardID, payload, e.Key); err != nil {
 			return err
 		}
-		if task.Notice.Goal > 0 && (progress.Units/task.Notice.Goal > old.Units/task.Notice.Goal || progress.Units == task.Goal) {
-			c.chatNotice(questNotice(task.Notice.UserMsg, progress.Units, task.Goal))
+		// The reference notifies when the match-local progress lands exactly on a
+		// multiple of the notice goal, not when it crosses a boundary; a 15-point
+		// condition with a 30-point notice goal therefore speaks every other kill.
+		if task.Notice.Goal > 0 {
+			temp := questMatchUnits(stat, task, delta)
+			if temp%task.Notice.Goal == 0 {
+				c.chatNotice(questNotice(task.Notice.UserMsg, temp, task.Goal))
+			}
 		}
 	}
 	return nil
+}
+
+// questMatchUnits tracks the per-match progress the reference keeps in
+// UserQuestTaskProgress::unitsDone. The stored counter spans matches, so the
+// notice rule (a multiple of the notice goal) has to run on this one.
+func questMatchUnits(stat *matchStat, task questTask, delta int) int {
+	if stat == nil {
+		return delta
+	}
+	if stat.questUnits == nil {
+		stat.questUnits = map[[2]int]int{}
+	}
+	key := [2]int{task.QuestID, task.TaskID}
+	stat.questUnits[key] += delta
+	return stat.questUnits[key]
 }
 
 func (s *Server) resumeQuestRewards(c *client) error {

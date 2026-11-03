@@ -229,7 +229,10 @@ func (s *Store) DeleteClanItem(userID, pageID, slot int) (int, error) {
 	if pageID < 0 || pageID >= ClanStoragePages || slot < 0 || slot >= ClanStoragePageSize {
 		return -1, nil
 	}
-	result, err := s.DB.Exec("UPDATE ClanStorageItem SET itemID=0,itemCount=0,itemDuration=0,itemEnhValue=0 WHERE clanID=(SELECT clanID FROM ClanMember WHERE userID=? AND memberGrade<=1 LIMIT 1) AND pageID=? AND slot=? AND itemID<>0", userID, pageID, slot)
+	// The reference authorises a delete with memberGrade <= that page's
+	// accessGrade, not with a fixed grade: every member whose grade the page
+	// admits may clear a slot. See DeleteClanStorageItem.
+	result, err := s.DB.Exec("UPDATE ClanStorageItem SET itemID=0,itemCount=0,itemDuration=0,itemEnhValue=0 WHERE clanID=(SELECT m.clanID FROM ClanMember m INNER JOIN ClanStoragePage p ON p.clanID=m.clanID AND p.pageID=? WHERE m.userID=? AND m.memberGrade<=p.accessGrade LIMIT 1) AND pageID=? AND slot=? AND itemID<>0", pageID, userID, pageID, slot)
 	if err != nil {
 		return 0, err
 	}

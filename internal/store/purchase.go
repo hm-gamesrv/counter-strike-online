@@ -13,27 +13,39 @@ type Reward struct {
 	Dormant, Unselected, Exclusive, Stackable bool
 }
 
-// Purchase atomically charges the account and grants every bundle item. A full
-// inventory or failed insert cannot charge a user or partially grant a bundle.
+// Purchase is PurchaseTracked without the affected rows.
 func (s *Store) Purchase(id int, points bool, price, bonus int, items []Reward, limit, defaultSlots int) error {
+	_, err := s.PurchaseTracked(id, points, price, bonus, items, limit, defaultSlots)
+	return err
+}
+
+// PurchaseTracked atomically charges the account and grants every bundle item,
+// and reports the rows it added or incremented so the caller can send exactly
+// that patch. A full inventory or failed insert cannot charge a user or
+// partially grant a bundle.
+func (s *Store) PurchaseTracked(id int, points bool, price, bonus int, items []Reward, limit, defaultSlots int) ([]Item, error) {
 	if price < 0 || bonus < 0 || len(items) == 0 {
-		return errors.New("BUY_FAIL_SYSTEM_ERROR")
+		return nil, errors.New("BUY_FAIL_SYSTEM_ERROR")
 	}
 	if err := validateGrants(items, limit, defaultSlots); err != nil {
-		return err
+		return nil, err
 	}
 	tx, e := s.DB.Begin()
 	if e != nil {
-		return e
+		return nil, e
 	}
 	defer tx.Rollback()
 	if e = chargePurchase(tx, id, points, price, bonus); e != nil {
-		return e
+		return nil, e
 	}
-	if e = grantItems(tx, id, items, limit, defaultSlots); e != nil {
-		return e
+	touched, e := grantItemsForPurchase(tx, id, items, limit, defaultSlots, true)
+	if e != nil {
+		return nil, e
 	}
-	return tx.Commit()
+	if e = tx.Commit(); e != nil {
+		return nil, e
+	}
+	return touched, nil
 }
 
 func validateGrants(items []Reward, limit, defaultSlots int) error {
@@ -87,6 +99,15 @@ func grantItems(tx *sql.Tx, id int, items []Reward, limit, defaultSlots int) err
 // the row that was just inserted. Password boxes are a character counter and are
 // not reported.
 func grantItemsTracked(tx *sql.Tx, id int, items []Reward, limit, defaultSlots int) ([]Item, error) {
+	return grantItemsForPurchase(tx, id, items, limit, defaultSlots, false)
+}
+
+// grantItemsForPurchase is grantItemsTracked with the AddItem rule that buying a
+// timed item the account already owns extends that copy instead of opening a
+// second row. It is limited to the purchase path: the reward and prize paths keep
+// inserting, which is where their fixtures and the reference's own reward flow
+// differ from a shop transaction.
+func grantItemsForPurchase(tx *sql.Tx, id int, items []Reward, limit, defaultSlots int, extendTimed bool) ([]Item, error) {
 	var touched []Item
 	var count, slot int
 	if err := tx.QueryRow("SELECT count(*),coalesce(max(slot),0)+1 FROM UserInventory WHERE userID=?", id).Scan(&count, &slot); err != nil {
@@ -127,6 +148,42 @@ func grantItemsTracked(tx *sql.Tx, id int, items []Reward, limit, defaultSlots i
 					Slot:  existingSlot,
 					ID:    i.ID,
 					Count: existingCount + i.Count,
+				})
+				continue
+			}
+			if !errors.Is(err, sql.ErrNoRows) {
+				return nil, err
+			}
+		}
+		if extendTimed && i.Duration > 0 {
+			// CItemManager::AddItem extends a timed item the account already owns
+			// instead of adding a second row, using ExtendItem with the day count as
+			// the increment. A copy that is not in use gets the raw day count added
+			// (the reference adds days onto an absolute timestamp there), an in-use
+			// copy gets days*1440 minutes, and a copy whose total would exceed 999
+			// days becomes permanent.
+			var extendSlot, extendExpiry, extendObtain, extendInUse int
+			err := tx.QueryRow("SELECT slot,coalesce(expiryDate,0),coalesce(obtainDate,0),coalesce(inUse,0) FROM UserInventory WHERE userID=? AND itemID=? AND expiryDate<>0 AND enhanceValue=0 AND partSlot1=0 AND partSlot2=0 LIMIT 1", id, i.ID).Scan(&extendSlot, &extendExpiry, &extendObtain, &extendInUse)
+			if err == nil {
+				expiry := extendExpiry
+				switch {
+				case extendInUse == 0:
+					expiry += i.Duration
+				case i.Duration+(expiry-extendObtain)/1440 >= 999:
+					expiry = 0
+				default:
+					expiry += i.Duration * 1440
+				}
+				if _, e = tx.Exec("UPDATE UserInventory SET expiryDate=? WHERE userID=? AND slot=?", expiry, id, extendSlot); e != nil {
+					return nil, e
+				}
+				touched = append(touched, Item{
+					Slot:   extendSlot,
+					ID:     i.ID,
+					Count:  1,
+					Obtain: extendObtain,
+					Expiry: expiry,
+					InUse:  extendInUse,
 				})
 				continue
 			}

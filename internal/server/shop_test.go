@@ -50,14 +50,22 @@ func TestCapturedCurrentClientShopPurchase(t *testing.T) {
 	ch, _ := db.Character(1)
 	items, _ := db.Inventory(1)
 	now := int(time.Now().Unix() / 60)
-	if ch.Points != 3 || len(items) != 3 || items[1].ID != 212 || items[1].Status != 0 || items[2].Status != 1 || items[2].InUse != 1 || items[2].Expiry < now+4320-1 || items[2].Expiry > now+4320+1 {
+	// Buying the same timed item twice extends the owned copy (AddItem runs
+	// ExtendItem and returns) instead of opening a second row, so the duration
+	// doubles: 3 days + 3 days.
+	if ch.Points != 3 || len(items) != 2 || items[1].ID != 212 || items[1].Status != 1 || items[1].InUse != 1 {
 		t.Fatal("purchase did not debit and grant timed weapon", ch, items)
+	}
+	if items[1].Expiry < now+8640-2 || items[1].Expiry > now+8640+2 {
+		t.Fatalf("second purchase did not extend the owned copy: expiry-%d=%d, want ~8640", now, items[1].Expiry-now)
 	}
 	if err = s.shopRequest(c, &protocol.Reader{Data: []byte{1, 255, 255, 0, 0}}); err != nil {
 		t.Fatal(err)
 	}
-	if success, message := reply(); success != 0 || message != "BUY_FAIL_NOITEM" {
-		t.Fatal("purchase error advertised success", success, message)
+	// SendShopBuyProductReply writes the same second byte for every result; the
+	// outcome is in the message key.
+	if _, message := reply(); message != "BUY_FAIL_NOITEM" {
+		t.Fatal("purchase error advertised success", message)
 	}
 	for _, data := range [][]byte{{1, 56}, {1, 0, 56}, {1, 56, 0, 0}, {1, 56, 0, 0, 0, 0}} {
 		if err = s.shopRequest(c, &protocol.Reader{Data: data}); err == nil {
@@ -76,7 +84,9 @@ func TestCapturedCurrentClientShopPurchase(t *testing.T) {
 		t.Fatal("current catalog permanent item rejected", success, message)
 	}
 	items, err = db.Inventory(1)
-	if err != nil || len(items) != 4 || items[3].InUse != 0 || items[3].Expiry != 0 || items[3].Status != 0 {
+	// A permanent copy carries no duration, so it is inserted rather than folded
+	// into the timed copy: bag = default, timed weapon, dormant permer.
+	if err != nil || len(items) != 3 || items[2].InUse != 0 || items[2].Expiry != 0 || items[2].Status != 0 {
 		t.Fatal("permanent catalog item lost dormant state", items, err)
 	}
 }

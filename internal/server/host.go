@@ -23,6 +23,9 @@ type matchStat struct {
 	started                                                                        time.Time
 	questMinutes                                                                   int
 	questStreaks                                                                   map[[3]int]int
+	// questUnits is the match-local progress the reference keeps per task; the
+	// stored counter spans matches, so the notice rule runs on this one.
+	questUnits map[[2]int]int
 }
 type gameMatch struct {
 	id                         string

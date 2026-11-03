@@ -256,7 +256,8 @@ func (s *Server) shopRequest(c *client, r *protocol.Reader) error {
 				reply = "BUY_FAIL_SYSTEM_ERROR"
 				continue
 			}
-			err = s.Store.Purchase(c.user.ID, p.Points, sp.Price, sp.AdditionalPoints, items, s.Config.InventorySlotMax, len(s.Config.DefaultUser.DefaultItems))
+			var touched []store.Item
+			touched, err = s.Store.PurchaseTracked(c.user.ID, p.Points, sp.Price, sp.AdditionalPoints, items, s.Config.InventorySlotMax, len(s.Config.DefaultUser.DefaultItems))
 			if err != nil {
 				reply = err.Error()
 			} else {
@@ -267,7 +268,9 @@ func (s *Server) shopRequest(c *client, r *protocol.Reader) error {
 				if e != nil {
 					return e
 				}
-				if e = s.sendInventory(c); e != nil {
+				// The reference sends the rows AddItem added or incremented, not a
+				// full bag; the 154 frame is a slot-keyed patch.
+				if e = s.sendInventoryItems(c, touched); e != nil {
 					return e
 				}
 				w := &protocol.Writer{}
@@ -279,11 +282,9 @@ func (s *Server) shopRequest(c *client, r *protocol.Reader) error {
 	}
 	w := &protocol.Writer{}
 	w.U8(1)
-	if reply == "BUY_OK" {
-		w.U8(1)
-	} else {
-		w.U8(0)
-	}
+	// SendShopBuyProductReply writes this constant unconditionally; the result
+	// travels in the reply string.
+	w.U8(1)
 	w.String(reply)
 	w.U16(0)
 	c.send(72, w)
