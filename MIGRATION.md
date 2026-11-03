@@ -608,3 +608,13 @@
 
 九批 overlay 探针复跑时，`review-b4cc191` 的 `TestReviewBonusRetryPercent` 仍会在未打开 `ItemBonusEnabled` 时看到 `itemExp=0`。该探针写于 R6（装备加成默认关闭，对齐基线里被注释掉的循环）之前，与 5bc14c8 起的既定行为冲突，不是本轮回归；重试幂等由打开开关的 `TestEquipmentBonusRetryIsIdempotent` 覆盖。
 
+## 2026-11-03 库存行消失后的级联状态梳理（2 处补齐）
+
+把所有会让库存行消失的入口列全，逐个核对“外部引用 / 选择接替 / 在线缓存 / 下发”。清单与判断依据见 `.tmp/inventory-removal-audit.md`。其中两处确有可达缺口：
+
+- **公仓存入不清引用**（`store/GiveClanItem`）：存入不检查 `status`/`inUse`，正在装备的背景、特效、装饰与选中的武器都能存进公仓。删除行之后补 `clearItemReference` 与 `promoteItemSelection`；服务端 `clanStorageGive` 在 154 补丁后调用 `refreshCharacterCache`。
+- **强化材料吃掉了选中的副本**（`store/EnhanceItem`）：材料是普通库存行，可能正是某把武器的选中副本，删除后没有副本接替，`hostInventory` 会漏掉这把武器。整批删除后调用 `promoteItemSelection`；材料是武器，不涉及背景/装饰引用。
+
+测试：新增 `internal/store/removal_cascade_test.go`（`TestClanDepositClearsEquippedNameplate`、`TestEnhanceMaterialPromotesSelectedCopy`）。其余入口（消耗、开箱钥匙、续期、喷漆、部件、改名卡、奖励来源、插件材料）逐条核对后判定不需要级联，理由写在清单里。
+
+

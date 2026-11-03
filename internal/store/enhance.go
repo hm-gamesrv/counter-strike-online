@@ -23,7 +23,7 @@ func (s *Store) EnhanceItem(id, targetSlot int, materialSlots []int, level, exp,
 		return nil, ErrItemUnavailable
 	}
 	seen := map[int]bool{targetSlot: true}
-	var removed []int
+	var removed []Item
 	for _, slot := range materialSlots {
 		material, ok := bySlot[slot]
 		if !ok || material.Count < 1 {
@@ -37,10 +37,16 @@ func (s *Store) EnhanceItem(id, targetSlot int, materialSlots []int, level, exp,
 			if _, err = tx.Exec("DELETE FROM UserInventory WHERE userID=? AND slot=?", id, slot); err != nil {
 				return nil, err
 			}
-			removed = append(removed, slot)
+			removed = append(removed, material)
 		} else if _, err = tx.Exec("UPDATE UserInventory SET count=count-1 WHERE userID=? AND slot=?", id, slot); err != nil {
 			return nil, err
 		}
+	}
+	// Materials are ordinary inventory rows, so one of them can be the selected
+	// copy of a weapon. Hand the selection to a remaining copy before the rows are
+	// gone for good; nothing else in the pass does it for a material.
+	if err = promoteItemSelection(tx, id, removed); err != nil {
+		return nil, err
 	}
 	result, err := tx.Exec("UPDATE UserInventory SET enhancementLevel=?,enhancementExp=?,enhanceValue=? WHERE userID=? AND slot=?", level, exp, value, id, targetSlot)
 	if err != nil {
@@ -55,8 +61,8 @@ func (s *Store) EnhanceItem(id, targetSlot int, materialSlots []int, level, exp,
 	if err != nil {
 		return nil, err
 	}
-	for _, slot := range removed {
-		items = append([]Item{{Slot: slot}}, items...)
+	for _, item := range removed {
+		items = append([]Item{{Slot: item.Slot}}, items...)
 	}
 	if err = tx.Commit(); err != nil {
 		return nil, err

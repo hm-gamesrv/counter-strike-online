@@ -99,8 +99,8 @@ func (s *Store) GiveClanItem(userID, pageID, slot int) ([]Item, int, error) {
 	if err != nil {
 		return nil, 0, err
 	}
-	var itemID, count, expiry, enhance, clanItem int
-	err = tx.QueryRow("SELECT itemID,count,coalesce(expiryDate,0),coalesce(enhanceValue,0),coalesce(isClanItem,0) FROM UserInventory WHERE userID=? AND slot=? AND count>0 AND "+liveItemSQL, userID, slot, nowMinutes()).Scan(&itemID, &count, &expiry, &enhance, &clanItem)
+	var itemID, count, expiry, enhance, clanItem, status int
+	err = tx.QueryRow("SELECT itemID,count,coalesce(expiryDate,0),coalesce(enhanceValue,0),coalesce(isClanItem,0),coalesce(status,0) FROM UserInventory WHERE userID=? AND slot=? AND count>0 AND "+liveItemSQL, userID, slot, nowMinutes()).Scan(&itemID, &count, &expiry, &enhance, &clanItem, &status)
 	if errors.Is(err, sql.ErrNoRows) || itemID <= 0 || clanItem != 0 {
 		return nil, -2, nil
 	}
@@ -115,6 +115,20 @@ func (s *Store) GiveClanItem(userID, pageID, slot int) ([]Item, int, error) {
 		return nil, 0, err
 	}
 	if _, err = tx.Exec("DELETE FROM UserInventory WHERE userID=? AND slot=?", userID, slot); err != nil {
+		return nil, 0, err
+	}
+	// The deposited copy leaves the bag, so a nameplate, effect, costume or zombie
+	// skin pointing at it has to be cleared and a selected weapon needs another
+	// copy to take over -- same cascade as disassemble and expiry. Nothing checks
+	// whether the item was equipped, so this is reachable from the storage UI.
+	if err = clearItemReference(tx, userID, itemID); err != nil {
+		return nil, 0, err
+	}
+	if err = promoteItemSelection(tx, userID, []Item{{
+		Slot:   slot,
+		ID:     itemID,
+		Status: status,
+	}}); err != nil {
 		return nil, 0, err
 	}
 	if err = tx.Commit(); err != nil {

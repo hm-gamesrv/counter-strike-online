@@ -779,6 +779,9 @@ func (s *Server) clanStorageGive(c *client, r *protocol.Reader) error {
 	if err = s.sendInventoryItems(c, items); err != nil {
 		return err
 	}
+	// A deposited copy can be the equipped nameplate or effect; the store cleared
+	// the selection, so the online cache and the client's user info must follow.
+	s.refreshCharacterCache(c)
 	s.clanReply(c, 24, 1, "")
 	return s.sendClanStoragePage(c, page)
 }
