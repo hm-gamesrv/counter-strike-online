@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"net"
+	"slices"
 	"sort"
 	"strconv"
 	"time"
@@ -53,7 +54,13 @@ func (s *Server) startGame(c *client) error {
 	}
 	var peer *dedicatedServer
 	if s.Config.Room.HostConnectingMethod != 0 {
-		peer = s.availableDedicated()
+		// A playlist rotation keeps this room's dedicated server assigned, so it
+		// must be reused before the pool hands out a fresh one.
+		if r.dedicated != nil && r.dedicated.room == r.id && slices.Contains(s.dedicated, r.dedicated) {
+			peer = r.dedicated
+		} else {
+			peer = s.availableDedicated()
+		}
 	}
 	if s.Config.Room.HostConnectingMethod == 1 && peer == nil {
 		c.notice("Cannot start game due to no available dedicated server")

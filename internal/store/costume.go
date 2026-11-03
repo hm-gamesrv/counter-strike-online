@@ -78,9 +78,11 @@ func toggleRegularCostume(tx *sql.Tx, id int, items []Item, target Item, field i
 	newInUse := 1 - target.InUse
 	if newInUse == 1 {
 		oldID := loadout[field]
-		if oldID != 0 && oldID != target.ID {
+		if oldID != 0 {
+			// Replace the previously equipped copy even when it carries the same
+			// item ID: two copies of one costume must never stay equipped together.
 			for _, item := range items {
-				if item.ID == oldID && item.InUse == 1 {
+				if item.ID == oldID && item.InUse == 1 && item.Slot != target.Slot {
 					// The reference keeps the replaced costume active (status 1)
 					// and only clears its inUse flag.
 					if _, err = tx.Exec("UPDATE UserInventory SET inUse=0,status=1 WHERE userID=? AND slot=?", id, item.Slot); err != nil {
@@ -140,9 +142,9 @@ func toggleZombieSkinCostume(tx *sql.Tx, id int, items []Item, target Item, skin
 	changed := []Item{}
 	newInUse := 1 - target.InUse
 	if newInUse == 1 {
-		if exists && current != 0 && current != target.ID {
+		if exists && current != 0 {
 			for _, item := range items {
-				if item.ID == current && item.InUse == 1 {
+				if item.ID == current && item.InUse == 1 && item.Slot != target.Slot {
 					if _, err = tx.Exec("UPDATE UserInventory SET inUse=0,status=1 WHERE userID=? AND slot=?", id, item.Slot); err != nil {
 						return nil, err
 					}

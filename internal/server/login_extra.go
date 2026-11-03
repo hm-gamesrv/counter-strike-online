@@ -2,28 +2,38 @@ package server
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/hm-gamesrv/cso-server-go/internal/protocol"
 	"github.com/hm-gamesrv/cso-server-go/internal/store"
 )
 
+// errRewardDeferred marks a notice that cannot be paid right now (choice UI,
+// unknown definition, catalog gap). The row stays queued and the login continues.
+var errRewardDeferred = errors.New("reward deferred")
+
 func (s *Server) sendExpiryNotices(c *client) error {
-	items, err := s.Store.ExpiryNotices(c.user.ID)
+	notices, err := s.Store.ExpiryNoticeRows(c.user.ID)
 	if err != nil {
 		return err
 	}
-	sendable := items[:0]
-	for _, item := range items {
-		if item >= 0 && item <= 65535 {
-			sendable = append(sendable, item)
+	sendable := make([]int, 0, len(notices))
+	delivered := make([]int, 0, len(notices))
+	for _, notice := range notices {
+		if notice.ItemID < 0 || notice.ItemID > 65535 {
+			// Never representable on the wire; drop the row instead of retrying.
+			delivered = append(delivered, notice.RowID)
+			continue
 		}
+		if len(sendable) >= 255 {
+			break
+		}
+		sendable = append(sendable, notice.ItemID)
+		delivered = append(delivered, notice.RowID)
 	}
 	if len(sendable) == 0 {
-		return nil
-	}
-	if len(sendable) > 255 {
-		sendable = sendable[:255]
+		return s.Store.ClearExpiryNotices(c.user.ID, delivered)
 	}
 	w := &protocol.Writer{}
 	w.U8(62)
@@ -34,7 +44,7 @@ func (s *Server) sendExpiryNotices(c *client) error {
 		w.U8(0)
 	}
 	c.send(67, w)
-	return s.Store.ClearExpiryNotices(c.user.ID, len(sendable))
+	return s.Store.ClearExpiryNotices(c.user.ID, delivered)
 }
 
 // grantCatalogReward grants one fixed catalog reward. Choice rewards stay
@@ -45,7 +55,7 @@ func (s *Server) grantCatalogReward(c *client, rewardID int) error {
 		return err
 	}
 	if len(p.Choices) > 0 {
-		return errors.New("choice reward needs the selection UI")
+		return fmt.Errorf("%w: choice reward needs the selection UI", errRewardDeferred)
 	}
 	changed, err := s.Store.GrantReward(c.user.ID, p.Grant, s.Config.InventorySlotMax, len(s.Config.DefaultUser.DefaultItems))
 	if err != nil {
@@ -82,10 +92,10 @@ func (s *Server) grantRewardNotices(c *client) error {
 	return nil
 }
 
-// rewardRejection reports award refusals that keep the notice queued instead of
-// aborting the login packet chain.
+// rewardRejection reports refusals that keep the notice queued and let the login
+// continue, so one unpayable reward cannot lock the account out.
 func rewardRejection(err error) bool {
-	if errors.Is(err, store.ErrItemUnavailable) || errors.Is(err, store.ErrItemProtected) || errors.Is(err, store.ErrRewardLevel) {
+	if errors.Is(err, store.ErrItemUnavailable) || errors.Is(err, store.ErrItemProtected) || errors.Is(err, store.ErrRewardLevel) || errors.Is(err, errRewardDeferred) {
 		return true
 	}
 	return strings.Contains(err.Error(), "INVENTORY_FULL")
@@ -96,10 +106,10 @@ func rewardRejection(err error) bool {
 func (s *Server) grantCatalogRewardNotice(c *client, rewardID int) error {
 	p, err := s.buildCatalogReward(rewardID, 1)
 	if err != nil {
-		return err
+		return fmt.Errorf("%w: %v", errRewardDeferred, err)
 	}
 	if len(p.Choices) > 0 {
-		return errors.New("choice reward needs the selection UI")
+		return fmt.Errorf("%w: choice reward needs the selection UI", errRewardDeferred)
 	}
 	changed, err := s.Store.GrantRewardNotice(c.user.ID, rewardID, p.Grant, s.Config.InventorySlotMax, len(s.Config.DefaultUser.DefaultItems))
 	if err != nil {

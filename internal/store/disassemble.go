@@ -22,7 +22,8 @@ func (s *Store) DeleteItems(id int, slots []int, protected []int) ([]Item, error
 	seen := map[int]bool{}
 	for _, slot := range slots {
 		item, ok := bySlot[slot]
-		if !ok || seen[slot] || slices.Contains(protected, slot) {
+		// protected lists item IDs (default/pseudo-default), not slots.
+		if !ok || seen[slot] || slices.Contains(protected, item.ID) {
 			continue
 		}
 		seen[slot] = true

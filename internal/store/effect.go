@@ -1,12 +1,33 @@
 package store
 
-import "errors"
+import (
+	"database/sql"
+	"errors"
+)
 
 // effectColumns are the cosmetic effect choices stored on the extended
 // character row. Upstream only persists them and refreshes inventory flags.
 var effectColumns = map[string]bool{
 	"zbRespawnEffect":  true,
 	"killerMarkEffect": true,
+}
+
+// activateExpiry returns the expiry to persist when a row is switched on. A
+// dormant copy stores a relative day count, which must become an absolute
+// timestamp before the item can count as live.
+func activateExpiry(tx *sql.Tx, id, slot int) (int, error) {
+	var status, expiry int
+	err := tx.QueryRow("SELECT coalesce(status,0),coalesce(expiryDate,0) FROM UserInventory WHERE userID=? AND slot=?", id, slot).Scan(&status, &expiry)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, ErrItemUnavailable
+	}
+	if err != nil {
+		return 0, err
+	}
+	if status == 0 && expiry > 0 && expiry <= 36500 {
+		expiry = nowMinutes() + expiry*1440
+	}
+	return expiry, nil
 }
 
 // ToggleNameplate switches a LobbyBG nameplate, mirroring the nameplate branch
@@ -32,7 +53,11 @@ func (s *Store) ToggleNameplate(id, itemID, slot int) ([]Item, int, error) {
 		next = itemID
 		inUse = 1
 	}
-	result, err := tx.Exec("UPDATE UserInventory SET status=1,inUse=? WHERE userID=? AND slot=?", inUse, id, slot)
+	expiry, err := activateExpiry(tx, id, slot)
+	if err != nil {
+		return nil, 0, err
+	}
+	result, err := tx.Exec("UPDATE UserInventory SET status=1,inUse=?,expiryDate=? WHERE userID=? AND slot=?", inUse, expiry, id, slot)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -91,7 +116,11 @@ func (s *Store) ToggleEffectItem(id, itemID, slot int, column string) ([]Item, e
 		next = itemID
 		inUse = 1
 	}
-	result, err := tx.Exec("UPDATE UserInventory SET status=1,inUse=? WHERE userID=? AND slot=?", inUse, id, slot)
+	expiry, err := activateExpiry(tx, id, slot)
+	if err != nil {
+		return nil, err
+	}
+	result, err := tx.Exec("UPDATE UserInventory SET status=1,inUse=?,expiryDate=? WHERE userID=? AND slot=?", inUse, expiry, id, slot)
 	if err != nil {
 		return nil, err
 	}

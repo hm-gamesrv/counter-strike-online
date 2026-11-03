@@ -27,7 +27,10 @@ func (s *Store) ExtendItem(id, targetSlot, extenderID, days int) ([]Item, error)
 	if target.ID == 0 || target.Expiry == 0 || extender.ID == 0 || extender.Count < days || target.Slot == extender.Slot {
 		return nil, ErrItemUnavailable
 	}
-	if target.InUse == 0 {
+	// Only a not-yet-activated copy keeps a relative day count; an activated item
+	// keeps an absolute minute timestamp even after being unequipped.
+	relative := target.Status == 0 && target.InUse == 0 && target.Expiry > 0 && target.Expiry <= 36500
+	if relative {
 		target.Expiry += days
 	} else if days+(target.Expiry-target.Obtain)/1440 >= 999 {
 		target.Expiry = 0

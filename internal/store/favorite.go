@@ -2,6 +2,7 @@ package store
 
 import (
 	"errors"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -31,6 +32,67 @@ func (s *Store) SetFastBuy(id, slot int, name string, items []int) error {
 		return err
 	}
 	return nil
+}
+
+// SetAddonsConsuming replaces the addon list and consumes one unit of every
+// requested item in the same transaction, so a rejected request or a failed save
+// cannot eat the player's materials. Missing or protected items are skipped, as
+// the reference does per item. protected lists item IDs.
+func (s *Store) SetAddonsConsuming(id int, itemIDs []int, protected []int) ([]int, []Item, error) {
+	tx, err := s.DB.Begin()
+	if err != nil {
+		return nil, nil, err
+	}
+	defer tx.Rollback()
+	items, err := readInventory(tx, id)
+	if err != nil {
+		return nil, nil, err
+	}
+	addons := make([]int, 0, len(itemIDs))
+	removed := make([]int, 0, len(itemIDs))
+	for _, itemID := range itemIDs {
+		target := -1
+		for i := range items {
+			if items[i].ID == itemID && items[i].Count > 0 && !slices.Contains(protected, items[i].ID) {
+				target = i
+				break
+			}
+		}
+		if target < 0 {
+			continue
+		}
+		if items[target].Count == 1 {
+			if _, err = tx.Exec("DELETE FROM UserInventory WHERE userID=? AND slot=?", id, items[target].Slot); err != nil {
+				return nil, nil, err
+			}
+			removed = append(removed, items[target].Slot)
+		} else {
+			if _, err = tx.Exec("UPDATE UserInventory SET count=count-1 WHERE userID=? AND slot=?", id, items[target].Slot); err != nil {
+				return nil, nil, err
+			}
+			items[target].Count--
+		}
+		addons = append(addons, itemID)
+	}
+	if _, err = tx.Exec("DELETE FROM UserAddon WHERE userID=?", id); err != nil {
+		return nil, nil, err
+	}
+	for _, addon := range addons {
+		if _, err = tx.Exec("INSERT INTO UserAddon(userID,itemID) VALUES(?,?)", id, addon); err != nil {
+			return nil, nil, err
+		}
+	}
+	changed, err := readInventory(tx, id)
+	if err != nil {
+		return nil, nil, err
+	}
+	for _, slot := range removed {
+		changed = append([]Item{{Slot: slot}}, changed...)
+	}
+	if err = tx.Commit(); err != nil {
+		return nil, nil, err
+	}
+	return addons, changed, nil
 }
 
 // SetAddons replaces the character's ZB addon list.

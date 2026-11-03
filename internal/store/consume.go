@@ -16,7 +16,8 @@ func (s *Store) ConsumeItem(id, itemID int, protected []int) ([]Item, error) {
 	}
 	var target Item
 	for _, item := range items {
-		if item.ID == itemID && item.Count > 0 && !slices.Contains(protected, item.Slot) {
+		// protected lists item IDs (default/pseudo-default), not slots.
+		if item.ID == itemID && item.Count > 0 && !slices.Contains(protected, item.ID) {
 			target = item
 			break
 		}

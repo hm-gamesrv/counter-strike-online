@@ -557,3 +557,17 @@
 - **到期通知截断后清空余项**（P2）：`ClearExpiryNotices` 只删除实际下发的行数，260 条通知首登发 255 条后仍余 5 条；同时先过滤非法 itemID 再计数。
 
 测试：新增 `internal/server/review_expanded_test.go`（通知余量、离线奖励幂等、集字满包重试、强化候选、奖励回包到期值）与 `internal/store/clan_dormant_test.go`；`bingo_test.go` 增加满包回滚重试用例；`itembox_test.go` 的夹具补上奖品道具（归一化现在要求道具在目录中）。`go vet`、`go test ./...` 全绿，两轮审查的 overlay 探针全部通过。
+
+
+## 2026-11-03 处理 b6afe1f 复核与 f6eda20 整体审查（8 项）
+
+- **选择型离线奖励会锁死登录**：`grantCatalogRewardNotice` 用 `errRewardDeferred` 包装"需要选择 UI / 奖励定义缺失 / 目录缺项"的失败，`rewardRejection` 认它，于是保留通知、继续登录；数据库错误仍上抛。此前返回原始错误会让`loginPackets`中断，账号每次登录都被断开。
+- **到期通知按行身份删除**：新增 `Store.ExpiryNoticeRows`（rowid + itemID）与 `ClearExpiryNotices(id, rowIDs)`，只删真正下发的行；非法 itemID 的行直接清掉。此前"读取按 itemID 排序、删除按 rowid 取前 N 行"，乱序插入时会删掉未发送的、留下已发送的。
+- **专服轮换无法开下一局**：`startGame` 先复用仍归本房间的 `r.dedicated`（仍在该池中且 `room==r.id`），没有再向池申请；修掉"第二张图提示没有可用专服"，也避免覆盖旧实例造成占用泄漏。
+- **限时外观启用后消失**：`LobbyBG`/`zbRespawnEffect`/`CombatInfoItem` 的休眠副本在启用时通过 `activateExpiry` 把相对天数换算成绝对分钟并置 `status=1`，否则启用后立刻被当作过期过滤掉。
+- **保护列表按物品 ID**：`DeleteItems`、`ConsumeItem` 改为比较 `item.ID`（原来误比 slot），受保护 ID 的副本无论在哪个槽位都不会被分解/消耗，普通 ID 也不会因槽位数字碰巧相同而被误保护。
+- **ZB 插件请求原子化**：先完整解析并校验尾部，再用 `Store.SetAddonsConsuming` 在单个事务里扣材料 + 替换 `UserAddon`；截断、尾部多余、写库失败都不会再永久扣道具。
+- **同款装饰两个副本同时装备**：替换分支不再要求 `oldID != target.ID`，按槽位排除目标后清掉旧副本；普通装饰与僵尸皮肤两条路径一致。
+- **已卸下装饰续期按分钟算**：`ExtendItem` 只在"未激活"（`status=0 && inUse=0 && 相对天数`）时按天加，已激活后再卸下（`status=1`、绝对时间、`inUse=0`）按 `days*1440` 分钟加。
+
+测试：新增 `internal/server/review_overall_test.go`（选择型通知、通知行身份、专服复用、限时外观、同款装饰、续期单位、保护 ID、插件失败回滚共 8 组用例）。`go vet`、`go test ./...` 全绿，四批 overlay 探针（`review-44b5eed`、`review-expanded`、`review-b6afe1f`、`review-overall-f6eda20`）全部通过。
