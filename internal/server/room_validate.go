@@ -300,33 +300,44 @@ const (
 	bigHeadField   = 44
 )
 
+// hostItemSetting pairs a settings field with the inventory item that backs it.
+type hostItemSetting struct {
+	Field int
+	Item  int
+}
+
 // refreshHostRoomItems mirrors CRoom::CheckForHostItems and the item-backed
 // settings in CRoomSettings::LoadNewSettings: superRoom, sd (big head event) and
 // c4Timer come from items the host actually owns.
 func (s *Server) refreshHostRoomItems(host *client, st *settings) error {
-	items, err := s.Store.Inventory(host.user.ID)
+	// Both reference paths that consult items (LoadNewSettings/CheckNewSettings and
+	// CheckForHostItems) use GetFirstActiveItemByItemID, whose query requires
+	// status=1 AND inUse=1: merely owning a dormant copy grants nothing.
+	active, err := func(id int) (bool, error) {
+		return s.Store.HasActiveItem(host.user.ID, id)
+	}(superRoomItemID)
 	if err != nil {
 		return err
 	}
-	owned := func(id int) bool {
-		for _, item := range items {
-			if item.ID == id && item.Count > 0 {
-				return true
-			}
-		}
-		return false
-	}
-	st.setNumber(58, boolInt(owned(superRoomItemID)), 1)
+	st.setNumber(superRoomField, boolInt(active), 1)
 	mode := st.number(6)
-	if st.hasField(33) && st.number(33) != 0 { // C4 sound
-		st.setNumber(33, boolInt(owned(c4SoundItemID)), 1)
+	if st.hasField(c4Field) && st.number(c4Field) != 0 { // C4 sound
+		active, err = s.Store.HasActiveItem(host.user.ID, c4SoundItemID)
+		if err != nil {
+			return err
+		}
+		st.setNumber(c4Field, boolInt(active), 1)
 	}
 	switch mode {
 	case 3, 4, 5, 15, 24:
-		st.setNumber(44, boolInt(owned(bigHeadItemID)), 1)
+		active, err = s.Store.HasActiveItem(host.user.ID, bigHeadItemID)
+		if err != nil {
+			return err
+		}
+		st.setNumber(bigHeadField, boolInt(active), 1)
 	default:
-		if st.hasField(44) {
-			st.clearField(44)
+		if st.hasField(bigHeadField) {
+			st.clearField(bigHeadField)
 		}
 	}
 	return nil

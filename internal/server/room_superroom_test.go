@@ -35,14 +35,16 @@ func TestSuperRoomFlagComesFromHostItem(t *testing.T) {
 		t.Fatal("superRoom flag bit was not sent")
 	}
 
-	if _, err = db.DB.Exec("INSERT INTO UserInventory(userID,slot,itemID,count,status,inUse,obtainDate,expiryDate,isClanItem,enhancementLevel,enhancementExp,enhanceValue,paintID,partSlot1,partSlot2,lockStatus) VALUES(1,20,8357,1,0,0,0,0,0,0,0,0,0,0,0,0)"); err != nil {
+	if _, err = db.DB.Exec("INSERT INTO UserInventory(userID,slot,itemID,count,status,inUse,obtainDate,expiryDate,isClanItem,enhancementLevel,enhancementExp,enhanceValue,paintID,partSlot1,partSlot2,lockStatus) VALUES(1,20,8357,1,1,1,0,0,0,0,0,0,0,0,0,0)"); err != nil {
 		t.Fatal(err)
 	}
 	if err = s.refreshHostRoomItems(c, &st); err != nil {
 		t.Fatal(err)
 	}
+	// The reference resolves these with GetFirstActiveItemByItemID, so the item
+	// has to be selected and active (status=1 AND inUse=1), not merely owned.
 	if st.number(58) != 1 {
-		t.Fatal("owned superRoom item did not set the flag")
+		t.Fatal("active superRoom item did not set the flag")
 	}
 
 	host := settings{}
@@ -55,10 +57,10 @@ func TestSuperRoomFlagComesFromHostItem(t *testing.T) {
 	if host.number(33) != 0 || host.number(44) != 0 {
 		t.Fatal("unowned C4 sound or big-head item kept")
 	}
-	if _, err = db.DB.Exec("INSERT INTO UserInventory(userID,slot,itemID,count,status,inUse,obtainDate,expiryDate,isClanItem,enhancementLevel,enhancementExp,enhanceValue,paintID,partSlot1,partSlot2,lockStatus) VALUES(1,21,112,1,0,0,0,0,0,0,0,0,0,0,0,0)"); err != nil {
+	if _, err = db.DB.Exec("INSERT INTO UserInventory(userID,slot,itemID,count,status,inUse,obtainDate,expiryDate,isClanItem,enhancementLevel,enhancementExp,enhanceValue,paintID,partSlot1,partSlot2,lockStatus) VALUES(1,21,112,1,1,1,0,0,0,0,0,0,0,0,0,0)"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = db.DB.Exec("INSERT INTO UserInventory(userID,slot,itemID,count,status,inUse,obtainDate,expiryDate,isClanItem,enhancementLevel,enhancementExp,enhanceValue,paintID,partSlot1,partSlot2,lockStatus) VALUES(1,22,439,1,0,0,0,0,0,0,0,0,0,0,0,0)"); err != nil {
+	if _, err = db.DB.Exec("INSERT INTO UserInventory(userID,slot,itemID,count,status,inUse,obtainDate,expiryDate,isClanItem,enhancementLevel,enhancementExp,enhanceValue,paintID,partSlot1,partSlot2,lockStatus) VALUES(1,22,439,1,1,1,0,0,0,0,0,0,0,0,0,0)"); err != nil {
 		t.Fatal(err)
 	}
 	host.setNumber(33, 1, 1)
@@ -66,7 +68,7 @@ func TestSuperRoomFlagComesFromHostItem(t *testing.T) {
 		t.Fatal(err)
 	}
 	if host.number(33) != 1 || host.number(44) != 1 {
-		t.Fatal("owned C4 sound or big-head item not applied")
+		t.Fatal("active C4 sound or big-head item not applied")
 	}
 	clear := settings{}
 	clear.setNumber(6, 0, 1)

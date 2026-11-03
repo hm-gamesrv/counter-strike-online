@@ -182,30 +182,30 @@ func (s *settings) write(w *protocol.Writer) {
 
 // layout renders the length of every transmitted field so a mismatched
 // settings payload can be compared against the client's own bytes.
-// writeMasked encodes the update mask of one settings value but the field bytes of
-// another. The reference sends the mask from the request (newSettings flags) with
-// the values of the room's current settings, so a field the server corrected
-// reaches the client with its effective value.
-func (s *settings) writeMasked(w *protocol.Writer, mask settings) {
-	for _, v := range mask.flags {
-		w.U32(int(v))
-	}
-	for group, bits := range mask.flags {
+// writeUpdate encodes the fields the request asked to change, limited to those the
+// room still carries, using their effective values.
+//
+// CheckNewSettings clears the update bit of a field it rejects, so the broadcast
+// must drop that bit as well. Re-announcing a cleared field is not just extra
+// data: a variable-length block (Voxel, arrays) derives its width from its own
+// leading flags, so padding it back to the requested length shifts every field
+// behind it.
+func (s *settings) writeUpdate(w *protocol.Writer, request settings) {
+	var mask settings
+	for group, bits := range request.flags {
 		for bit := 0; bit < 32; bit++ {
 			if bits&(1<<bit) == 0 {
 				continue
 			}
 			index := group*32 + bit
-			if field := s.fields[index]; field != nil {
-				w.Bytes(field)
+			if s.fields[index] == nil {
 				continue
 			}
-			// The room cleared this field (a mode-specific cleanup). Keep the width
-			// the client sent so the frame stays well formed, but carry the
-			// effective zero value.
-			w.Bytes(make([]byte, len(mask.fields[index])))
+			mask.flags[group] |= 1 << bit
+			mask.fields[index] = s.fields[index]
 		}
 	}
+	mask.write(w)
 }
 
 func (s *settings) layout() string {
@@ -564,11 +564,17 @@ func (s *Server) roomRequest(c *client, r *protocol.Reader) error {
 			c.notice("ROOM_JOIN_FAILED_BAN")
 			return nil
 		}
-		if to.settings.number(70) != 0 && !s.familyBattleJoin(to, c) {
-			return nil
+		team := 2
+		if to.settings.number(70) != 0 {
+			if !s.familyBattleJoin(to, c) {
+				return nil
+			}
+			// Family Battle seats the joining clan opposite the host's clan instead
+			// of dropping everyone on team two.
+			team = s.familyBattleTeam(to, c.character.ClanID)
 		}
 		c.room = id
-		c.team = 2
+		c.team = team
 		c.ready = 0
 		w := &protocol.Writer{}
 		w.U8(1)
@@ -680,12 +686,13 @@ func (s *Server) roomRequest(c *client, r *protocol.Reader) error {
 			return err
 		}
 		currentRoom.settings = merged
+		s.regroupFamilyBattle(currentRoom)
 		w := &protocol.Writer{}
 		w.U8(4)
 		// Send the corrected values for the fields the client asked to change;
 		// echoing the raw request would hand the room settings the server rejected
 		// (superRoom without the item, clamped ranges, mode defaults).
-		merged.writeMasked(w, st)
+		merged.writeUpdate(w, st)
 		currentRoom.broadcast(65, w)
 		s.refreshRooms()
 	case 22:
@@ -744,21 +751,37 @@ func (s *Server) refreshMigratedHostItems(r *room) error {
 	if r.host == nil {
 		return nil
 	}
-	if err := s.refreshHostRoomItems(r.host, &r.settings); err != nil {
-		return err
-	}
-	fields := []int{superRoomField}
-	if r.settings.hasField(c4Field) {
-		fields = append(fields, c4Field)
+	// CheckForHostItems resolves each value with GetFirstActiveItemByItemID, which
+	// requires status=1 AND inUse=1: a dormant copy the new host merely owns grants
+	// nothing, even though the create/update path accepts an owned item.
+	values := []hostItemSetting{
+		{
+			Field: superRoomField,
+			Item:  superRoomItemID,
+		},
+		{
+			Field: c4Field,
+			Item:  c4SoundItemID,
+		},
 	}
 	switch r.settings.number(6) {
 	case 3, 4, 5, 15, 24:
-		fields = append(fields, bigHeadField)
+		values = append(values, hostItemSetting{
+			Field: bigHeadField,
+			Item:  bigHeadItemID,
+		})
 	}
-	for _, index := range fields {
+	for _, value := range values {
+		active, err := s.Store.HasActiveItem(r.host.user.ID, value.Item)
+		if err != nil {
+			return err
+		}
+		// Recompute unconditionally: a host who owns the item turns the setting on
+		// even when the previous host had it off or the field was never present.
+		r.settings.setNumber(value.Field, boolInt(active), 1)
 		var update settings
-		update.flags[index/32] = 1 << uint(index%32)
-		update.fields[index] = r.settings.fields[index]
+		update.flags[value.Field/32] = 1 << uint(value.Field%32)
+		update.fields[value.Field] = r.settings.fields[value.Field]
 		w := &protocol.Writer{}
 		w.U8(4)
 		update.write(w)

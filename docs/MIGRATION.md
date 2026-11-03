@@ -655,6 +655,16 @@ WSL 里的 30003 实例确认是**原版 C++ 基线**（仓库 `~/repos/hm-games
 
 测试：审查者 `review-04608be` 三条探针覆盖 R1/N2/N3；`go build/vet/test ./...` 在根目录全绿；十一批历史探针通过（`review-b4cc191` 两条过期探针除外）。
 
+## 2026-11-03 处理 70bd62e 审查（1 P0 + 3 P1）
+
+- **广播保留已清洗标志并按原长度补零**（R1，P0）：上一版的 `writeMasked` 用原始请求 flags 作掩码，字段被清洗时按原宽度补零；Voxel 这类变长块宽度由块内标志决定，补零后长度错误，后续字段整体错位。基线 `CheckNewSettings` 清掉被拒绝字段的更新位，广播用的是清洗后的 flags。改为 `settings.writeUpdate(w, request)`：掩码先裁剪到“房间仍携带的字段”，再按有效值编码，被清洗的字段直接从掩码消失。
+- **迁移的道具判定与 C4 方向**（R2）：`CheckForHostItems` 用 `GetFirstActiveItemByItemID`（`status=1 AND inUse=1`），`refreshMigratedHostItems` 改用 `Store.HasActiveItem`，休眠副本不再授予 superRoom（该字段直接决定 `kickRequest` 的超级房主踢人权限）；三项改为无条件按新房主重算并广播，修掉“旧值 0 时无法变成 1”。对照基线后把 `refreshHostRoomItems`（建房/设置更新）也从“持有即可”统一为活跃行判定。
+- **家族战双方被分到同一队**（N1）：加入路径新增 `familyBattleTeam`（参照第一个有军团的在场成员：同军团同队、否则对队）；启用家族战时新增 `regroupFamilyBattle` 按 `clan1` 重排并逐人广播 `65/13`。注意：基线重排比较的是更新**前**的 `familyBattleClanID1`，首次启用时为 0 会把非房主全部判到对队，这里按新的军团分配实现，属有意偏离，已在响应文档说明。
+- **击杀事件缺扭蛋计数与发奖**（N2）：新增 `Store.TickGachapon`，递减 `killsToGetGachaponItem`，到 0 时重置 100 并在同一事务内发 166 或 5101 一件；服务端按基线顺序先发 `78/10` 或 `78/12` 再发 154。计数对每个被记录的击杀事件递减（含自杀，与基线一致）；满包不扣计数、不中断击杀事件，留待下次重试。
+
+测试：审查者 `review-70bd62e` 五条探针覆盖上述四项；`TestSuperRoomFlagComesFromHostItem` 夹具改为 `status=1,inUse=1`。根目录 `go build/vet/test ./...` 全绿，十二批历史探针通过（`review-b4cc191` 两条过期探针除外）。
+
+
 
 
 

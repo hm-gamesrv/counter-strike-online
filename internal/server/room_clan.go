@@ -63,6 +63,60 @@ func (s *Server) familyBattleJoin(r *room, c *client) bool {
 	return true
 }
 
+// familyBattleTeam picks the side a joining clan belongs to, mirroring the team
+// selection in CChannelManager::OnRoomJoinRequest: find a member who has a clan,
+// keep that member's team when the clans match, take the opposite team otherwise.
+func (s *Server) familyBattleTeam(r *room, clanID int) int {
+	for _, member := range r.members {
+		if member.character.ClanID == 0 {
+			continue
+		}
+		if member.character.ClanID == clanID {
+			return member.team
+		}
+		if member.team == 1 {
+			return 2
+		}
+		return 1
+	}
+	return 2
+}
+
+// regroupFamilyBattle mirrors the team reassignment OnRoomUpdateSettings performs
+// when a room turns Family Battle on: the host's clan keeps the host's team and
+// the opposing clan takes the other side.
+func (s *Server) regroupFamilyBattle(r *room) {
+	if r.settings.number(70) == 0 || r.host == nil {
+		return
+	}
+	hostTeam := r.host.team
+	if hostTeam != 1 && hostTeam != 2 {
+		hostTeam = 2
+	}
+	for _, member := range r.members {
+		if member == r.host || member.character.ClanID == 0 {
+			continue
+		}
+		team := hostTeam
+		if member.character.ClanID != r.clan1 {
+			if hostTeam == 1 {
+				team = 2
+			} else {
+				team = 1
+			}
+		}
+		if member.team == team {
+			continue
+		}
+		member.team = team
+		w := &protocol.Writer{}
+		w.U8(13)
+		w.U32(member.user.ID)
+		w.U8(team)
+		r.broadcast(65, w)
+	}
+}
+
 // familyBattleRecompute rebuilds the two clan slots after a member leaves or
 // the host migrates. The host's clan always occupies slot one.
 func (s *Server) familyBattleRecompute(r *room) {

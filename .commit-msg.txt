@@ -1,0 +1,31 @@
+fix(server,store): apply the 70bd62e review findings
+
+R1: the settings broadcast kept the request's raw mask and padded a cleared
+field back to its requested width. A variable-length block such as Voxel derives
+its width from its own leading flags, so padding it shifts every following field
+-- the probe saw teamSwitch read as 0 while the room stored 1. CheckNewSettings
+clears the update bit of a field it rejects, so settings.writeUpdate now prunes
+the mask to the fields the room still carries and encodes their effective values.
+
+R2: migration resolved host items with "owns any copy", while CheckForHostItems
+uses GetFirstActiveItemByItemID (status=1 AND inUse=1), and it only recomputed C4
+when the old value was present and non-zero. refreshMigratedHostItems now asks
+Store.HasActiveItem for all three values and recomputes them unconditionally, so
+a dormant copy grants nothing (superRoom gates super-host kicks) and a new host
+who owns the item can turn the setting on. The create/update path used the same
+"owned" check even though LoadNewSettings and CheckNewSettings also query active
+rows, so refreshHostRoomItems was unified on the same rule.
+
+N1: joining a Family Battle room dropped the player on team two, putting both
+clans on the same side. familyBattleTeam picks the side from an existing member's
+clan, and enabling Family Battle in an existing room now regroups members and
+broadcasts the team change.
+
+N2: kill events never paid the gachapon counter. Store.TickGachapon decrements
+killsToGetGachaponItem and, at zero, resets it and grants 166 or 5101 in the same
+transaction; the handler sends the gachapon notice before the inventory update, as
+the reference does. A full bag leaves the counter untouched so the next kill
+retries instead of breaking the event.
+
+TestSuperRoomFlagComesFromHostItem's fixture now inserts active rows, matching the
+query the reference uses.

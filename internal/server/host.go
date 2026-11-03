@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	mrand "math/rand/v2"
 	"net"
 	"slices"
 	"sort"
@@ -306,10 +307,39 @@ func (s *Server) hostRequest(c *client, p *protocol.Reader) error {
 		if stat := m.stats[victim]; stat != nil {
 			stat.questStreaks = nil
 		}
-		if stat := m.stats[killer]; stat != nil && killer != victim {
-			stat.kills = min(stat.kills+1, 1000000)
-			if err := s.applyQuestEvent(stat.user, m, stat, questEvent{Kind: 2, GunID: gun, KillerTeam: killerTeam, VictimTeam: victimTeam, VictimID: victim, VictimKillType: killType}); err != nil {
+		if stat := m.stats[killer]; stat != nil {
+			if killer != victim {
+				stat.kills = min(stat.kills+1, 1000000)
+			}
+			// Every kill event the reference sees ticks the gachapon counter,
+			// suicide included, and pays one of the two prize items when it runs out.
+			index := mrand.IntN(2)
+			award := 5101
+			if index == 1 {
+				award = 166
+			}
+			gained, changed, err := s.Store.TickGachapon(stat.user.user.ID, award, s.Config.InventorySlotMax, len(s.Config.DefaultUser.DefaultItems))
+			if err != nil {
 				return err
+			}
+			if gained {
+				// SendItemGachapon: item notice 10 for the first prize, 12 for the
+				// second, then the inventory update that carries the item itself.
+				w := &protocol.Writer{}
+				if index == 1 {
+					w.U8(10)
+				} else {
+					w.U8(12)
+				}
+				stat.user.send(78, w)
+				if err = s.sendInventoryItems(stat.user, changed); err != nil {
+					return err
+				}
+			}
+			if killer != victim {
+				if err = s.applyQuestEvent(stat.user, m, stat, questEvent{Kind: 2, GunID: gun, KillerTeam: killerTeam, VictimTeam: victimTeam, VictimID: victim, VictimKillType: killType}); err != nil {
+					return err
+				}
 			}
 		}
 	case 5:
