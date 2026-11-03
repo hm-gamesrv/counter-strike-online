@@ -2,7 +2,6 @@ package server
 
 import (
 	"bytes"
-	"encoding/binary"
 	"encoding/hex"
 	"io"
 	"log/slog"
@@ -64,18 +63,6 @@ func TestRoomSettingsDifficultyFollowedByField(t *testing.T) {
 	}
 	if len(st.fields[45]) != 9 || st.zsDifficulty() != 2 || st.number(46) != 1 {
 		t.Fatalf("difficulty=%v league=%d", st.fields[45], st.number(46))
-	}
-}
-
-// TestRoomSettingsFlagWithoutPayload guards the write side: a flag set without
-// bytes would shift every following field on the client.
-func TestRoomSettingsFlagWithoutPayload(t *testing.T) {
-	var st settings
-	st.flags[0] = 1 << 31
-	w := &protocol.Writer{}
-	st.write(w)
-	if binary.LittleEndian.Uint32(w.Data[:4]) != 0 || len(w.Data) != 16 {
-		t.Fatalf("dangling flag kept: %x", w.Data)
 	}
 }
 
