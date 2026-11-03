@@ -146,6 +146,29 @@ func rewardNotice(reward itemReward, items []store.Reward, g store.Grant) *proto
 	return w
 }
 
+// refreshItems re-reads the bag after an out-of-band rewrite and replaces the
+// snapshot entries that still exist. Entries whose slot is gone are consumed
+// sources and stay as tombstones for the client.
+func (s *Server) refreshItems(id int, snapshot []store.Item) ([]store.Item, error) {
+	fresh, err := s.Store.Inventory(id)
+	if err != nil {
+		return nil, err
+	}
+	bySlot := make(map[int]store.Item, len(fresh))
+	for _, item := range fresh {
+		bySlot[item.Slot] = item
+	}
+	refreshed := make([]store.Item, 0, len(snapshot))
+	for _, item := range snapshot {
+		if current, ok := bySlot[item.Slot]; ok {
+			refreshed = append(refreshed, current)
+			continue
+		}
+		refreshed = append(refreshed, item)
+	}
+	return refreshed, nil
+}
+
 // autoEquipCostumes applies the upstream AddItem rule: a newly granted costume
 // fills an empty loadout slot automatically. Returns the item IDs equipped.
 func (s *Server) autoEquipCostumes(id int, items []store.Reward) map[int]bool {

@@ -127,3 +127,64 @@ func TestBingoUpdateAndOpenLine(t *testing.T) {
 		t.Fatalf("bingo rewards %d", weapons)
 	}
 }
+
+// TestBingoAwardsSurviveFullBagRetry keeps the number, the line and the prizes in
+// one transaction: a full bag must leave the board untouched so a retry cannot
+// duplicate or lose an award.
+func TestBingoAwardsSurviveFullBagRetry(t *testing.T) {
+	s, c, id := bingoServer(t)
+	if err := s.initBingo(c); err != nil {
+		t.Fatal(err)
+	}
+	slots, err := s.Store.BingoSlots(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := range slots {
+		slots[i].Opened = 1
+	}
+	slots[0].Opened = 0
+	if err = s.Store.SetBingoSlots(id, slots); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.Store.DB.Exec("UPDATE UserMiniGameBingoPrizeSlot SET opened=CASE WHEN idx IN (0,5,10) THEN 0 ELSE 1 END WHERE userID=?", id); err != nil {
+		t.Fatal(err)
+	}
+	var have int
+	if err = s.Store.DB.QueryRow("SELECT count(*) FROM UserInventory WHERE userID=?", id).Scan(&have); err != nil {
+		t.Fatal(err)
+	}
+	s.Config.InventorySlotMax = have
+	if err = s.bingoOpen(c); err != nil {
+		t.Fatal(err)
+	}
+	var awarded, marked int
+	if err = s.Store.DB.QueryRow("SELECT count(*) FROM UserInventory WHERE userID=? AND itemID=567", id).Scan(&awarded); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.Store.DB.QueryRow("SELECT count(*) FROM UserMiniGameBingoPrizeSlot WHERE userID=? AND idx IN (0,5,10) AND opened=1", id).Scan(&marked); err != nil {
+		t.Fatal(err)
+	}
+	if awarded != 0 || marked != 0 {
+		t.Fatalf("full bag left awarded=%d marked=%d", awarded, marked)
+	}
+	if slots, err = s.Store.BingoSlots(id); err != nil {
+		t.Fatal(err)
+	}
+	if slots[0].Opened != 0 {
+		t.Fatal("full bag still consumed the bingo number")
+	}
+	s.Config.InventorySlotMax = have + 3
+	if err = s.bingoOpen(c); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.Store.DB.QueryRow("SELECT count(*) FROM UserInventory WHERE userID=? AND itemID=567", id).Scan(&awarded); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.Store.DB.QueryRow("SELECT count(*) FROM UserMiniGameBingoPrizeSlot WHERE userID=? AND idx IN (0,5,10) AND opened=1", id).Scan(&marked); err != nil {
+		t.Fatal(err)
+	}
+	if awarded != 3 || marked != 3 {
+		t.Fatalf("retry awarded=%d marked=%d, want 3/3", awarded, marked)
+	}
+}

@@ -248,10 +248,11 @@ func (s *Server) finishRewardClaim(c *client, token, selection int) error {
 		return nil
 	}
 	equipped := s.autoEquipCostumes(c.user.ID, p.Grant.Items)
-	for i := range changed {
-		if equipped[changed[i].ID] {
-			changed[i].InUse = 1
-			changed[i].Status = 1
+	if len(equipped) > 0 {
+		// Auto-equip rewrote status and expiry after the grant snapshot was read,
+		// so the packet has to come from the current rows.
+		if changed, err = s.refreshItems(c.user.ID, changed); err != nil {
+			return err
 		}
 	}
 	if err = s.sendInventoryItems(c, changed); err != nil {

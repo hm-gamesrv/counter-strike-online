@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"math/rand"
+	"strings"
 
 	"github.com/hm-gamesrv/cso-server-go/internal/config"
 	"github.com/hm-gamesrv/cso-server-go/internal/protocol"
@@ -184,46 +185,46 @@ func (s *Server) bingoOpen(c *client) error {
 			completed = append(completed, index)
 		}
 	}
-	for _, index := range completed {
-		if err = s.grantBingoPrize(c, prizes[index]); err != nil {
-			if s.Log != nil {
-				s.Log.Warn("bingo prize grant failed", "user", c.user.ID, "index", index, "error", err)
-			}
+	var rewards []store.Reward
+	prizeItems := make([][]store.Reward, len(completed))
+	for i, index := range completed {
+		prize := prizes[index]
+		items, e := s.prepareGrants([]store.Reward{{
+			ID:       prize.ItemID,
+			Count:    prize.Count,
+			Duration: prize.Duration,
+		}})
+		if e != nil {
+			return e
+		}
+		prizeItems[i] = items
+		rewards = append(rewards, items...)
+	}
+	// One transaction covers the number, every completed line and the prizes, so
+	// a retry after "inventory full" cannot duplicate or lose a reward.
+	items, err := s.Store.OpenBingoAwards(c.user.ID, slots[selected].Number, completed, rewards, s.Config.InventorySlotMax, len(s.Config.DefaultUser.DefaultItems))
+	if err != nil {
+		if strings.Contains(err.Error(), "INVENTORY_FULL") {
 			c.notice("Inventory is full.")
 			return nil
 		}
-	}
-	if err = s.Store.OpenBingo(c.user.ID, slots[selected].Number, completed); err != nil {
 		return err
+	}
+	if len(rewards) > 0 {
+		if err = s.sendInventoryItems(c, items); err != nil {
+			return err
+		}
+		for _, items := range prizeItems {
+			notice := rewardNotice(itemReward{
+				Title:       "Bingo Event",
+				Description: "Congratulations! You have completed a bingo line.",
+			}, items, store.Grant{})
+			if len(notice.Data) <= protocol.MaxPayload {
+				c.send(67, notice)
+			}
+		}
 	}
 	return s.sendBingoUpdate(c)
-}
-
-func (s *Server) grantBingoPrize(c *client, prize store.BingoPrize) error {
-	items := []store.Reward{{
-		ID:       prize.ItemID,
-		Count:    prize.Count,
-		Duration: prize.Duration,
-	}}
-	items, err := s.prepareGrants(items)
-	if err != nil {
-		return err
-	}
-	changed, err := s.Store.GrantReward(c.user.ID, store.Grant{Items: items}, s.Config.InventorySlotMax, len(s.Config.DefaultUser.DefaultItems))
-	if err != nil {
-		return err
-	}
-	if err = s.sendInventoryItems(c, changed); err != nil {
-		return err
-	}
-	notice := rewardNotice(itemReward{
-		Title:       "Bingo Event",
-		Description: "Congratulations! You have completed a bingo line.",
-	}, items, store.Grant{})
-	if len(notice.Data) <= protocol.MaxPayload {
-		c.send(67, notice)
-	}
-	return nil
 }
 
 func (s *Server) bingoShuffle(c *client) error {

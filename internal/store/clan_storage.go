@@ -100,7 +100,7 @@ func (s *Store) GiveClanItem(userID, pageID, slot int) ([]Item, int, error) {
 		return nil, 0, err
 	}
 	var itemID, count, expiry, enhance, clanItem int
-	err = tx.QueryRow("SELECT itemID,count,coalesce(expiryDate,0),coalesce(enhanceValue,0),coalesce(isClanItem,0) FROM UserInventory WHERE userID=? AND slot=? AND count>0 AND (expiryDate=0 OR expiryDate>?)", userID, slot, nowMinutes()).Scan(&itemID, &count, &expiry, &enhance, &clanItem)
+	err = tx.QueryRow("SELECT itemID,count,coalesce(expiryDate,0),coalesce(enhanceValue,0),coalesce(isClanItem,0) FROM UserInventory WHERE userID=? AND slot=? AND count>0 AND "+liveItemSQL, userID, slot, nowMinutes()).Scan(&itemID, &count, &expiry, &enhance, &clanItem)
 	if errors.Is(err, sql.ErrNoRows) || itemID <= 0 || clanItem != 0 {
 		return nil, -2, nil
 	}
@@ -168,7 +168,7 @@ func (s *Store) TakeClanItem(userID, pageID, slot, limit, defaultSlots int) ([]I
 		return nil, -5, nil
 	}
 	if duration == 0 {
-		if err = tx.QueryRow("SELECT EXISTS(SELECT 1 FROM UserInventory WHERE userID=? AND itemID=? AND (expiryDate=0 OR expiryDate>?) LIMIT 1)", userID, itemID, nowMinutes()).Scan(&existing); err != nil {
+		if err = tx.QueryRow("SELECT EXISTS(SELECT 1 FROM UserInventory WHERE userID=? AND itemID=? AND "+liveItemSQL+" LIMIT 1)", userID, itemID, nowMinutes()).Scan(&existing); err != nil {
 			return nil, 0, err
 		}
 		if existing != 0 {

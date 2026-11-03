@@ -17,8 +17,14 @@ func (s *Store) ExpiryNotices(id int) ([]int, error) {
 	return items, rows.Err()
 }
 
-func (s *Store) ClearExpiryNotices(id int) error {
-	_, err := s.DB.Exec("DELETE FROM UserExpiryNotice WHERE userID=?", id)
+// ClearExpiryNotices removes exactly the rows that were delivered. The client
+// accepts at most 255 entries per packet, so a long queue must survive until the
+// next login instead of being dropped.
+func (s *Store) ClearExpiryNotices(id, delivered int) error {
+	if delivered <= 0 {
+		return nil
+	}
+	_, err := s.DB.Exec("DELETE FROM UserExpiryNotice WHERE rowid IN (SELECT rowid FROM UserExpiryNotice WHERE userID=? ORDER BY rowid LIMIT ?)", id, delivered)
 	return err
 }
 

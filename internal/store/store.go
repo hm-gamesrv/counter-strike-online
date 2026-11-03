@@ -302,8 +302,13 @@ type inventoryQuerier interface {
 	Query(string, ...any) (*sql.Rows, error)
 }
 
+// liveItemSQL is the shared definition of a usable inventory row: permanent,
+// not yet expired, or a dormant copy whose expiryDate is still a relative day
+// count. Every path that takes an item out of the bag must use it.
+const liveItemSQL = "(expiryDate=0 OR expiryDate>? OR (inUse=0 AND status=0 AND expiryDate BETWEEN 1 AND 36500))"
+
 func readInventory(q inventoryQuerier, id int) ([]Item, error) {
-	rows, e := q.Query("SELECT slot,itemID,count,status,inUse,obtainDate,expiryDate,enhancementLevel,enhancementExp,enhanceValue,paintID,partSlot1,partSlot2,lockStatus,paintIDList FROM UserInventory WHERE userID=? AND count>0 AND (expiryDate=0 OR expiryDate>? OR (inUse=0 AND status=0 AND expiryDate BETWEEN 1 AND 36500)) ORDER BY slot", id, nowMinutes())
+	rows, e := q.Query("SELECT slot,itemID,count,status,inUse,obtainDate,expiryDate,enhancementLevel,enhancementExp,enhanceValue,paintID,partSlot1,partSlot2,lockStatus,paintIDList FROM UserInventory WHERE userID=? AND count>0 AND "+liveItemSQL+" ORDER BY slot", id, nowMinutes())
 	if e != nil {
 		return nil, e
 	}

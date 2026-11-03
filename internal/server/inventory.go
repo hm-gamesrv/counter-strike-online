@@ -142,6 +142,13 @@ func (s *Server) openItemBox(c *client, first, second int) error {
 		results = append(results, award)
 		awards = append(awards, store.Reward{ID: award.ID, Count: 1, Duration: max(award.Duration, 0)})
 	}
+	// Decoder awards follow the same catalog rules as purchases and rewards, so
+	// duplicate weapons cannot end up selected twice.
+	awards, err = s.prepareGrants(awards)
+	if err != nil {
+		s.itemBoxError(c, "LOTTERY_FAIL_NOITEM")
+		return nil
+	}
 	changed, err := s.Store.OpenItemBox(c.user.ID, slot, target.ID, count, awards, s.Config.InventorySlotMax, len(s.Config.DefaultUser.DefaultItems))
 	if err != nil {
 		switch {

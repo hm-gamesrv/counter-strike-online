@@ -28,7 +28,7 @@ func TestOpenItemBoxConsumesKeysAndReturnsAwards(t *testing.T) {
 	s := &Server{
 		Store:     db,
 		Config:    config.Config{InventorySlotMax: 10},
-		items:     map[int]itemDefinition{8292: {ClassName: "LotteryKeyItem"}},
+		items:     map[int]itemDefinition{8292: {ClassName: "LotteryKeyItem"}, 1234: {Category: 2}},
 		itemBoxes: map[int]*itemBox{8292: {ID: 8292, Total: 1, Rates: []itemBoxRate{{Rate: 1, Grade: 1, Durations: []int{-1}, Items: []int{1234}}}}},
 	}
 	c := &client{user: store.User{ID: 1}, character: store.Character{Name: "BoxUser"}, queue: make(chan outbound, 64)}
@@ -85,7 +85,7 @@ func TestOpenItemBoxUnknownBoxDoesNotConsumeKey(t *testing.T) {
 	s := &Server{
 		Store:     db,
 		Config:    config.Config{InventorySlotMax: 10},
-		items:     map[int]itemDefinition{8292: {ClassName: "LotteryKeyItem"}},
+		items:     map[int]itemDefinition{8292: {ClassName: "LotteryKeyItem"}, 1234: {Category: 2}},
 		itemBoxes: map[int]*itemBox{},
 	}
 	c := &client{user: store.User{ID: 1}, character: store.Character{Name: "NoBoxUser"}, queue: make(chan outbound, 8)}
@@ -123,7 +123,7 @@ func TestOpenItemBoxCountFirstOrder(t *testing.T) {
 	s := &Server{
 		Store:     db,
 		Config:    config.Config{InventorySlotMax: 10},
-		items:     map[int]itemDefinition{8292: {ClassName: "LotteryKeyItem"}},
+		items:     map[int]itemDefinition{8292: {ClassName: "LotteryKeyItem"}, 1234: {Category: 2}},
 		itemBoxes: map[int]*itemBox{8292: {ID: 8292, Total: 1, Rates: []itemBoxRate{{Rate: 1, Grade: 1, Durations: []int{-1}, Items: []int{1234}}}}},
 	}
 	c := &client{user: store.User{ID: 1}, character: store.Character{Name: "BoxCount"}, queue: make(chan outbound, 64)}
@@ -175,7 +175,7 @@ func TestOpenItemBoxFullInventoryKeepsKey(t *testing.T) {
 	s := &Server{
 		Store:     db,
 		Config:    config.Config{InventorySlotMax: 1},
-		items:     map[int]itemDefinition{8292: {ClassName: "LotteryKeyItem"}},
+		items:     map[int]itemDefinition{8292: {ClassName: "LotteryKeyItem"}, 1234: {Category: 2}},
 		itemBoxes: map[int]*itemBox{8292: {ID: 8292, Total: 1, Rates: []itemBoxRate{{Rate: 1, Grade: 1, Durations: []int{-1}, Items: []int{1234}}}}},
 	}
 	c := &client{user: store.User{ID: 1}, character: store.Character{Name: "BoxFull"}, queue: make(chan outbound, 8)}

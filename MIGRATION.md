@@ -543,3 +543,17 @@
 - **僵尸皮肤卸下报错**：`toggleZombieSkinCostume` 在 `UserZBCostumeLoadout` 没有对应行时会把 `sql.ErrNoRows` 原样返回，导致卸下一件未装备的皮肤报 "sql: no rows in result set"；现在与普通装饰路径一致，视为"无旧行"继续。
 
 测试：新增 `internal/store/costume_dormant_test.go`（R1/R2/R3）、`internal/server/reward_review_test.go`（R4/R5/R7）、`TestTruncatedRoomSettingsAreRejected`；更新 `TestZombieSkinCostumeToggle`（0 号槽合法、18 号拒绝）与 `TestApplyEquipmentBonus`（默认关闭、显式开启后生效）。审查者 overlay 里 R5 的探针在未打开 `ItemBonusEnabled` 时会看到 `itemExp=0`（R6 的预期结果），开启开关后的重试幂等由 `TestEquipmentBonusRetryIsIdempotent` 覆盖。
+
+
+## 2026-11-03 处理 44b5eed 复核与扩大范围审查（8 项）
+
+- **奖励回包到期时间不同步**（复核 P1）：`finishRewardClaim` 在自动装备后不再手工修补快照，改为按槽位从数据库重读并替换（`refreshItems`），154 包的 `status/expiry` 与落库值一致；来源消耗留下的墓碑条目保留。
+- **Bingo 发奖与状态分离**：新增 `Store.OpenBingoAwards`，把开格号码、完成线标记与全部奖品放进同一事务；背包不足时整步回滚（号码不消耗、线不标记），腾出空间后重试不会重复发也不会丢。
+- **离线奖励可能重复发**：新增 `Store.GrantRewardNotice`，在同一事务里消费 `UserRewardNotice` 行并发奖；`grantRewardNotices` 改走该入口，物品类拒绝（满包/等级/不可用）保留通知待下次登录，数据库错误照旧上抛。
+- **集字活动满包丢奖**：`SetWeaponReleaseCharacterReward` 把最后一个字母、`opened` 标记与奖品发放在一个事务里完成；满包整体回滚，字母不消耗，腾出空间后可重试。
+- **开箱绕过目录归一**：`openItemBox` 现在先过 `prepareGrants`，与商店/奖励共用 `Exclusive/Stackable/Dormant` 规则，同款武器不会同时选中两份。
+- **强化随机漏掉 Ammo**：`enhanceAttribute` 的抽取范围从 `rand.IntN(5)` 改为 `rand.IntN(6)`（基线 `Randomer(5)` 的分布是闭区间 0..5），Ammo（索引 5）回到候选。
+- **公仓拒收休眠道具**：新增共享谓词 `liveItemSQL`（永久 / 未过期 / 仍是相对天数的休眠副本），`readInventory`、`GiveClanItem` 与公仓查重统一使用；3 天休眠道具可以正常存入。
+- **到期通知截断后清空余项**（P2）：`ClearExpiryNotices` 只删除实际下发的行数，260 条通知首登发 255 条后仍余 5 条；同时先过滤非法 itemID 再计数。
+
+测试：新增 `internal/server/review_expanded_test.go`（通知余量、离线奖励幂等、集字满包重试、强化候选、奖励回包到期值）与 `internal/store/clan_dormant_test.go`；`bingo_test.go` 增加满包回滚重试用例；`itembox_test.go` 的夹具补上奖品道具（归一化现在要求道具在目录中）。`go vet`、`go test ./...` 全绿，两轮审查的 overlay 探针全部通过。

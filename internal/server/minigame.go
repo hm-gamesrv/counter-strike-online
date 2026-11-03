@@ -3,6 +3,7 @@ package server
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/hm-gamesrv/cso-server-go/internal/config"
 	"github.com/hm-gamesrv/cso-server-go/internal/protocol"
@@ -216,8 +217,24 @@ func (s *Server) weaponReleaseSet(c *client, r *protocol.Reader) error {
 		return nil
 	}
 	opened := progress.Progress|(1<<bit) == (1<<len(row.Name))-1
-	code, _, left, err := s.Store.SetWeaponReleaseCharacter(c.user.ID, row.ItemID, bit, character, opened)
+	var rewards []store.Reward
+	if opened {
+		rewards, err = s.prepareGrants([]store.Reward{{
+			ID:       row.ItemID,
+			Count:    row.Count,
+			Duration: row.Duration,
+		}})
+		if err != nil {
+			return err
+		}
+	}
+	code, _, left, items, err := s.Store.SetWeaponReleaseCharacterReward(c.user.ID, row.ItemID, bit, character, opened, rewards, s.Config.InventorySlotMax, len(s.Config.DefaultUser.DefaultItems))
 	if err != nil {
+		if strings.Contains(err.Error(), "INVENTORY_FULL") {
+			c.notice("Inventory is full.")
+			s.sendWeaponReleaseSet(c, 5, 0, 0, 0, 0)
+			return nil
+		}
 		return err
 	}
 	switch code {
@@ -226,11 +243,15 @@ func (s *Server) weaponReleaseSet(c *client, r *protocol.Reader) error {
 		return nil
 	}
 	if opened {
-		if err = s.grantWeaponRelease(c, row); err != nil {
-			if s.Log != nil {
-				s.Log.Warn("weapon release grant failed", "user", c.user.ID, "item", row.ItemID, "error", err)
-			}
-			c.notice("Inventory is full.")
+		if err = s.sendInventoryItems(c, items); err != nil {
+			return err
+		}
+		notice := rewardNotice(itemReward{
+			Title:       "Weapon Release Event",
+			Description: "Congratulations! You have received the below weapon by collecting the word.",
+		}, rewards, store.Grant{})
+		if len(notice.Data) <= protocol.MaxPayload {
+			c.send(67, notice)
 		}
 	}
 	status := 0
@@ -238,33 +259,6 @@ func (s *Server) weaponReleaseSet(c *client, r *protocol.Reader) error {
 		status = 2
 	}
 	s.sendWeaponReleaseSet(c, status, weaponSlot, slot, character, left)
-	return nil
-}
-
-func (s *Server) grantWeaponRelease(c *client, row weaponReleaseRow) error {
-	items := []store.Reward{{
-		ID:       row.ItemID,
-		Count:    row.Count,
-		Duration: row.Duration,
-	}}
-	items, err := s.prepareGrants(items)
-	if err != nil {
-		return err
-	}
-	changed, err := s.Store.GrantReward(c.user.ID, store.Grant{Items: items}, s.Config.InventorySlotMax, len(s.Config.DefaultUser.DefaultItems))
-	if err != nil {
-		return err
-	}
-	if err = s.sendInventoryItems(c, changed); err != nil {
-		return err
-	}
-	notice := rewardNotice(itemReward{
-		Title:       "Weapon Release Event",
-		Description: "Congratulations! You have received the below weapon by collecting the word.",
-	}, items, store.Grant{})
-	if len(notice.Data) <= protocol.MaxPayload {
-		c.send(67, notice)
-	}
 	return nil
 }
 

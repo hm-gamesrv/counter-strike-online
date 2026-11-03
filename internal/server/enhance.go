@@ -185,7 +185,9 @@ func (s *Server) enhanceAttribute(attrs [7]int, currentLevel int, caps [7]int) (
 		return 6, true
 	}
 	for attempts := 0; attempts < 64; attempts++ {
-		index := rand.IntN(5)
+		// The reference draws from Randomer(itemEnhanceInfo.size()-2) = 5, whose
+		// uniform distribution is inclusive, i.e. indices 0..5 (Ammo is 5).
+		index := rand.IntN(6)
 		if index == 0 {
 			index = 1
 		} else if index == 1 {

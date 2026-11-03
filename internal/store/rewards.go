@@ -1,6 +1,7 @@
 package store
 
 import (
+	"database/sql"
 	"errors"
 	"math"
 )
@@ -16,25 +17,76 @@ type Grant struct {
 
 var ErrRewardLevel = errors.New("Your level is too low for this reward.")
 
-// GrantReward commits source consumption, the complete bundle and character
-// rewards together. Clients never supply this structure or choose their awards.
-func (s *Store) GrantReward(id int, g Grant, limit, defaultSlots int) ([]Item, error) {
+// validateGrant checks the bundle before any transaction is opened.
+func validateGrant(g Grant, limit, defaultSlots int) error {
 	if err := validateGrants(g.Items, limit, defaultSlots); err != nil {
-		return nil, err
+		return err
 	}
 	for _, v := range []int{g.Points, g.Exp, g.HonorPoints} {
 		if v < 0 || uint64(v) > math.MaxUint32 {
-			return nil, errors.New("reward outside protocol range")
+			return errors.New("reward outside protocol range")
 		}
 	}
 	if g.MinimumLevel < 0 || g.SourceSlot < 0 || g.SourceSlot == 0 && (g.Consume != 0 || g.SourceItem != 0) || g.SourceSlot != 0 && (g.Consume < 1 || g.Consume > 65535 || g.SourceItem < 1) {
-		return nil, ErrItemUnavailable
+		return ErrItemUnavailable
+	}
+	return nil
+}
+
+// GrantReward commits source consumption, the complete bundle and character
+// rewards together. Clients never supply this structure or choose their awards.
+func (s *Store) GrantReward(id int, g Grant, limit, defaultSlots int) ([]Item, error) {
+	if err := validateGrant(g, limit, defaultSlots); err != nil {
+		return nil, err
 	}
 	tx, err := s.DB.Begin()
 	if err != nil {
 		return nil, err
 	}
 	defer tx.Rollback()
+	items, err := grantRewardTx(tx, id, g, limit, defaultSlots)
+	if err != nil {
+		return nil, err
+	}
+	if err = tx.Commit(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+// GrantRewardNotice consumes one offline reward notice and grants its bundle in
+// the same transaction, so a crash between the two cannot pay it twice.
+func (s *Store) GrantRewardNotice(id, reward int, g Grant, limit, defaultSlots int) ([]Item, error) {
+	if err := validateGrant(g, limit, defaultSlots); err != nil {
+		return nil, err
+	}
+	tx, err := s.DB.Begin()
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	result, err := tx.Exec("DELETE FROM UserRewardNotice WHERE rowid IN (SELECT rowid FROM UserRewardNotice WHERE userID=? AND rewardID=? LIMIT 1)", id, reward)
+	if err != nil {
+		return nil, err
+	}
+	if n, err := result.RowsAffected(); err != nil {
+		return nil, err
+	} else if n != 1 {
+		return nil, ErrRewardClaimed
+	}
+	items, err := grantRewardTx(tx, id, g, limit, defaultSlots)
+	if err != nil {
+		return nil, err
+	}
+	if err = tx.Commit(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+// grantRewardTx performs the whole grant inside the caller's transaction.
+func grantRewardTx(tx *sql.Tx, id int, g Grant, limit, defaultSlots int) ([]Item, error) {
+	var err error
 	if g.ClaimToken != 0 {
 		result, err := tx.Exec("UPDATE GoRewardClaim SET claimed=1 WHERE userID=? AND token=? AND claimed=0", id, g.ClaimToken)
 		if err != nil {
@@ -117,9 +169,6 @@ func (s *Store) GrantReward(id int, g Grant, limit, defaultSlots int) ([]Item, e
 		if err = enqueueQuestEvent(tx, QuestEvent{UserID: id, Kind: 5, Count: level - oldLevel}); err != nil {
 			return nil, err
 		}
-	}
-	if err = tx.Commit(); err != nil {
-		return nil, err
 	}
 	return items, nil
 }

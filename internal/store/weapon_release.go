@@ -80,33 +80,41 @@ func (s *Store) AddWeaponReleaseCharacter(userID int, character byte, count int)
 // Result codes: -1 row already opened, -2 bit already set, -3 no letter left,
 // 0 database error, 1 updated. The caller owns the bit-to-position mapping.
 func (s *Store) SetWeaponReleaseCharacter(userID, itemID, bit, character int, opened bool) (int, int, int, error) {
+	code, progress, left, _, err := s.SetWeaponReleaseCharacterReward(userID, itemID, bit, character, opened, nil, 0, 0)
+	return code, progress, left, err
+}
+
+// SetWeaponReleaseCharacterReward does the same step and grants the completed
+// word's prize inside the same transaction. A full bag rolls the letter back so
+// the player can retry instead of losing the prize.
+func (s *Store) SetWeaponReleaseCharacterReward(userID, itemID, bit, character int, opened bool, rewards []Reward, limit, defaultSlots int) (int, int, int, []Item, error) {
 	if bit < 0 || bit > 7 || character < 0 || character > 255 {
-		return -3, 0, 0, nil
+		return -3, 0, 0, nil, nil
 	}
 	tx, err := s.DB.Begin()
 	if err != nil {
-		return 0, 0, 0, err
+		return 0, 0, 0, nil, err
 	}
 	defer tx.Rollback()
 	var progress, currentOpened int
 	err = tx.QueryRow("SELECT coalesce(character,0),coalesce(opened,0) FROM UserMiniGameWeaponReleaseItemProgress WHERE userID=? AND slot=? LIMIT 1", userID, itemID).Scan(&progress, &currentOpened)
-	if err != nil && err != sql.ErrNoRows {
-		return 0, 0, 0, err
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return 0, 0, 0, nil, err
 	}
 	if currentOpened != 0 {
-		return -1, progress, 0, nil
+		return -1, progress, 0, nil, nil
 	}
 	if progress&(1<<bit) != 0 {
-		return -2, progress, 0, nil
+		return -2, progress, 0, nil, nil
 	}
 	letter := string(rune(character))
 	var count int
 	err = tx.QueryRow("SELECT coalesce(count,0) FROM UserMiniGameWeaponReleaseCharacters WHERE userID=? AND character=? LIMIT 1", userID, letter).Scan(&count)
-	if err != nil && err != sql.ErrNoRows {
-		return 0, 0, 0, err
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return 0, 0, 0, nil, err
 	}
 	if count <= 0 {
-		return -3, progress, 0, nil
+		return -3, progress, 0, nil, nil
 	}
 	nextProgress := progress | 1<<bit
 	nextOpened := 0
@@ -115,22 +123,31 @@ func (s *Store) SetWeaponReleaseCharacter(userID, itemID, bit, character int, op
 	}
 	result, err := tx.Exec("UPDATE UserMiniGameWeaponReleaseItemProgress SET character=?,opened=? WHERE userID=? AND slot=?", nextProgress, nextOpened, userID, itemID)
 	if err != nil {
-		return 0, 0, 0, err
+		return 0, 0, 0, nil, err
 	}
 	updated, err := result.RowsAffected()
 	if err != nil {
-		return 0, 0, 0, err
+		return 0, 0, 0, nil, err
 	}
 	if updated == 0 {
 		if _, err = tx.Exec("INSERT INTO UserMiniGameWeaponReleaseItemProgress(userID,slot,character,opened) VALUES(?,?,?,?)", userID, itemID, nextProgress, nextOpened); err != nil {
-			return 0, 0, 0, err
+			return 0, 0, 0, nil, err
 		}
 	}
 	if _, err = tx.Exec("UPDATE UserMiniGameWeaponReleaseCharacters SET count=count-1 WHERE userID=? AND character=? AND count>0", userID, letter); err != nil {
-		return 0, 0, 0, err
+		return 0, 0, 0, nil, err
+	}
+	var items []Item
+	if opened && len(rewards) > 0 {
+		if err = grantItems(tx, userID, rewards, limit, defaultSlots); err != nil {
+			return 0, 0, 0, nil, err
+		}
+		if items, err = readInventory(tx, userID); err != nil {
+			return 0, 0, 0, nil, err
+		}
 	}
 	if err = tx.Commit(); err != nil {
-		return 0, 0, 0, err
+		return 0, 0, 0, nil, err
 	}
-	return 1, nextProgress, count - 1, nil
+	return 1, nextProgress, count - 1, items, nil
 }

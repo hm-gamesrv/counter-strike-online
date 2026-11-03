@@ -117,6 +117,38 @@ func (s *Store) SetBingoSlots(userID int, slots []BingoSlot) error {
 	return tx.Commit()
 }
 
+// OpenBingoAwards marks the opened number, the completed prize lines and the
+// prize items in one transaction, so a full bag can neither pay one prize of a
+// line nor leave the line unclaimed.
+func (s *Store) OpenBingoAwards(userID, number int, prizes []int, rewards []Reward, limit, defaultSlots int) ([]Item, error) {
+	tx, err := s.DB.Begin()
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	if _, err = tx.Exec("UPDATE UserMiniGameBingoSlot SET opened=1 WHERE userID=? AND number=?", userID, number); err != nil {
+		return nil, err
+	}
+	for _, index := range prizes {
+		if _, err = tx.Exec("UPDATE UserMiniGameBingoPrizeSlot SET opened=1 WHERE userID=? AND idx=?", userID, index); err != nil {
+			return nil, err
+		}
+	}
+	var items []Item
+	if len(rewards) > 0 {
+		if err = grantItems(tx, userID, rewards, limit, defaultSlots); err != nil {
+			return nil, err
+		}
+		if items, err = readInventory(tx, userID); err != nil {
+			return nil, err
+		}
+	}
+	if err = tx.Commit(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 // OpenBingo marks one number and any completed prize lines in one transaction.
 func (s *Store) OpenBingo(userID, number int, prizes []int) error {
 	tx, err := s.DB.Begin()
