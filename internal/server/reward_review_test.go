@@ -29,6 +29,11 @@ func rewardMatch(t *testing.T) (*Server, *room, *matchStat) {
 	c.playing = true
 	c.team = 2
 	c.room = 1
+	// The class bonus is resolved from the database at settlement, so the fixture
+	// stores the class item as a selected, active row.
+	if _, err = db.DB.Exec("INSERT INTO UserInventory(userID,slot,itemID,count,status,inUse,obtainDate,expiryDate,isClanItem,enhancementLevel,enhancementExp,enhanceValue,paintID,partSlot1,partSlot2,lockStatus) VALUES(1,5,10,1,1,1,0,0,0,0,0,0,0,0,0,0)"); err != nil {
+		t.Fatal(err)
+	}
 	stat := &matchStat{
 		user:  c,
 		class: 10,

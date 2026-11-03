@@ -636,13 +636,15 @@ func (s *Server) sweepExpiredItems(now time.Time, skip int) {
 	}
 	// Expiry drops selections and may hand a weapon's selection to a remaining
 	// copy; refresh the character and push the bag patch to everyone who lost an
-	// item except the session that is still logging in.
+	// item. The session that is still logging in reloads the cleared selections
+	// without sending: skipping the push must not keep a stale cache alive.
 	for _, user := range users {
-		if user.UserID == skip {
-			continue
-		}
 		c := s.users[user.UserID]
 		if c == nil {
+			continue
+		}
+		if user.UserID == skip {
+			s.reloadCharacter(c)
 			continue
 		}
 		s.refreshCharacterCache(c)

@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/hm-gamesrv/cso-server-go/internal/protocol"
+	"github.com/hm-gamesrv/cso-server-go/internal/store"
 )
 
 type enhanceLimit struct {
@@ -20,6 +21,48 @@ type enhanceLimit struct {
 }
 
 var enhanceItemExp = [7]int{0, 10, 20, 50, 100, 200, 500}
+
+// materialGrade resolves an enhancement material's table grade. The three
+// reinforcement items have no grade of their own and are mapped by the
+// reference's InsertExp switch.
+func (s *Server) materialGrade(material store.Item) int {
+	grade := s.items[material.ID].Grade
+	if grade != 0 {
+		return grade
+	}
+	switch material.ID {
+	case 8481:
+		return 4
+	case 8482:
+		return 5
+	case 8566:
+		return 3
+	}
+	return grade
+}
+
+// enhanceMaterialExp is the reference's InsertExp accumulation: every material
+// adds its table value (scaled by its enhancement level), and a material sharing
+// the target's item ID then doubles the whole running total, including everything
+// collected before it.
+func enhanceMaterialExp(targetID int, materials []store.Item, gradeOf func(store.Item) int) int {
+	total := 0
+	for _, material := range materials {
+		grade := gradeOf(material)
+		if grade < 0 || grade >= len(enhanceItemExp) {
+			continue
+		}
+		exp := enhanceItemExp[grade]
+		if material.Level > 0 {
+			exp = int(float64(exp) * float64(material.Level) * 1.4)
+		}
+		total += exp
+		if material.ID == targetID {
+			total *= 2
+		}
+	}
+	return total
+}
 
 func readEnhanceCSV(dir, name string, headerCheck string) ([][]string, map[string]int, error) {
 	f, err := os.Open(filepath.Join(dir, "Data", name))
@@ -297,8 +340,8 @@ func (s *Server) enhanceInsert(c *client, p *protocol.Reader) error {
 		return nil
 	}
 	materialSlots := make([]int, 0, len(materialGameSlots))
+	materials := make([]store.Item, 0, len(materialGameSlots))
 	seen := map[int]bool{targetSlot: true}
-	totalExp := 0
 	for _, gameSlot := range materialGameSlots {
 		slot := gameSlot - defaults
 		if slot <= 0 || seen[slot] {
@@ -313,29 +356,9 @@ func (s *Server) enhanceInsert(c *client, p *protocol.Reader) error {
 		material := items[index]
 		seen[slot] = true
 		materialSlots = append(materialSlots, slot)
-		materialGrade := s.items[material.ID].Grade
-		if materialGrade == 0 {
-			switch material.ID {
-			case 8481:
-				materialGrade = 4
-			case 8482:
-				materialGrade = 5
-			case 8566:
-				materialGrade = 3
-			}
-		}
-		if materialGrade < 0 || materialGrade >= len(enhanceItemExp) {
-			continue
-		}
-		exp := enhanceItemExp[materialGrade]
-		if material.Level > 0 {
-			exp = int(float64(exp) * float64(material.Level) * 1.4)
-		}
-		if material.ID == target.ID {
-			exp *= 2
-		}
-		totalExp += exp
+		materials = append(materials, material)
 	}
+	totalExp := enhanceMaterialExp(target.ID, materials, s.materialGrade)
 	newExp := target.Exp + totalExp
 	if newExp > row[grade] {
 		newExp = row[grade]
@@ -367,6 +390,9 @@ func (s *Server) enhanceInsert(c *client, p *protocol.Reader) error {
 	if err = s.sendInventoryItems(c, changed); err != nil {
 		return err
 	}
+	// A material is any inventory row, so it can be the equipped nameplate or
+	// effect; the store cleared that selection and the cache must follow.
+	s.refreshCharacterCache(c)
 	s.enhanceReply(c, status, targetGameSlot, enhanceLevel(attrs), attribute)
 	return nil
 }
@@ -470,6 +496,7 @@ func (s *Server) enhanceDecrease(c *client, p *protocol.Reader) error {
 	if err = s.sendInventoryItems(c, changed); err != nil {
 		return err
 	}
+	s.refreshCharacterCache(c)
 	s.enhanceReply(c, status, materialGameSlot, newLevel, attribute)
 	return nil
 }

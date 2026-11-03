@@ -133,6 +133,8 @@ func parseVoxel(r *protocol.Reader) {
 			r.CString()
 		case 2, 4, 5, 19, 21, 23, 24:
 			r.U8()
+		case 11, 12, 13, 15, 16, 17:
+			r.U32()
 		case 14:
 			n := r.U32()
 			if n > 4096 {
@@ -144,7 +146,9 @@ func parseVoxel(r *protocol.Reader) {
 				r.CString()
 			}
 		default:
-			r.U32()
+			// Bits 18 and 20 have no VOXELFLAG_ definition and no read in
+			// CRoomSettings, so they carry no payload. Consuming bytes here would
+			// swallow whatever field follows the Voxel block.
 		}
 	}
 }

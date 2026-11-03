@@ -510,13 +510,18 @@ func (s *Server) endGame(r *room, forced bool) error {
 		// and only clamps the displayed base afterwards.
 		rawExp := matchBaseReward(coef.Exp, stat.kills)
 		rawPoints := matchBaseReward(coef.Points, stat.kills)
+		// The reference resolves the class bonus at settlement time with
+		// GetFirstActiveItemByItemID, so it must query the database instead of the
+		// snapshot taken when the player entered the match: an expired class item
+		// no longer earns the percentage.
 		classBonus := s.Config.GameMatch.CalcResults.BonusPercentage.Classes[strconv.Itoa(stat.class)]
-		for _, item := range stat.items {
-			if item.ID == stat.class && item.InUse != 0 && item.Status != 0 {
-				stat.classExp = classBonus.Exp
-				stat.classPoints = classBonus.Points
-				break
-			}
+		active, err := s.Store.HasActiveItem(stat.user.user.ID, stat.class)
+		if err != nil {
+			return err
+		}
+		if active {
+			stat.classExp = classBonus.Exp
+			stat.classPoints = classBonus.Points
 		}
 		stat.bonusExp = rawExp * stat.classExp / 100
 		stat.bonusPoints = rawPoints * stat.classPoints / 100

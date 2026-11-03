@@ -34,22 +34,29 @@ func (s *Server) nicknameReply(c *client, code int) {
 	c.send(69, w)
 }
 
-// refreshCharacterCache reloads the persisted character after an inventory
-// removal and republishes the user info when a cosmetic selection changed.
-func (s *Server) refreshCharacterCache(c *client) {
+// reloadCharacter re-reads the persisted character into the online cache and
+// reports whether the advertised nameplate changed. It never sends anything, so
+// a caller that is still inside the login handshake can use it.
+func (s *Server) reloadCharacter(c *client) bool {
 	if c == nil || c.user.ID == 0 {
-		return
+		return false
 	}
 	character, err := s.Store.Character(c.user.ID)
 	if err != nil {
 		if s.Log != nil {
 			s.Log.Warn("character refresh failed", "user", c.user.ID, "error", err)
 		}
-		return
+		return false
 	}
 	changed := character.NameplateID != c.character.NameplateID
 	c.character = character
-	if changed {
+	return changed
+}
+
+// refreshCharacterCache reloads the persisted character after an inventory
+// removal and republishes the user info when a cosmetic selection changed.
+func (s *Server) refreshCharacterCache(c *client) {
+	if s.reloadCharacter(c) {
 		s.broadcastUserInfo(c)
 	}
 }

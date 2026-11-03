@@ -617,4 +617,15 @@
 
 测试：新增 `internal/store/removal_cascade_test.go`（`TestClanDepositClearsEquippedNameplate`、`TestEnhanceMaterialPromotesSelectedCopy`）。其余入口（消耗、开箱钥匙、续期、喷漆、部件、改名卡、奖励来源、插件材料）逐条核对后判定不需要级联，理由写在清单里。
 
+## 2026-11-03 处理 a0bb9a6 审查（4 P1 + 1 P2）
+
+- **登录扫描跳过推送，也跳过了缓存重读**（R1）：`refreshCharacterCache` 拆成 `reloadCharacter`（只重读、不发包，返回是否变化）与 `refreshCharacterCache`（重读 + `nameplateID` 变化时 `broadcastUserInfo`）。`sweepExpiredItems` 对正在登录的账号只调 `reloadCharacter`：包序仍是 UserStart 150 在前，但登录链用的已经是清空后的背景选择。
+- **强化材料没有做引用清理**（R2）：材料是任意库存行（服务端只校验归属、重复槽位与 Grade，不限制类别），基线经 `OnItemUse` → `RemoveItem` 处理材料。`EnhanceItem` 现在对每个被消费材料调用 `clearItemReference`，两条强化入口（强化 / 降级）在下发补丁后调用 `refreshCharacterCache`。
+- **职业加成用了进入对局时的快照**（R3）：基线 `CGameMatch::CalculateGameResult` 在结算时用 `GetFirstActiveItemByItemID`（`status=1 AND inUse=1`）查库。新增 `Store.HasActiveItem`，`endGame` 逐玩家查询；已被到期扫描删除的职业物品不再给加成。装备加成是显式扩展（默认关），仍按对局快照，时间语义与基线职业加成分开说明。
+- **同款材料翻倍对象错误**（R4）：基线先 `totalExp += exp`，再在同 ID 时 `totalExp *= 2`，即连之前累计的一起翻倍。抽出纯函数 `enhanceMaterialExp`（`materialGrade` 单独负责目录 Grade 与 8481/8482/8566 映射），配确定性用例 `(500+10)*2=1020`，不再依赖随机抽取证明。
+- **Voxel 保留位被当成 U32 载荷**（R5）：`parseVoxel` 只对基线真正读取的 11/12/13/15/16/17 消费 U32；18、20 没有 `VOXELFLAG_` 定义、也不读字节，改为不消费，避免吞掉紧随其后的 FireBomb 字段。
+
+测试：新增 `internal/server/review_a0_fixes_test.go`（R1/R2/R3/R4/R5 各一组）；`rewardMatch` 夹具改为把职业物品写成 `status=1,inUse=1` 的数据库行，因为加成现在按基线查库。九批 overlay 探针通过；`review-b4cc191` 的两条 server 探针仍红，它们用纯内存 `stat.items` 证明职业加成、并期待装备加成默认开启，两个前提都已被 R3/R6 取代，见该轮说明。
+
+
 

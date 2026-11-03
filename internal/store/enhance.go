@@ -42,9 +42,15 @@ func (s *Store) EnhanceItem(id, targetSlot int, materialSlots []int, level, exp,
 			return nil, err
 		}
 	}
-	// Materials are ordinary inventory rows, so one of them can be the selected
-	// copy of a weapon. Hand the selection to a remaining copy before the rows are
-	// gone for good; nothing else in the pass does it for a material.
+	// Materials are ordinary inventory rows: the reference consumes them through
+	// OnItemUse/RemoveItem, so a cosmetic used as material must drop its external
+	// reference and a selected copy needs a successor. The server does not
+	// restrict materials to weapons, so this is reachable.
+	for _, material := range removed {
+		if err = clearItemReference(tx, id, material.ID); err != nil {
+			return nil, err
+		}
+	}
 	if err = promoteItemSelection(tx, id, removed); err != nil {
 		return nil, err
 	}
