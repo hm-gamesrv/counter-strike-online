@@ -524,7 +524,9 @@ func (s *Server) useInGameItem(c *client, item store.Item) ([]store.Item, error)
 	case item.ID == itemExtendID:
 		return nil, nil
 	case definition.Category < 9 || definition.Category == 11:
-		return s.Store.ChangeItem(c.user.ID, item.Slot, store.ActivateItem, nil)
+		// UseItem's default branch, not ActivateItem: an item whose inUse flag is
+		// already set still becomes selected here, and no other copy is deselected.
+		return s.Store.UseInGameItem(c.user.ID, item.Slot)
 	default:
 		// Outside the usable categories the reference only logs a warning.
 		return nil, nil

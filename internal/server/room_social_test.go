@@ -1,28 +1,45 @@
 package server
 
 import (
+	"path/filepath"
+	"strings"
 	"testing"
 
+	"github.com/hm-gamesrv/cso-server-go/internal/config"
 	"github.com/hm-gamesrv/cso-server-go/internal/protocol"
 	"github.com/hm-gamesrv/cso-server-go/internal/store"
 )
 
-func socialFixture() (*Server, *room, *client, *client, *client) {
+func socialFixture(t *testing.T) (*Server, *room, *client, *client, *client) {
+	t.Helper()
+	// Leaving the room now re-reads the new host's inventory, so the fixture needs
+	// a real store rather than a bare Server.
+	db, err := store.Open(filepath.Join(t.TempDir(), "social.db3"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { db.Close() })
 	users := map[int]*client{}
 	clients := map[*client]bool{}
 	for i, name := range []string{"Host", "Guest", "Other"} {
+		if err = db.Register(strings.ToLower(name)+"user", "secret1", "127.0.0.1", 0); err != nil {
+			t.Fatal(err)
+		}
+		if err = db.CreateCharacter(i+1, name, config.DefaultUser{Level: 1}); err != nil {
+			t.Fatal(err)
+		}
 		u := &client{user: store.User{ID: i + 1, Name: name}, character: store.Character{ID: i + 1, Name: name}, queue: make(chan outbound, 64), room: 1}
 		users[i+1] = u
 		clients[u] = true
 	}
 	r := &room{id: 1, host: users[1], members: []*client{users[1], users[2], users[3]}}
 	r.settings.setNumber(8, 4, 1)
-	s := &Server{users: users, clients: clients, rooms: map[int]*room{1: r}}
+	s := &Server{Store: db, users: users, clients: clients, rooms: map[int]*room{1: r}}
 	return s, r, users[1], users[2], users[3]
 }
 
 func TestRoomKickPermissionsAndHostChange(t *testing.T) {
-	s, r, host, guest, other := socialFixture()
+	s, r, host, guest, other := socialFixture(t)
 	s.kickRoomUser(guest, host.user.ID)
 	s.kickRoomUser(host, host.user.ID)
 	host.playing = true
@@ -59,7 +76,7 @@ func TestRoomKickPermissionsAndHostChange(t *testing.T) {
 }
 
 func TestRoomInvitesParseBeforeSendingAndDeduplicate(t *testing.T) {
-	s, _, host, guest, other := socialFixture()
+	s, _, host, guest, other := socialFixture(t)
 	invite := func(count int, names ...string) *protocol.Reader {
 		w := &protocol.Writer{}
 		w.String("join the test")

@@ -276,7 +276,7 @@ python blackbox\metadata.py --a 30002 --b 30003     # 32 个 91 类型，解压�
 | 2 | `103` | 索引 43，背包之前 | 索引 59，`69` 之后 | `voxel.go` 两个 sender 的调用点 |
 | 3 | `151` | 1 条 | 2 条 | `rooms.go:258` 的 `roomList` 调用次数 |
 | 4 | `180` | 在 `153`/`151` 之前 | 在它们之后 | `host.go:40` / `lobby.go:726` |
-| 5 | `153` | 314B，label=`tester1` | 412B，label=`test_lobby` | 大厅 label 是基线 `SendLobbyJoin` 里的固定串 |
+| 5 | `153` | 314B，label=`tester1` | 412B，label=`test_lobby` | 98B 差里约 3B 来自 label 常量（基线 `SendLobbyJoin` 的固定串），约 95B 来自 `157` 的 user-info 字段策略；只改 label 不会让长度相等 |
 | 6 | `72` | 34B，`Recommended`/空 | 32B，`Test`/`Test2` | 标题常量不同：`shop.go:203` vs 基线 `packetmanager.cpp:2142` |
 | 7 | `67` | 2 条 | 3 条 | 基线多一条固定 168B 欢迎语，公告相对顺序也不同 |
 | 8 | `157` | 303B，flags `0c4d03eb` | 398B，flags `ffffffff` | `userInfo` 只置位实际写出的可选段，基线置满 |

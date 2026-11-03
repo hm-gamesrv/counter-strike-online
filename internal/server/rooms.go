@@ -182,6 +182,32 @@ func (s *settings) write(w *protocol.Writer) {
 
 // layout renders the length of every transmitted field so a mismatched
 // settings payload can be compared against the client's own bytes.
+// writeMasked encodes the update mask of one settings value but the field bytes of
+// another. The reference sends the mask from the request (newSettings flags) with
+// the values of the room's current settings, so a field the server corrected
+// reaches the client with its effective value.
+func (s *settings) writeMasked(w *protocol.Writer, mask settings) {
+	for _, v := range mask.flags {
+		w.U32(int(v))
+	}
+	for group, bits := range mask.flags {
+		for bit := 0; bit < 32; bit++ {
+			if bits&(1<<bit) == 0 {
+				continue
+			}
+			index := group*32 + bit
+			if field := s.fields[index]; field != nil {
+				w.Bytes(field)
+				continue
+			}
+			// The room cleared this field (a mode-specific cleanup). Keep the width
+			// the client sent so the frame stays well formed, but carry the
+			// effective zero value.
+			w.Bytes(make([]byte, len(mask.fields[index])))
+		}
+	}
+}
+
 func (s *settings) layout() string {
 	var b strings.Builder
 	for group, mask := range s.flags {
@@ -656,7 +682,10 @@ func (s *Server) roomRequest(c *client, r *protocol.Reader) error {
 		currentRoom.settings = merged
 		w := &protocol.Writer{}
 		w.U8(4)
-		st.write(w)
+		// Send the corrected values for the fields the client asked to change;
+		// echoing the raw request would hand the room settings the server rejected
+		// (superRoom without the item, clamped ranges, mode defaults).
+		merged.writeMasked(w, st)
 		currentRoom.broadcast(65, w)
 		s.refreshRooms()
 	case 22:
@@ -705,6 +734,37 @@ func (s *Server) roomRequest(c *client, r *protocol.Reader) error {
 		s.Log.Debug("unsupported room action", "kind", kind, "user", c.user.ID)
 	}
 	return r.Err
+}
+
+// refreshMigratedHostItems mirrors CRoom::CheckForHostItems after the room lost
+// its host: superRoom, c4Timer and (for the modes that use it) sd belong to the
+// new host, not to the one who left. Each field is broadcast on its own, in the
+// reference's order, so the client applies exactly the same three updates.
+func (s *Server) refreshMigratedHostItems(r *room) error {
+	if r.host == nil {
+		return nil
+	}
+	if err := s.refreshHostRoomItems(r.host, &r.settings); err != nil {
+		return err
+	}
+	fields := []int{superRoomField}
+	if r.settings.hasField(c4Field) {
+		fields = append(fields, c4Field)
+	}
+	switch r.settings.number(6) {
+	case 3, 4, 5, 15, 24:
+		fields = append(fields, bigHeadField)
+	}
+	for _, index := range fields {
+		var update settings
+		update.flags[index/32] = 1 << uint(index%32)
+		update.fields[index] = r.settings.fields[index]
+		w := &protocol.Writer{}
+		w.U8(4)
+		update.write(w)
+		r.broadcast(65, w)
+	}
+	return nil
 }
 
 func (s *Server) leaveRoom(c *client) {
@@ -765,6 +825,9 @@ func (s *Server) leaveRoom(c *client) {
 		w.U32(r.host.user.ID)
 		w.U8(1)
 		r.broadcast(65, w)
+		if err := s.refreshMigratedHostItems(r); err != nil {
+			s.Log.Warn("host item refresh after migration failed", "room", r.id, "error", err)
+		}
 		s.migrateHost(r)
 	}
 	if r.settings.number(70) != 0 {

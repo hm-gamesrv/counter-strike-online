@@ -646,6 +646,16 @@ WSL 里的 30003 实例确认是**原版 C++ 基线**（仓库 `~/repos/hm-games
 
 测试：`TestHostScenarioItemUse` 按基线改写（refuse / activation / unknown 三个分支）；`TestClanStorageGiveTakeDeleteAndAccess` 的补丁断言改为“首条墓碑 + 不再含该槽位有效条目”；`TestRoomSettingsReserveSpaceForEveryMember` 的夹具改为最坏角色，与预算同源。审查者的 `review-4308aae` 三条探针全过。
 
+## 2026-11-03 处理 04608be 审查（4 P1）
+
+- **host 激活分支遗漏 `inUse=1,status=0` 的物品**（R1）：`ChangeItem(ActivateItem)` 在 `InUse!=0` 时直接返回，那是 `SwitchInUse` 的幂等约束，不能代替 `UseItem` 的用途分派。新增 `Store.UseInGameItem` 复刻 `itemmanager.cpp:1402–1442` 的默认分支：`CanUseItem` 仍拒绝 `count==0`/`status!=0`；带相对天数的道具先换算成绝对分钟，若存在同 ID、有到期时间且已选中的副本则按 `ExtendItem(duration=false)` 延长并删除优惠券，否则把本行 `status` 置 1（连同换算后的到期时间）；不取消其它副本的选中。
+- **归档目录被 `./...` 扫描导致标准检查失败**（N1）：`code-review/probes/go.mod` 建立模块边界，父模块不再进入该目录；overlay 绝对路径与归档布局保持不变。根目录 `go build/vet/test ./...` 恢复全绿。
+- **房间设置保存校正值、广播原始请求值**（N2）：新增 `settings.writeMasked(w, mask)`，掩码取请求 flags、字段字节取校正后的 `merged`，与基线 `OnRoomUpdateSettings`（`newSettings` 的 flags + 房间当前设置的值）一致。房间清掉的字段按请求宽度发零值，保证帧合法，且不重新引入已撤销的 flag 归一化。
+- **换房主后不刷新房主道具权益**（N3）：新增 `refreshMigratedHostItems`，在 `leaveRoom` 选出新房主后重算 superRoom / c4Timer / sd，并按基线 `CheckForHostItems` 逐字段广播（sd 仅模式 3/4/5/15/24）。`socialFixture` 补上真实 Store，因为 `leaveRoom` 现在要读新房主库存。
+
+测试：审查者 `review-04608be` 三条探针覆盖 R1/N2/N3；`go build/vet/test ./...` 在根目录全绿；十一批历史探针通过（`review-b4cc191` 两条过期探针除外）。
+
+
 
 
 

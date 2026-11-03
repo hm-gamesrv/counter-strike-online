@@ -292,6 +292,12 @@ const (
 	superRoomItemID = 8357
 	bigHeadItemID   = 439
 	c4SoundItemID   = 112
+
+	// Settings field indexes for the three item-backed values. They match the
+	// reference's ROOM_LOWMID_* bits: 58 is superRoom, 33 c4Timer and 44 sd.
+	superRoomField = 58
+	c4Field        = 33
+	bigHeadField   = 44
 )
 
 // refreshHostRoomItems mirrors CRoom::CheckForHostItems and the item-backed
