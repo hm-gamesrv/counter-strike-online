@@ -700,3 +700,30 @@ WSL 里的 30003 实例确认是**原版 C++ 基线**（仓库 `~/repos/hm-games
 **决定：保留 `Recommended`/空串，记为已批准偏离。** 该字符串只影响商店推荐页的显示文本，不影响任何道具、价格或购买流程；除这一处字符串外，整块字节与基线一致（`WriteUInt32(0)`、数量与 ID 列表都相同）。基线发的本来就是未替换的占位文本，照抄会让界面显示 "Test"。
 
 代码处已加注释（`internal/server/shop.go`），`code-review/review-request.md` 的两处（§5 P0-6 第 6 行、§7 非目标第 6 条）也同步标注，避免下一轮被重复报成缺陷。
+
+
+## 2026-11-04 处理 75cddae 两轮审查（6 P2 + 存储层 2 项）
+
+### 业务语义（6 项）
+
+- **重复购买限时道具新开一行**：`grantItemsForPurchase` 对购买路径实施 `AddItem` 的延期规则（可延期副本 → `ExtendItem` 三分支 → 不插行）。**范围收窄**：奖励/奖品路径仍插行，因为既有夹具依赖该语义；全路径对齐需连带改夹具，已记档。
+- **购买成功重发整包**：`PurchaseTracked` 返回受影响行，商店只发这些行；`Purchase` 保留原签名。
+- **购买失败回包第二字节**：改为基线那样无条件写 1。
+- **公仓删除权限**：改为 `memberGrade <= 该页 accessGrade`（基线 `DeleteClanStorageItem` 的判据）。
+- **连续击杀窗口**：按基线「先自增再比较」，2 连杀在第 3 杀计分。
+- **里程碑通知**：改为「每局临时进度 % Notice.Goal == 0」，新增 `matchStat.questUnits`。
+
+### 存储层（2 项）
+
+- **`SetTitle` 并发丢更新**：读-改-写包进事务（实测 2000 轮从丢 20 次到零丢），新增 `TestSetTitleKeepsConcurrentSlots`。
+- **`activateExpiry` 可激活过期行**：补 `liveItemSQL`，新增 `TestToggleNameplateRejectsExpiredRow`。
+
+### 不采纳（1 项）
+
+- **S-3「未建模 flag 位被重播」不是偏离**：`WriteSettings` 先把四个 flag DWORD 原样写出、再按固定字段表写值，未建模位在基线上同样产生「flag 置位、无 payload」。据此保留现有解析行为，并给 `parseSettings` 补注释说明「未建模位原样重播」「该解析器不是自身逆运算（难度 1 进 9 出）」「截断走 `truncated`」。
+
+### 其它
+
+- `FuzzItemRequest` 队列 64 → 8192，避免队列溢出触发 nil 连接关闭被误记为缺陷。
+- 长跑 fuzz 三个目标共约 120 万次执行无 panic；54 个事务方法自锁扫描全绿；6 条回滚注入与 4 条幂等重放全部通过。
+- 待办（已记档、不阻塞）：`FuzzItemRequest` 补库存一致性断言；`SettleMatch` 的建表移到启动期；Bot 缺省 -1 的口径；公仓时长往返；家族战名单口径；掉落箱系统回复；商店购买请求 5B 例外写入 §8；GM `/removeitem` 文案。
