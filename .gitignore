@@ -7,6 +7,7 @@
 *.exe
 *.test
 *.out
+__pycache__/
 
 # C++ 分支遗留的本地运行数据（Go 版用 .data/）
 /data/
