@@ -1,6 +1,8 @@
 package server
 
 import (
+	"slices"
+
 	"github.com/hm-gamesrv/cso-server-go/internal/protocol"
 )
 
@@ -61,6 +63,66 @@ func (s *Server) familyBattleJoin(r *room, c *client) bool {
 		return false
 	}
 	return true
+}
+
+// familyBattleSettings validates a Family Battle settings update against the
+// room's members, mirroring the checks in OnRoomUpdateSettings. On success it
+// records the two clan slots; on failure it returns the notice text the
+// reference sends.
+func (s *Server) familyBattleSettings(r *room, st *settings) (string, bool) {
+	hostClan, err := s.clanIDFor(r.host)
+	if err != nil || hostClan == 0 {
+		return "ROOM_SETTING_FAILED_CLAN_NOT_MEMBER", false
+	}
+	clans := []int{hostClan}
+	for _, member := range r.members {
+		if member == r.host {
+			continue
+		}
+		id, err := s.clanIDFor(member)
+		if err != nil || id == 0 {
+			return "ROOM_SETTING_FAILED_NO_CLAN_USER", false
+		}
+		if slices.Contains(clans, id) {
+			continue
+		}
+		clans = append(clans, id)
+		if len(clans) > 2 {
+			return "ROOM_SETTING_FAILED_TOO_MANY_CLANS", false
+		}
+	}
+	if st.number(8) != 0 && len(r.members) > st.number(8) {
+		return "ROOM_SETTING_FAILED_TOO_MANY_CLAN_MEMBERS", false
+	}
+	r.clan1 = clans[0]
+	r.clan2 = 0
+	if len(clans) == 2 {
+		r.clan2 = clans[1]
+	}
+	return "", true
+}
+
+// revertRoomSettings replays the current settings with an empty change mask, the
+// shape the reference sends when it refuses an update.
+func (s *Server) revertRoomSettings(r *room, c *client) {
+	w := &protocol.Writer{}
+	w.U8(4)
+	for range 4 {
+		w.U32(0)
+	}
+	c.send(65, w)
+}
+
+// familyBattleParticipant reports whether the user is on the participant list of
+// the running match. The reference keeps m_FamilyBattleUsers; the match statistics
+// are that list here, because every participant gets an entry when the game starts
+// and keeps it through a reconnect.
+func familyBattleParticipant(r *room, userID int) bool {
+	if r.match == nil {
+		return true
+	}
+	_, ok := r.match.stats[userID]
+	return ok
 }
 
 // familyBattleTeam picks the side a joining clan belongs to, mirroring the team

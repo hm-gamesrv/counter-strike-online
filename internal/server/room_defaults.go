@@ -127,6 +127,40 @@ func loadModes(dir string) (map[int]modeDefinition, error) {
 	return modes, nil
 }
 
+// applyMapDefaults mirrors the ROOM_LOW_MAPID block of CRoomSettings::LoadNewSettings.
+// The reference runs it on every map change, outside the validateSettings gate,
+// because these values come from the map table rather than from the client. It
+// returns the fields it wrote so they can join the broadcast mask.
+func (s *Server) applyMapDefaults(st *settings, mapID int) settings {
+	var added settings
+	mark := func(index int) {
+		added.flags[index/32] |= 1 << uint(index%32)
+	}
+	row, known := s.maps[mapID]
+	if mapID != 254 && known {
+		st.setNumber(8, row.MaxPlayer, 1) // maxPlayers follows the map
+		mark(8)
+	}
+	if known {
+		if restriction := row.value("weapon_restrict_deault"); restriction != 0 {
+			st.setNumber(69, restriction, 1)
+			mark(69)
+		}
+		st.setNumber(38, row.value("ball_default"), 1)
+		mark(38)
+	}
+	st.setNumber(59, boolInt(mapID == 282), 1)
+	mark(59)
+	// The reference always resends the playlist and the displayed map so the
+	// client repaints; the playlist value itself is whatever the room already has.
+	if st.fields[41] != nil {
+		mark(41)
+	}
+	st.setNumber(48, mapID, 2)
+	mark(48)
+	return added
+}
+
 func (s *settings) setNumber(index, value, width int) {
 	w := &protocol.Writer{}
 	if width == 2 {

@@ -10,6 +10,27 @@ func (s *settings) hasField(index int) bool {
 	return s.flags[index/32]&(1<<uint(index%32)) != 0
 }
 
+// restoreRejected puts back the value a rejected update would otherwise erase.
+// The reference builds the update from the request alone, and a field it refuses
+// only loses its update bit: the room keeps the value it already had. Our
+// corrections run on the merged settings, so a refused field arrives here as an
+// absent field whose bit the request carried.
+func (s *settings) restoreRejected(request, previous settings) {
+	for group, bits := range request.flags {
+		for bit := 0; bit < 32; bit++ {
+			if bits&(1<<bit) == 0 {
+				continue
+			}
+			index := group*32 + bit
+			if s.fields[index] != nil || previous.fields[index] == nil {
+				continue
+			}
+			s.fields[index] = previous.fields[index]
+			s.flags[group] |= 1 << bit
+		}
+	}
+}
+
 func (s *settings) clearField(index int) {
 	s.flags[index/32] &^= 1 << uint(index%32)
 	s.fields[index] = nil

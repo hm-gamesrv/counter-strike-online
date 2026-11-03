@@ -79,13 +79,22 @@ func chargePurchase(tx *sql.Tx, id int, points bool, price, bonus int) error {
 // grantItems is shared by purchases, consumable rewards and future quest claims.
 // The caller owns the transaction so source consumption and awards commit together.
 func grantItems(tx *sql.Tx, id int, items []Reward, limit, defaultSlots int) error {
+	_, err := grantItemsTracked(tx, id, items, limit, defaultSlots)
+	return err
+}
+
+// grantItemsTracked is grantItems plus the rows it touched: a merged stack, or
+// the row that was just inserted. Password boxes are a character counter and are
+// not reported.
+func grantItemsTracked(tx *sql.Tx, id int, items []Reward, limit, defaultSlots int) ([]Item, error) {
+	var touched []Item
 	var count, slot int
 	if err := tx.QueryRow("SELECT count(*),coalesce(max(slot),0)+1 FROM UserInventory WHERE userID=?", id).Scan(&count, &slot); err != nil {
-		return err
+		return nil, err
 	}
 	var nextSlot int
 	if err := tx.QueryRow("SELECT nextInventorySlot FROM UserCharacterExtended WHERE userID=?", id).Scan(&nextSlot); err != nil {
-		return err
+		return nil, err
 	}
 	slot = max(slot, nextSlot)
 	now := nowMinutes()
@@ -94,13 +103,13 @@ func grantItems(tx *sql.Tx, id int, items []Reward, limit, defaultSlots int) err
 		if i.ID == 166 { // Password boxes are a character counter upstream.
 			result, err := tx.Exec("UPDATE UserCharacter SET passwordBoxes=passwordBoxes+? WHERE userID=? AND passwordBoxes+?<=65535", i.Count, id, i.Count)
 			if err != nil {
-				return err
+				return nil, err
 			}
 			if affected, err := result.RowsAffected(); err != nil || affected != 1 {
 				if err != nil {
-					return err
+					return nil, err
 				}
-				return errors.New("BUY_FAIL_SYSTEM_ERROR")
+				return nil, errors.New("BUY_FAIL_SYSTEM_ERROR")
 			}
 			continue
 		}
@@ -109,19 +118,24 @@ func grantItems(tx *sql.Tx, id int, items []Reward, limit, defaultSlots int) err
 			err := tx.QueryRow("SELECT slot,count FROM UserInventory WHERE userID=? AND itemID=? AND inUse=1 AND (expiryDate=0 OR expiryDate>?) ORDER BY slot LIMIT 1", id, i.ID, now).Scan(&existingSlot, &existingCount)
 			if err == nil {
 				if existingCount < 1 || existingCount > 65535-i.Count {
-					return errors.New("BUY_FAIL_SYSTEM_ERROR")
+					return nil, errors.New("BUY_FAIL_SYSTEM_ERROR")
 				}
 				if _, e = tx.Exec("UPDATE UserInventory SET count=count+? WHERE userID=? AND slot=?", i.Count, id, existingSlot); e != nil {
-					return e
+					return nil, e
 				}
+				touched = append(touched, Item{
+					Slot:  existingSlot,
+					ID:    i.ID,
+					Count: existingCount + i.Count,
+				})
 				continue
 			}
 			if !errors.Is(err, sql.ErrNoRows) {
-				return err
+				return nil, err
 			}
 		}
 		if count >= limit || slot > 65535-defaultSlots {
-			return errors.New("BUY_FAIL_INVENTORY_FULL")
+			return nil, errors.New("BUY_FAIL_INVENTORY_FULL")
 		}
 		expiry := 0
 		if i.Duration > 0 {
@@ -137,18 +151,27 @@ func grantItems(tx *sql.Tx, id int, items []Reward, limit, defaultSlots int) err
 		}
 		if i.Exclusive && status != 0 {
 			if _, e = tx.Exec("UPDATE UserInventory SET status=0 WHERE userID=? AND itemID=?", id, i.ID); e != nil {
-				return e
+				return nil, e
 			}
 		}
 		_, e = tx.Exec("INSERT INTO UserInventory(userID,slot,itemID,count,status,inUse,obtainDate,expiryDate,isClanItem,enhancementLevel,enhancementExp,enhanceValue,paintID,partSlot1,partSlot2,lockStatus) VALUES(?,?,?,?,?,?,?,?,0,0,0,0,0,0,0,0)", id, slot, i.ID, i.Count, status, inUse, now, expiry)
 		if e != nil {
-			return e
+			return nil, e
 		}
+		touched = append(touched, Item{
+			Slot:   slot,
+			ID:     i.ID,
+			Count:  i.Count,
+			Status: status,
+			InUse:  inUse,
+			Obtain: now,
+			Expiry: expiry,
+		})
 		slot++
 		count++
 	}
 	if _, e = tx.Exec("UPDATE UserCharacterExtended SET nextInventorySlot=max(nextInventorySlot,?) WHERE userID=?", slot, id); e != nil {
-		return e
+		return nil, e
 	}
-	return nil
+	return touched, nil
 }

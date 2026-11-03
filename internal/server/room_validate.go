@@ -336,8 +336,10 @@ func (s *Server) refreshHostRoomItems(host *client, st *settings) error {
 		}
 		st.setNumber(bigHeadField, boolInt(active), 1)
 	default:
+		// CheckForHostItems writes the field with value 0 for modes that do not use
+		// it; it does not drop the field.
 		if st.hasField(bigHeadField) {
-			st.clearField(bigHeadField)
+			st.setNumber(bigHeadField, 0, 1)
 		}
 	}
 	return nil

@@ -190,19 +190,30 @@ func (s *settings) write(w *protocol.Writer) {
 // data: a variable-length block (Voxel, arrays) derives its width from its own
 // leading flags, so padding it back to the requested length shifts every field
 // behind it.
-func (s *settings) writeUpdate(w *protocol.Writer, request settings) {
+func (s *settings) writeUpdate(w *protocol.Writer, request, added settings) {
 	var mask settings
+	include := func(group, bit int) {
+		index := group*32 + bit
+		if s.fields[index] == nil {
+			return
+		}
+		mask.flags[group] |= 1 << bit
+		mask.fields[index] = s.fields[index]
+	}
 	for group, bits := range request.flags {
 		for bit := 0; bit < 32; bit++ {
-			if bits&(1<<bit) == 0 {
-				continue
+			if bits&(1<<bit) != 0 {
+				include(group, bit)
 			}
-			index := group*32 + bit
-			if s.fields[index] == nil {
-				continue
+		}
+	}
+	// Values the server derived itself (map table, host items, mode defaults) are
+	// part of the update the client receives, even though it never sent them.
+	for group, bits := range added.flags {
+		for bit := 0; bit < 32; bit++ {
+			if bits&(1<<bit) != 0 {
+				include(group, bit)
 			}
-			mask.flags[group] |= 1 << bit
-			mask.fields[index] = s.fields[index]
 		}
 	}
 	mask.write(w)
@@ -566,6 +577,12 @@ func (s *Server) roomRequest(c *client, r *protocol.Reader) error {
 		}
 		team := 2
 		if to.settings.number(70) != 0 {
+			// A Family Battle match accepts only the players it started with; the
+			// reference keeps an explicit participant list for this check.
+			if to.match != nil && !familyBattleParticipant(to, c.user.ID) {
+				c.notice("You are not participating in this Family Battle.")
+				return nil
+			}
 			if !s.familyBattleJoin(to, c) {
 				return nil
 			}
@@ -637,7 +654,8 @@ func (s *Server) roomRequest(c *client, r *protocol.Reader) error {
 			return nil
 		}
 		s.Log.Debug("room settings", "kind", kind, "len", len(r.Data), "flags", st.flags, "layout", st.layout())
-		merged := currentRoom.settings
+		previous := currentRoom.settings
+		merged := previous
 		if st.fields[6] != nil && st.number(6) != merged.number(6) {
 			if !s.roomDefaults(&st, false) {
 				c.notice("Unsupported game mode.")
@@ -645,6 +663,12 @@ func (s *Server) roomRequest(c *client, r *protocol.Reader) error {
 			}
 		}
 		merged.merge(st)
+		// A map change reloads the values the map table owns, and those fields have
+		// to join the broadcast even though the client never sent them.
+		var added settings
+		if st.fields[7] != nil {
+			added = s.applyMapDefaults(&merged, merged.number(7))
+		}
 		if err := s.refreshHostRoomItems(currentRoom.host, &merged); err != nil {
 			return err
 		}
@@ -660,20 +684,16 @@ func (s *Server) roomRequest(c *client, r *protocol.Reader) error {
 			return nil
 		}
 		if merged.number(70) != 0 {
-			candidate := &room{host: currentRoom.host, members: currentRoom.members, settings: merged}
-			if !s.familyBattleInit(candidate, candidate.host) {
+			if notice, ok := s.familyBattleSettings(currentRoom, &merged); !ok {
+				// The reference answers a rejected update with the current settings
+				// and an empty change mask so the host's dialog reverts, then the
+				// reason. Without it the host UI keeps showing Family Battle as on.
+				s.revertRoomSettings(currentRoom, c)
+				if notice != "" {
+					c.notice(notice)
+				}
 				return nil
 			}
-			for _, member := range candidate.members {
-				if member == candidate.host {
-					continue
-				}
-				if !s.familyBattleJoin(candidate, member) {
-					return nil
-				}
-			}
-			currentRoom.clan1 = candidate.clan1
-			currentRoom.clan2 = candidate.clan2
 		} else {
 			currentRoom.clan1 = 0
 			currentRoom.clan2 = 0
@@ -685,6 +705,9 @@ func (s *Server) roomRequest(c *client, r *protocol.Reader) error {
 		if err := validateRoomFrame(merged); err != nil {
 			return err
 		}
+		// A field the client tried to change but the server refused keeps the value
+		// the room already had, exactly as the reference does.
+		merged.restoreRejected(st, previous)
 		currentRoom.settings = merged
 		s.regroupFamilyBattle(currentRoom)
 		w := &protocol.Writer{}
@@ -692,7 +715,7 @@ func (s *Server) roomRequest(c *client, r *protocol.Reader) error {
 		// Send the corrected values for the fields the client asked to change;
 		// echoing the raw request would hand the room settings the server rejected
 		// (superRoom without the item, clamped ranges, mode defaults).
-		merged.writeUpdate(w, st)
+		merged.writeUpdate(w, st, added)
 		currentRoom.broadcast(65, w)
 		s.refreshRooms()
 	case 22:

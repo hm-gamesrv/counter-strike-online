@@ -153,6 +153,12 @@ func New(dir string, c config.Config, db *store.Store, log *slog.Logger) (*Serve
 	if e != nil {
 		return nil, e
 	}
+	// The store inserts gachapon prizes with AddItem's rules, so it needs the same
+	// catalog view the reward pipeline uses.
+	s.Store.ItemRule = func(id int) (int, int) {
+		definition := s.items[id]
+		return definition.Category, definition.UseType
+	}
 	s.itemBoxes, e = loadItemBoxes(dir)
 	if e != nil {
 		return nil, e

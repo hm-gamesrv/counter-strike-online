@@ -76,7 +76,9 @@ func TestSuperRoomFlagComesFromHostItem(t *testing.T) {
 	if err = s.refreshHostRoomItems(c, &clear); err != nil {
 		t.Fatal(err)
 	}
-	if clear.hasField(44) {
-		t.Fatal("big-head flag kept for a mode that does not use it")
+	// CheckForHostItems writes the field with value 0 for modes that do not use
+	// it, so the field stays in the frame instead of disappearing.
+	if !clear.hasField(44) || clear.number(44) != 0 {
+		t.Fatalf("big-head field for an unused mode: present=%v value=%d", clear.hasField(44), clear.number(44))
 	}
 }

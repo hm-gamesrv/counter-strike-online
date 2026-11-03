@@ -314,17 +314,18 @@ func (s *Server) hostRequest(c *client, p *protocol.Reader) error {
 			// Every kill event the reference sees ticks the gachapon counter,
 			// suicide included, and pays one of the two prize items when it runs out.
 			index := mrand.IntN(2)
-			award := 5101
+			awardID := 5101
 			if index == 1 {
-				award = 166
+				awardID = 166
 			}
-			gained, changed, err := s.Store.TickGachapon(stat.user.user.ID, award, s.Config.InventorySlotMax, len(s.Config.DefaultUser.DefaultItems))
+			gained, granted, err := s.Store.TickGachapon(stat.user.user.ID, awardID, s.Config.InventorySlotMax, len(s.Config.DefaultUser.DefaultItems))
 			if err != nil {
 				return err
 			}
 			if gained {
 				// SendItemGachapon: item notice 10 for the first prize, 12 for the
-				// second, then the inventory update that carries the item itself.
+				// second, then whatever the award changed -- the new row, the merged
+				// stack, or the password box counter on the character.
 				w := &protocol.Writer{}
 				if index == 1 {
 					w.U8(10)
@@ -332,8 +333,16 @@ func (s *Server) hostRequest(c *client, p *protocol.Reader) error {
 					w.U8(12)
 				}
 				stat.user.send(78, w)
-				if err = s.sendInventoryItems(stat.user, changed); err != nil {
-					return err
+				if granted.PasswordBox {
+					// CUser::UpdatePasswordBoxes refreshes the session character and
+					// pushes the new user info; the box count lives on the character,
+					// not in the bag.
+					s.reloadCharacter(stat.user)
+					s.broadcastUserInfo(stat.user)
+				} else if len(granted.Items) != 0 {
+					if err = s.sendInventoryItems(stat.user, granted.Items); err != nil {
+						return err
+					}
 				}
 			}
 			if killer != victim {
@@ -406,7 +415,7 @@ func (s *Server) hostRequest(c *client, p *protocol.Reader) error {
 				}
 			}
 			if event == 34 && value >= 3000 && value <= 3023 {
-				s.grantDropBox(stat.user, value)
+				s.grantDropBox(r, stat.user, value)
 			}
 		}
 	case 13:
@@ -756,8 +765,21 @@ func (s *Server) migrateHost(r *room) {
 	}
 }
 
+// dropBoxModes is the scenario-mode whitelist of CGameMatch::OnGameEvent: the
+// reference rejects a drop box outside these modes as abuse before paying it.
+var dropBoxModes = map[int]bool{
+	15: true,
+	17: true,
+	26: true,
+	28: true,
+}
+
 // grantDropBox awards the scene drop box prize carried by host game event 34.
-func (s *Server) grantDropBox(c *client, rewardID int) {
+func (s *Server) grantDropBox(r *room, c *client, rewardID int) {
+	if r.match != nil && !dropBoxModes[r.match.mode] {
+		s.Log.Warn("drop box outside a scenario mode ignored", "user", c.user.ID, "mode", r.match.mode, "reward", rewardID)
+		return
+	}
 	if err := s.grantCatalogReward(c, rewardID); err != nil && s.Log != nil {
 		s.Log.Warn("drop box grant failed", "user", c.user.ID, "reward", rewardID, "error", err)
 	}

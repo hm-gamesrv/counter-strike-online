@@ -139,8 +139,11 @@ func TestHostDropBoxGrantsReward(t *testing.T) {
 		room:    1,
 		queue:   make(chan outbound, 16),
 	}
+	// Drop boxes belong to the scenario modes; the reference rejects them
+	// everywhere else as abuse.
 	match := &gameMatch{
 		id:    "match",
+		mode:  15,
 		stats: map[int]*matchStat{2: {user: target}},
 	}
 	currentRoom := &room{

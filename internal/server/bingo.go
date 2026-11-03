@@ -251,14 +251,10 @@ func (s *Server) bingoShuffle(c *client) error {
 		c.notice("BINGO_SHUFFLE_NUMBERS_FAILED_SHUFFLE_LIMIT_EXCEED")
 		return nil
 	}
-	numbers := make([]int, len(slots))
-	for i, slot := range slots {
-		numbers[i] = slot.Number
-	}
-	rand.Shuffle(len(numbers), func(i, j int) { numbers[i], numbers[j] = numbers[j], numbers[i] })
-	for i := range slots {
-		slots[i].Number = numbers[i]
-	}
+	// Shuffle whole slots, not just the numbers: opened marks belong to the number
+	// that was opened, so moving numbers alone would hand the player a different
+	// set of opened numbers than the one they drew.
+	rand.Shuffle(len(slots), func(i, j int) { slots[i], slots[j] = slots[j], slots[i] })
 	if err = s.Store.SetBingoSlots(c.user.ID, slots); err != nil {
 		return err
 	}

@@ -21,7 +21,14 @@ import (
 //go:embed schema.sql
 var schema string
 
-type Store struct{ DB *sql.DB }
+type Store struct {
+	DB *sql.DB
+	// ItemRule returns the catalog category and use type of an item so paths that
+	// insert items the way CItemManager::AddItem does can apply the same rules as
+	// the reward pipeline. The server installs it at startup; nil means "treat as
+	// plain equipment".
+	ItemRule func(id int) (category, useType int)
+}
 type User struct {
 	ID   int
 	Name string
@@ -71,7 +78,9 @@ func Open(path string) (*Store, error) {
 		return nil, e
 	}
 	db.SetMaxOpenConns(1)
-	s := &Store{db}
+	s := &Store{
+		DB: db,
+	}
 	if e = s.init(); e != nil {
 		db.Close()
 		return nil, e
