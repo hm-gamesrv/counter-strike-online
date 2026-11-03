@@ -1,6 +1,7 @@
 /.ref/
 /.tmp/
 /.data/
+/.data-upstream/
 /.dist/
 *.exe
 *.test
