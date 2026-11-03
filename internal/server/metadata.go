@@ -219,23 +219,23 @@ func loadMetadata(dir string, c config.Config) ([][]byte, error) {
 		byName[entry.Name] = frames
 	}
 	if c.Metadata["WeaponPaints"] {
-		var paints map[string]json.RawMessage
-		if e := config.ReadJSON(filepath.Join(dir, "WeaponPaints.json"), &paints); e != nil {
+		fields, e := readOrderedFile(dir, "WeaponPaints.json")
+		if e != nil {
 			return nil, e
 		}
+		fields = numericFields(fields)
 		w := protocol.Writer{}
 		w.U8(6)
-		keys := numericKeys(paints)
-		w.U16(len(keys))
-		for _, k := range keys {
-			var p struct{ Paints []int }
-			if e := json.Unmarshal(paints[k], &p); e != nil {
+		w.U16(len(fields))
+		for _, field := range fields {
+			var paint struct{ Paints []int }
+			if e = json.Unmarshal(field.Value, &paint); e != nil {
 				return nil, e
 			}
-			id, _ := strconv.Atoi(k)
+			id, _ := strconv.Atoi(field.Key)
 			w.U16(id)
-			w.U16(len(p.Paints))
-			for _, v := range p.Paints {
+			w.U16(len(paint.Paints))
+			for _, v := range paint.Paints {
 				w.U16(v)
 			}
 		}
@@ -255,61 +255,64 @@ func loadMetadata(dir string, c config.Config) ([][]byte, error) {
 		byName["ZombieWarWeaponList"] = [][]byte{w.Data}
 	}
 	if c.Metadata["RandomWeaponList"] {
-		var p map[string]json.RawMessage
-		if e := config.ReadJSON(filepath.Join(dir, "RandomWeaponList.json"), &p); e != nil {
+		fields, e := readOrderedFile(dir, "RandomWeaponList.json")
+		if e != nil {
 			return nil, e
 		}
-		keys := numericKeys(p)
+		fields = numericFields(fields)
 		w := protocol.Writer{}
 		w.U8(16)
-		w.U32(len(keys))
-		for _, k := range keys {
-			id, _ := strconv.Atoi(k)
+		w.U32(len(fields))
+		for _, field := range fields {
+			id, _ := strconv.Atoi(field.Key)
 			w.U32(id)
-			var modes map[string]struct{ DropRate, EnhanceProbability int }
-			if e := json.Unmarshal(p[k], &modes); e != nil {
+			modes, e := readOrderedObject(field.Value)
+			if e != nil {
 				return nil, e
 			}
-			mk := numericKeys(modes)
-			w.U32(len(mk))
-			for _, m := range mk {
-				id, _ := strconv.Atoi(m)
-				w.U8(id)
-				w.U32(modes[m].DropRate)
-				w.U32(modes[m].EnhanceProbability)
+			modes = numericFields(modes)
+			w.U32(len(modes))
+			for _, mode := range modes {
+				var rates struct{ DropRate, EnhanceProbability int }
+				if e = json.Unmarshal(mode.Value, &rates); e != nil {
+					return nil, e
+				}
+				modeID, _ := strconv.Atoi(mode.Key)
+				w.U8(modeID)
+				w.U32(rates.DropRate)
+				w.U32(rates.EnhanceProbability)
 			}
 		}
 		byName["RandomWeaponList"] = [][]byte{w.Data}
 	}
 	if c.Metadata["ItemBox"] {
-		var boxes map[string]struct {
-			Rate map[string]struct{ Items []int }
-		}
-		var raw map[string]json.RawMessage
-		if e := config.ReadJSON(filepath.Join(dir, "ItemBox.json"), &raw); e != nil {
-			return nil, e
-		}
-		delete(raw, "Version")
-		b, e := json.Marshal(raw)
+		boxes, e := readOrderedFile(dir, "ItemBox.json")
 		if e != nil {
 			return nil, e
 		}
-		if e = json.Unmarshal(b, &boxes); e != nil {
-			return nil, e
-		}
 		var pairs []itemBoxPair
-		for _, k := range numericKeys(boxes) {
-			id, _ := strconv.Atoi(k)
-			rates := boxes[k].Rate
-			keys := make([]string, 0, len(rates))
-			for key := range rates {
-				keys = append(keys, key)
+		for _, box := range numericFields(boxes) {
+			boxID, _ := strconv.Atoi(box.Key)
+			body, e := readOrderedObject(box.Value)
+			if e != nil {
+				return nil, e
 			}
-			sort.Strings(keys)
-			for _, key := range keys {
-				for _, item := range rates[key].Items {
+			rate, ok := member(body, "Rate")
+			if !ok {
+				continue
+			}
+			groups, e := readOrderedObject(rate)
+			if e != nil {
+				return nil, e
+			}
+			for _, group := range groups {
+				var items struct{ Items []int }
+				if e = json.Unmarshal(group.Value, &items); e != nil {
+					return nil, e
+				}
+				for _, item := range items.Items {
 					pairs = append(pairs, itemBoxPair{
-						Box:  id,
+						Box:  boxID,
 						Item: item,
 					})
 				}

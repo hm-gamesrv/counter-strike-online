@@ -4,6 +4,8 @@ import (
 	"archive/zip"
 	"bytes"
 	"io"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/hm-gamesrv/cso-server-go/assets"
@@ -249,4 +251,88 @@ func TestMetadataItemBoxHeader(t *testing.T) {
 	if len(data) != 5+int(count)*26 {
 		t.Fatalf("item box size %d for %d entries", len(data), count)
 	}
+}
+
+// TestMetadataKeepsFileOrder: the reference iterates the data JSON in file
+// order, so the metadata must not be re-sorted numerically. Numbers chosen so
+// that file order, numeric order and lexicographic order all disagree.
+func TestMetadataKeepsFileOrder(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "Data"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	write := func(name, body string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("WeaponPaints.json", `{"30":{"Paints":[1]},"4":{"Paints":[2]}}`)
+	write("RandomWeaponList.json", `{"Version":1,"8330":{"1":{"DropRate":10,"EnhanceProbability":2},"3":{"DropRate":30,"EnhanceProbability":4}},"1":{"3":{"DropRate":7,"EnhanceProbability":8}}}`)
+	write("ItemBox.json", `{"Version":1,"99":{"Rate":{"z":{"Items":[7]},"a":{"Items":[8]}}},"5":{"Rate":{"a":{"Items":[9]}}}}`)
+
+	t.Run("weapon paints", func(t *testing.T) {
+		packets, err := loadMetadata(dir, config.Config{Metadata: map[string]bool{"WeaponPaints": true}})
+		if err != nil || len(packets) != 1 {
+			t.Fatalf("packets %d, %v", len(packets), err)
+		}
+		r := &protocol.Reader{Data: packets[0]}
+		if r.U8() != 6 || r.U16() != 2 {
+			t.Fatalf("header %v", packets[0][:3])
+		}
+		first, paints := r.U16(), r.U16()
+		for range paints {
+			r.U16()
+		}
+		second := r.U16()
+		if first != 30 || second != 4 {
+			t.Fatalf("paint order %d then %d, want 30 then 4", first, second)
+		}
+	})
+
+	t.Run("random weapon list", func(t *testing.T) {
+		packets, err := loadMetadata(dir, config.Config{Metadata: map[string]bool{"RandomWeaponList": true}})
+		if err != nil || len(packets) != 1 {
+			t.Fatalf("packets %d, %v", len(packets), err)
+		}
+		r := &protocol.Reader{Data: packets[0]}
+		if r.U8() != 16 || r.U32() != 2 {
+			t.Fatal("random weapon header")
+		}
+		if first := r.U32(); first != 8330 {
+			t.Fatalf("first weapon %d, want 8330", first)
+		}
+		if modes := r.U32(); modes != 2 {
+			t.Fatalf("first weapon modes %d", modes)
+		}
+		if mode := r.U8(); mode != 1 {
+			t.Fatalf("first mode %d, want file order 1", mode)
+		}
+		r.U32()
+		r.U32()
+		if mode := r.U8(); mode != 3 {
+			t.Fatalf("second mode %d, want 3", mode)
+		}
+	})
+
+	t.Run("item box", func(t *testing.T) {
+		packets, err := loadMetadata(dir, config.Config{Metadata: map[string]bool{"ItemBox": true}})
+		if err != nil || len(packets) != 1 {
+			t.Fatalf("packets %d, %v", len(packets), err)
+		}
+		r := &protocol.Reader{Data: packets[0]}
+		if r.U8() != 4 || r.U32() != 3 {
+			t.Fatal("item box header")
+		}
+		var boxes []int
+		var items []int
+		for range 3 {
+			boxes = append(boxes, r.U32())
+			items = append(items, r.U32())
+			r.Bytes(18)
+		}
+		if boxes[0] != 99 || items[0] != 7 || items[1] != 8 || boxes[2] != 5 || items[2] != 9 {
+			t.Fatalf("item box order boxes=%v items=%v", boxes, items)
+		}
+	})
 }
