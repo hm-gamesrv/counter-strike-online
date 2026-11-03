@@ -118,3 +118,14 @@ $env:GOTOOLCHAIN = "local"
 ```
 
 需要长期生效可执行 `go env -w GOTOOLCHAIN=local`。后续所有构建和测试命令都应在这个设置下运行。
+
+### 3.1. 本机开发实例的数据目录
+
+联调用的服务端**不直接挂 `.data`**：`.data` 是固定的数据集快照，服务端只挂每次启动前从它镜像出来的可写副本 `.data-test`。这样重启一次就回到同一份数据库与配置，联调过程中产生的账号、道具、对局记录不会污染快照。
+
+```powershell
+pwsh scripts/sync-test-data.ps1      # .data -> .data-test（robocopy /MIR）
+& ./.dist/cso-server.exe -data .data-test -debug
+```
+
+需要固化的数据改动请改 `.data`（并说明来源），不要直接改 `.data-test`；后者的内容随时会被镜像覆盖。
