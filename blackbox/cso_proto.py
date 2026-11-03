@@ -36,6 +36,9 @@ class Reader:
         self.pos += count
         return chunk
 
+    def remaining(self) -> int:
+        return len(self.data) - self.pos
+
     def u8(self) -> int:
         return self.bytes(1)[0]
 
@@ -70,6 +73,17 @@ def cstring(text: str) -> bytes:
     return text.encode("utf-8") + b"\0"
 
 
+def frame(packet_id: int, payload: bytes = b"", sequence: int = 1) -> bytes:
+    """Builds one wire frame without the codec's payload guard.
+
+    Tests use it for frames a real client never writes: a payload at the exact
+    MAX_PAYLOAD boundary, a deliberately wrong sequence number, or the same
+    frame spliced into several socket writes. The declared length is derived
+    from *payload*, so a caller that wants a lying header writes raw bytes.
+    """
+    return b"U" + u8(sequence & 0xFF) + u16(len(payload) + 1) + u8(packet_id & 0xFF) + payload
+
+
 class Codec:
     """Reads and writes frames on one socket, tracking both sequence counters."""
 
@@ -81,13 +95,7 @@ class Codec:
     def send(self, packet_id: int, payload: bytes = b"") -> None:
         if len(payload) > MAX_PAYLOAD:
             raise FrameError("frame too large")
-        frame = bytearray()
-        frame += b"U"
-        frame.append(self.send_sequence)
-        frame += u16(len(payload) + 1)
-        frame.append(packet_id)
-        frame += payload
-        self.sock.sendall(frame)
+        self.sock.sendall(frame(packet_id, payload, self.send_sequence))
         self.send_sequence = (self.send_sequence + 1) & 0xFF
 
     def receive(self) -> tuple[int, bytes]:
