@@ -273,6 +273,10 @@ func (s *Server) clanJoinApproveRequest(c *client, r *protocol.Reader) error {
 	if err != nil {
 		return err
 	}
+	if code == -6 {
+		s.clanReply(c, 5, 0, "CSO_CLAN_JOIN_MAX_MEMBER")
+		return nil
+	}
 	if code != 1 {
 		s.clanReply(c, 5, 0, "CSO_CLAN_NOT_IN_APPLICANTS")
 		return nil

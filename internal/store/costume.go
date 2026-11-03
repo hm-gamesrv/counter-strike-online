@@ -220,7 +220,16 @@ func (s *Store) AutoEquipCostume(id, itemID int, className string, zombieSkin in
 			return false, err
 		}
 		if loadout[field.index] != 0 {
-			return false, nil
+			// A loadout entry can outlive its item (expiry, disassemble). Only a
+			// live copy keeps the slot occupied.
+			var live int
+			if err = tx.QueryRow("SELECT EXISTS(SELECT 1 FROM UserInventory WHERE userID=? AND itemID=? AND count>0 AND "+liveItemSQL+")", id, loadout[field.index], nowMinutes()).Scan(&live); err != nil {
+				return false, err
+			}
+			if live != 0 {
+				return false, nil
+			}
+			loadout[field.index] = 0
 		}
 		loadout[field.index] = itemID
 		if exists {
@@ -232,7 +241,17 @@ func (s *Store) AutoEquipCostume(id, itemID int, className string, zombieSkin in
 		var existing int
 		err = tx.QueryRow("SELECT itemID FROM UserZBCostumeLoadout WHERE userID=? AND slot=?", id, zombieSkin).Scan(&existing)
 		if err == nil {
-			return false, nil
+			var live int
+			if err = tx.QueryRow("SELECT EXISTS(SELECT 1 FROM UserInventory WHERE userID=? AND itemID=? AND count>0 AND "+liveItemSQL+")", id, existing, nowMinutes()).Scan(&live); err != nil {
+				return false, err
+			}
+			if live != 0 {
+				return false, nil
+			}
+			if _, err = tx.Exec("DELETE FROM UserZBCostumeLoadout WHERE userID=? AND slot=?", id, zombieSkin); err != nil {
+				return false, err
+			}
+			err = sql.ErrNoRows
 		}
 		if !errors.Is(err, sql.ErrNoRows) {
 			return false, err

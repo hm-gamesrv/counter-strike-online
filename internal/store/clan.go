@@ -445,6 +445,15 @@ func (s *Store) ApproveClanJoin(userID int, targetName string, now int) (int, in
 	if err != nil {
 		return 0, 0, err
 	}
+	// Requests do not reserve a slot, so the capacity has to be re-checked here;
+	// a full clan keeps the application queued instead of overflowing.
+	var members, capacity int
+	if err = tx.QueryRow("SELECT coalesce(memberCount,0),coalesce(maxMemberCount,0) FROM Clan WHERE clanID=?", clanID).Scan(&members, &capacity); err != nil {
+		return 0, 0, err
+	}
+	if capacity > 0 && members >= capacity {
+		return -6, 0, nil
+	}
 	if _, err = tx.Exec("DELETE FROM ClanMemberRequest WHERE clanID=? AND userID=?", clanID, targetID); err != nil {
 		return 0, 0, err
 	}

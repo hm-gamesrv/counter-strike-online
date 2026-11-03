@@ -62,13 +62,27 @@ func (s *Store) SetAddonsConsuming(id int, itemIDs []int, protected []int) ([]in
 			continue
 		}
 		if items[target].Count == 1 {
-			if _, err = tx.Exec("DELETE FROM UserInventory WHERE userID=? AND slot=?", id, items[target].Slot); err != nil {
+			result, err := tx.Exec("DELETE FROM UserInventory WHERE userID=? AND slot=?", id, items[target].Slot)
+			if err != nil {
 				return nil, nil, err
 			}
-			removed = append(removed, items[target].Slot)
-		} else {
-			if _, err = tx.Exec("UPDATE UserInventory SET count=count-1 WHERE userID=? AND slot=?", id, items[target].Slot); err != nil {
+			if n, err := result.RowsAffected(); err != nil {
 				return nil, nil, err
+			} else if n != 1 {
+				return nil, nil, ErrItemUnavailable
+			}
+			removed = append(removed, items[target].Slot)
+			// The row is gone: the snapshot must not offer it to a later request.
+			items[target].Count = 0
+		} else {
+			result, err := tx.Exec("UPDATE UserInventory SET count=count-1 WHERE userID=? AND slot=?", id, items[target].Slot)
+			if err != nil {
+				return nil, nil, err
+			}
+			if n, err := result.RowsAffected(); err != nil {
+				return nil, nil, err
+			} else if n != 1 {
+				return nil, nil, ErrItemUnavailable
 			}
 			items[target].Count--
 		}

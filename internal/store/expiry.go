@@ -39,6 +39,9 @@ func (s *Store) ExpireItems(now int) (int, error) {
 		if _, err = tx.Exec("INSERT INTO UserExpiryNotice(userID,itemID) VALUES(?,?)", item.user, item.item); err != nil {
 			return 0, err
 		}
+		if err = clearItemReference(tx, item.user, item.item); err != nil {
+			return 0, err
+		}
 	}
 	if err = tx.Commit(); err != nil {
 		return 0, err

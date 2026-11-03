@@ -571,3 +571,13 @@
 - **已卸下装饰续期按分钟算**：`ExtendItem` 只在"未激活"（`status=0 && inUse=0 && 相对天数`）时按天加，已激活后再卸下（`status=1`、绝对时间、`inUse=0`）按 `days*1440` 分钟加。
 
 测试：新增 `internal/server/review_overall_test.go`（选择型通知、通知行身份、专服复用、限时外观、同款装饰、续期单位、保护 ID、插件失败回滚共 8 组用例）。`go vet`、`go test ./...` 全绿，四批 overlay 探针（`review-44b5eed`、`review-expanded`、`review-b6afe1f`、`review-overall-f6eda20`）全部通过。
+
+
+## 2026-11-03 处理 154b2fe 复核与整体审查（4 项）
+
+- **新插件事务重复使用已删除的材料快照**（154b2fe 引入的回归）：`SetAddonsConsuming` 删除整叠时把快照的 `Count` 置 0，并要求 DELETE/UPDATE 恰好影响 1 行；同一请求里重复的插件 ID 不会再拿已删除的行当材料（此前 1 件材料能换 6 条插件）。
+- **删除/到期不清理外观与装备引用**：新增 `clearItemReference`，只在"同 ID 已无剩余副本"时清理，否则保留（选择以物品 ID 为键，还有副本时引用仍有效）。`DeleteItems` 与 `ExpireItems` 在删除行后、同一事务里清 `UserCharacter.nameplateID`、`UserCharacterExtended.zbRespawnEffect/killerMarkEffect`、`UserCostumeLoadout` 七个槽与 `UserZBCostumeLoadout`。
+- **过期装饰残留引用挡住后续自动装备**：`AutoEquipCostume` 检查 loadout 指向的物品是否仍有有效库存，没有就清掉该槽继续自动装备（覆盖历史残留）。
+- **审批入队申请可突破战队人数上限**：申请不预占名额，`ApproveClanJoin` 现在在事务内、删除申请与插入成员之前重查 `memberCount < maxMemberCount`；满员返回 `-6` 并保留申请，服务端映射为 `CSO_CLAN_JOIN_MAX_MEMBER`。
+
+测试：新增 `internal/store/references_test.go`（删除清选择、过期不挡自动装备、审批限容）与 `internal/server/review_overall_test.go` 的 `TestRepeatedAddonIDConsumesOneUnit`。`go vet`、`go test ./...` 全绿，五批 overlay 探针全部通过。
