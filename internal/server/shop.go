@@ -200,6 +200,9 @@ func (s shop) packets() []*protocol.Writer {
 	keys := numericKeys(s.Recommended)
 	w.U32(len(keys))
 	for _, k := range keys {
+		// Approved deviation: the reference hard-codes the placeholder strings
+		// "Test"/"Test2" here, which the client renders as the page title. The
+		// page keeps a real caption instead; the rest of the block is identical.
 		w.String("Recommended")
 		w.String("")
 		w.U32(0)
