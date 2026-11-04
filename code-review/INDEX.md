@@ -9,17 +9,21 @@
 
 ```
 reports-responses/
-  2026-11-03T06-08-43/
+  2026-11-03T06-08-43-b4cc191/
     CODE_REVIEW_B4CC191.md
     CODE_REVIEW_B4CC191_RESPONSE.md
-  2026-11-03T14-13-48/
-    CODE_REVIEW_44B5EED.md
-    CODE_REVIEW_44B5EED_EXPANDED.md
-    CODE_REVIEW_44B5EED_RESPONSE.md
-  ...
-  2026-11-03T20-31-27-4308aae/
-    CODE_REVIEW_4308AAE.md
+  2026-11-04T01-18-26-75cddae-store/
+    CODE_REVIEW_75CDDAE_STORE.md
+    CODE_REVIEW_75CDDAE_STORE_RESPONSE.md
+  2026-11-05T02-54-52-83b1c1a-lobby/
+    CODE_REVIEW_83B1C1A_LOBBY.md
+    CODE_REVIEW_83B1C1A_LOBBY_RESPONSE.md
+  2026-11-05T02-57-18-83b1c1a-lifecycle/
+    CODE_REVIEW_83B1C1A_LIFECYCLE.md
+    CODE_REVIEW_83B1C1A_LIFECYCLE_RESPONSE.md
 ```
+
+同一轮并行多份报告时，目录名在哈希后加主题后缀（`-store`、`-lobby`、`-lifecycle`），保证"一个目录一份报告一份响应"。报告放进来之后**必须**在同一目录补 `_RESPONSE.md`；没有响应的目录视为未处理。
 
 目录内文件名：
 
@@ -61,6 +65,12 @@ code-review/
 | `2026-11-03T20-31-27-4308aae` | 报告 + 响应（1 P1 + 2 P2，已修） |
 | `2026-11-03T21-15-03-04608be` | 报告 + 响应（4 P1，已修） |
 | `2026-11-03T22-24-51-70bd62e` | 报告 + 响应（1 P0 + 3 P1，已修） |
+| `2026-11-04T00-05-40-21801e6` | 报告 + 响应（3 P1 + 5 P2，已修） |
+| `2026-11-04T01-18-26-75cddae-store` | 报告 + 响应（存储层 S-1/S-2 采纳、S-3 不采纳） |
+| `2026-11-04T01-24-42-75cddae` | 报告 + 响应（6 P2，已修） |
+| `2026-11-04T15-24-55-86212b7` | 报告 + 响应（R1/N1 两处 P1、R2 一处 P2，2026-11-05 补修） |
+| `2026-11-05T02-54-52-83b1c1a-lobby` | 报告 + 响应（2 P1 + 6 P2，已修；同轮关掉 P0-6 的 8 条） |
+| `2026-11-05T02-57-18-83b1c1a-lifecycle` | 报告 + 响应（6 P2，已修） |
 
 所有路径均在 `reports-responses/<时间戳>-<哈希>/` 下。
 
