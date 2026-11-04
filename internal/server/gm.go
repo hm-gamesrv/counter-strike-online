@@ -151,9 +151,11 @@ func (s *Server) gmCommand(c *client, text string, args []string) (bool, error) 
 			target.chatNotice(fmt.Sprintf("GM gave you item %d x%d.", itemID, count))
 		}
 	case "/removeitem":
+		// The command's wording follows CChannelManager
+		// (src/manager/channelmanager.cpp:697).
 		itemID, ok := atoiArg(args, 1)
 		if !ok {
-			c.chatNotice("/removeitem usage: /removeitem <itemID> <slot>")
+			c.chatNotice("/removeitem usage: /removeitem <itemID>")
 			return true, nil
 		}
 		items, err := s.Store.Inventory(c.user.ID)
@@ -161,21 +163,27 @@ func (s *Server) gmCommand(c *client, text string, args []string) (bool, error) 
 			return true, err
 		}
 		slots := make([]int, 0, len(items))
+		counts := make([]int, 0, len(items))
 		for _, item := range items {
-			if item.ID == itemID && item.Count > 0 {
+			if item.ID == itemID {
 				slots = append(slots, item.Slot)
+				counts = append(counts, item.Count)
 			}
 		}
 		if len(slots) == 0 {
-			c.chatNotice("Item does not exist")
+			c.chatNotice(fmt.Sprintf("Items with %d ID cannot be found in your inventory", itemID))
 			return true, nil
 		}
 		index, hasSlot := atoiArg(args, 2)
 		if !hasSlot {
-			c.chatNotice("Select one of the available item slots to remove:")
-			for i, slot := range slots {
-				c.chatNotice(fmt.Sprintf("%d) slot %d", i, slot))
+			// One multi-line notice, not one notice per row.
+			var text strings.Builder
+			text.WriteString("Select one of the available item slots to remove:\n")
+			for i, count := range counts {
+				fmt.Fprintf(&text, "[%d], count: %d\n", i, count)
 			}
+			text.WriteString("Enter /removeitem <itemID> <slot>")
+			c.chatNotice(text.String())
 			return true, nil
 		}
 		if index < 0 || index >= len(slots) {

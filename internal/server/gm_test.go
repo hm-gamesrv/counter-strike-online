@@ -285,7 +285,20 @@ func TestGMItemExpAndRewardCommands(t *testing.T) {
 	}
 
 	admin.command("/removeitem 567")
-	gmNotice(t, admin, 11, "Select one of the available item slots to remove:")
+	// The reference sends the whole list as one multi-line notice
+	// (channelmanager.cpp:727).
+	list := gmNotice(t, admin, 11, "Select one of the available item slots to remove:")
+	if !strings.HasPrefix(list, "Select one of the available item slots to remove:\n") {
+		t.Fatalf("removeitem list header %q", list)
+	}
+	if !strings.HasSuffix(list, "Enter /removeitem <itemID> <slot>") {
+		t.Fatalf("removeitem list tail %q", list)
+	}
+	if !strings.Contains(list, "[0], count: ") {
+		t.Fatalf("removeitem list lacks a count line: %q", list)
+	}
+	admin.command("/removeitem 999999")
+	gmNotice(t, admin, 11, "Items with 999999 ID cannot be found in your inventory")
 	admin.command("/removeitem 567 0")
 	gmNotice(t, admin, 11, "Item (567, 0) removed")
 	if got := gmItemCount(t, db, 1, 567); got >= afterAdd {
