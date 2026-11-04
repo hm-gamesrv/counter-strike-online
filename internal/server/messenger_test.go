@@ -36,9 +36,7 @@ func TestMessengerReturnsTargetProfile(t *testing.T) {
 	if msg.id != 93 || r.U8() != 1 || r.U32() != 2 || r.CString() != "22223123132" {
 		t.Fatalf("unexpected messenger header %v", msg.data)
 	}
-	r.U32()
-	r.U32()
-	if name := r.CString(); name != "Target" {
+	if name := parseUserInfoBody(t, msg.data[r.Pos:]).GameName; name != "Target" {
 		t.Fatalf("messenger name %q", name)
 	}
 	if err = s.dispatch(c, protocol.Packet{ID: 93, Data: []byte{1, 'M', 'i', 's', 's', 'i', 'n', 'g', 0}}); err != nil {
@@ -49,9 +47,7 @@ func TestMessengerReturnsTargetProfile(t *testing.T) {
 	if msg.id != 93 || r.U8() != 1 || r.U32() != 0 || r.CString() != "22223123132" {
 		t.Fatalf("unexpected missing-user header %v", msg.data)
 	}
-	r.U32()
-	r.U32()
-	if name := r.CString(); name != "Missing" {
+	if name := parseUserInfoBody(t, msg.data[r.Pos:]).GameName; name != "Missing" {
 		t.Fatalf("missing-user name %q", name)
 	}
 }

@@ -136,12 +136,9 @@ func TestToggleNameplateAndUserInfo(t *testing.T) {
 	character.NameplateID = 8001
 	w := &protocol.Writer{}
 	userInfo(w, character)
-	r := &protocol.Reader{Data: w.Data}
-	if flags := r.U32(); flags&1 == 0 {
-		t.Fatalf("nameplate flag missing: %x", flags)
-	}
-	if r.U32() != 1 || r.U8() != 0 || r.U32() != 8001 || r.CString() != character.Name {
-		t.Fatalf("nameplate block malformed: %v", w.Data[:24])
+	fields := parseUserInfoBody(t, w.Data)
+	if fields.NameplateID != 8001 || fields.GameName != character.Name {
+		t.Fatalf("nameplate block malformed: %+v", fields)
 	}
 }
 

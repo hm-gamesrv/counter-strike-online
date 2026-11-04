@@ -131,61 +131,29 @@ func TestUserInfoCarriesTitles(t *testing.T) {
 	}
 	w := &protocol.Writer{}
 	userInfo(w, character)
-	r := &protocol.Reader{Data: w.Data}
-	flags := r.U32()
-	if flags&(1<<19) == 0 || flags&(1<<22) == 0 {
-		t.Fatalf("achievement/title flags missing: %#x", flags)
+	fields := parseUserInfoBody(t, w.Data)
+	if fields.GameName != "TitleUser" || fields.GameName2 != "TitleUser" {
+		t.Fatalf("name mismatch: %q/%q", fields.GameName, fields.GameName2)
 	}
-	if high := r.U32(); high != 1 {
-		t.Fatalf("high flag %d", high)
+	if fields.PrefixID != 7 {
+		t.Fatalf("prefix %d", fields.PrefixID)
 	}
-	if r.CString() != "TitleUser" {
-		t.Fatal("name mismatch")
-	}
-	r.U32()
-	for i := 0; i < 3; i++ {
-		r.U32()
-		r.U32()
-	}
-	r.U32()
-	r.U32()
-	r.U32()
-	r.U32()
-	for i := 0; i < 16; i++ {
-		r.U32()
-	}
-	r.CString()
-	r.U16()
-	r.U16()
-	r.U16()
-	r.CString()
-	r.U16()
-	if prefix := r.U16(); prefix != 7 {
-		t.Fatalf("prefix %d", prefix)
-	}
-	r.U8()
-	r.U8()
-	r.U32()
-	bitmap := r.Bytes(128)
-	if bitmap[7/8]&(1<<(7%8)) == 0 || bitmap[42/8]&(1<<(42%8)) == 0 {
+	if fields.Bitmap[7/8]&(1<<(7%8)) == 0 || fields.Bitmap[42/8]&(1<<(42%8)) == 0 {
 		t.Fatal("achievement bitmap missing unlocked titles")
 	}
-	for _, want := range []int{0, 42, 0, 0, 7} {
-		if got := r.U16(); got != want {
-			t.Fatalf("title slot %d, want %d", got, want)
-		}
+	if want := [5]int{0, 42, 0, 0, 7}; fields.Titles != want {
+		t.Fatalf("title slots %v, want %v", fields.Titles, want)
 	}
-	if mileage := r.U32(); mileage != 1234 {
-		t.Fatalf("mileage %d", mileage)
+	if fields.Mileage != 1234 {
+		t.Fatalf("mileage %d", fields.Mileage)
 	}
-	r.U32()
-	if id := r.U32(); id != 1 {
-		t.Fatalf("id %d", id)
+	if fields.CharacterID != 1 {
+		t.Fatalf("id %d", fields.CharacterID)
 	}
-	if color := r.U16(); color != 5 {
-		t.Fatalf("chat color %d", color)
+	if fields.ChatColorID != 5 {
+		t.Fatalf("chat color %d", fields.ChatColorID)
 	}
-	if r.Err != nil || r.Pos != len(r.Data) {
-		t.Fatalf("unexpected user info tail: %v at %d/%d", r.Err, r.Pos, len(r.Data))
+	if fields.Consumed != len(w.Data) {
+		t.Fatalf("user info tail: consumed %d of %d", fields.Consumed, len(w.Data))
 	}
 }

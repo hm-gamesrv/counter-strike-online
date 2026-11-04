@@ -13,6 +13,15 @@ import (
 
 const serverYellItemID = 204
 
+// The reference writes a fixed literal in the string slot of both lobby
+// entries: SendLobbyJoin (src/manager/packetmanager.cpp:1756) uses "test_lobby"
+// and SendLobbyUserJoin (src/manager/packetmanager.cpp:1770) uses
+// "TIBE YEBAT'?". The client reads the name from the user info that follows, so
+// both values are placeholders; they are reproduced verbatim so a byte
+// comparison against the reference stays clean.
+const lobbyJoinLabel = "test_lobby"
+const lobbyUserJoinLabel = "TIBE YEBAT'?"
+
 // achievementBitmap packs unlocked title IDs into the fixed 128-byte bitmap
 // the client expects for the achievement list section.
 func achievementBitmap(list []int) []byte {
@@ -26,30 +35,34 @@ func achievementBitmap(list []int) []byte {
 	return bitmap
 }
 
+// userInfo writes one character the way the reference does. Every caller passes
+// UFLAG_LOW_ALL|UFLAG_HIGH_ALL there (GetCharacter(UFLAG_LOW_ALL,
+// UFLAG_HIGH_ALL)), so CPacketHelper_FullUserInfo::Build
+// (src/packet/packethelper_fulluserinfo.cpp:43) emits *every* section, filling
+// the ones the reference has no data for with zeros. The flags are therefore
+// always all-ones here too: a client that parsed our shorter variant would
+// keep its defaults, which is not what it sees against the reference.
 func userInfo(w *protocol.Writer, c store.Character) {
-	// Only advertise fields actually serialized below; absent flags preserve
-	// client defaults and avoid fabricating ranking state.
-	flags := 1<<1 | 1<<3 | 1<<5 | 1<<6 | 1<<7 | 1<<8 | 1<<9 | 1<<16 | 1<<18 | 1<<19 | 1<<22 | 1<<26 | 1<<27
-	if c.ClanID != 0 {
-		flags |= 1 << 12
-	}
-	if c.NameplateID != 0 {
-		flags |= 1 << 0
-	}
-	if c.Tournament != 0 {
-		flags |= 1 << 13
-	}
-	w.U32(flags)
-	w.U32(1)
-	if c.NameplateID != 0 {
-		w.U8(0)
-		w.U32(c.NameplateID)
-	}
+	const allFlags = 0xFFFFFFFF
+	w.U32(allFlags)
+	w.U32(allFlags)
+	// UFLAG_LOW_NAMEPLATE: the byte in front of the id is a fixed type marker.
+	w.U8(0)
+	w.U32(c.NameplateID)
+	// UFLAG_LOW_GAMENAME and UFLAG_LOW_GAMENAME2 both carry the game name; the
+	// second one is followed by three zero bytes.
 	w.String(c.Name)
+	w.String(c.Name)
+	w.U8(0)
+	w.U8(0)
+	w.U8(0)
 	w.U32(c.Level)
+	w.U8(0) // UFLAG_LOW_UNK4
 	w.U64(int64(c.Exp))
 	w.U64(int64(c.Cash))
 	w.U64(int64(c.Points))
+	// UFLAG_LOW_STAT: four live counters and sixteen fields the reference
+	// hardcodes to zero.
 	w.U32(c.Battles)
 	w.U32(c.Win)
 	w.U32(c.Kills)
@@ -57,35 +70,66 @@ func userInfo(w *protocol.Writer, c store.Character) {
 	for i := 0; i < 16; i++ {
 		w.U32(0)
 	}
+	// UFLAG_LOW_LOCATION: region name, the three place ids and the PC cafe name.
 	w.String("")
 	w.U16(c.Nation)
 	w.U16(c.City)
 	w.U16(c.Town)
 	w.String("")
-	if c.ClanID != 0 {
-		w.U32(c.ClanID)
-		w.U32(c.ClanMarkID)
-		w.String(c.ClanName)
-		w.U8(0)
-		w.U8(0)
+	w.U32(0) // UFLAG_LOW_CASH2
+	w.U8(0)  // UFLAG_LOW_UNK11
+	// UFLAG_LOW_CLAN
+	w.U32(c.ClanID)
+	w.U32(c.ClanMarkID)
+	w.String(c.ClanName)
+	w.U8(0)
+	w.U8(0)
+	w.U8(0)
+	w.U8(c.Tournament) // UFLAG_LOW_TOURNAMENT
+	// UFLAG_LOW_RANK: a 0xFF present marker, one tier byte per league and the
+	// current league id. Rank tracking is not implemented, so the tiers stay at
+	// the value a character without rank rows has in the reference.
+	w.U8(0xFF)
+	for i := 0; i < 4; i++ {
 		w.U8(0)
 	}
-	if c.Tournament != 0 {
-		w.U8(c.Tournament)
-	}
-	w.U16(c.PasswordBoxes)
+	w.U8(0)
+	w.U8(0) // UFLAG_LOW_UNK15
+	w.U8(0)
+	w.U8(0)
+	w.U16(c.PasswordBoxes) // UFLAG_LOW_PASSWORDBOXES
+	w.U32(0)               // UFLAG_LOW_UNK17
+	// UFLAG_LOW_ACHIEVEMENT: prefix id, two zero bytes, honor points.
 	w.U16(c.PrefixID)
 	w.U8(0)
 	w.U8(0)
 	w.U32(c.HonorPoints)
-	w.Bytes(achievementBitmap(c.Achievements))
-	for _, title := range c.Titles {
+	w.Bytes(achievementBitmap(c.Achievements)) // UFLAG_LOW_ACHIEVEMENTLIST
+	for i := 0; i < 5; i++ {                   // UFLAG_LOW_UNK20
+		w.U16(0)
+	}
+	w.U8(0) // UFLAG_LOW_UNK21
+	w.U32(0)
+	for _, title := range c.Titles { // UFLAG_LOW_TITLES, always five slots
 		w.U16(title)
 	}
-	w.U32(c.MileagePoints)
+	// UFLAG_LOW_UNK23 is written twice by the reference: one byte here and two
+	// more after UFLAG_LOW_UNK30.
+	w.U8(0)
+	w.U16(0)               // UFLAG_LOW_UNK25
+	w.U32(c.MileagePoints) // UFLAG_LOW_UNK26
 	w.U32(0)
-	w.U32(c.ID)
-	w.U16(c.ChatColorID)
+	w.U32(c.ID)              // UFLAG_LOW_UNK27
+	w.U8(0)                  // UFLAG_LOW_UNK28
+	w.U8(0)                  // UFLAG_LOW_UNK29
+	for i := 0; i < 7; i++ { // UFLAG_LOW_UNK30
+		w.U32(0)
+	}
+	w.U8(0)
+	w.U8(0)
+	w.U8(0) // the second UFLAG_LOW_UNK23 block
+	w.U8(0)
+	w.U16(c.ChatColorID) // UFLAG_HIGH_CHATCOLOR
 }
 func (s *Server) serverList(c *client) {
 	w := &protocol.Writer{}
@@ -105,12 +149,18 @@ func (s *Server) joinLobby(c *client) {
 		return
 	}
 	s.leaveRoom(c)
-	if !c.inLobby {
+	// The reference sends the full room list twice on a first channel join:
+	// CChannel::UserJoin (src/channel/channel.cpp:68) and
+	// CChannelManager::JoinChannel (src/manager/channelmanager.cpp:207) both
+	// call SendRoomListFull. A client that is already in the channel only sees
+	// the latter.
+	joined := !c.inLobby
+	if joined {
 		c.inLobby = true
 		w := &protocol.Writer{}
 		w.U8(1)
 		w.U32(c.user.ID)
-		w.String(c.user.Name)
+		w.String(lobbyUserJoinLabel)
 		userInfo(w, c.character)
 		for u := range s.clients {
 			if u != c && u.inLobby {
@@ -130,12 +180,15 @@ func (s *Server) joinLobby(c *client) {
 	for u := range s.clients {
 		if u.inLobby {
 			w.U32(u.user.ID)
-			w.String(u.user.Name)
+			w.String(lobbyJoinLabel)
 			userInfo(w, u.character)
 		}
 	}
 	c.send(153, w)
 	s.roomList(c)
+	if joined {
+		s.roomList(c)
+	}
 }
 func (s *Server) lobbyLeft(c *client) {
 	if !c.inLobby {
@@ -367,9 +420,9 @@ func (s *Server) loginPackets(c *client) error {
 	w.U32(c.user.ID)
 	userInfo(w, c.character)
 	c.send(157, w)
-	if e := s.sendBanLogin(c); e != nil {
-		return e
-	}
+	// CUserManager::SendLoginPacket (src/manager/usermanager.cpp:583) sends the
+	// saved option block before the ban list, so the reference emits the 76
+	// option frame ahead of the 74 ban frame.
 	var cfg []byte
 	if e := s.Store.DB.QueryRow("SELECT config FROM UserCharacterExtended WHERE userID=?", c.user.ID).Scan(&cfg); e != nil {
 		return e
@@ -384,6 +437,9 @@ func (s *Server) loginPackets(c *client) error {
 		w.Bytes(cfg)
 		w.U8(1)
 		c.send(76, w)
+	}
+	if e := s.sendBanLogin(c); e != nil {
+		return e
 	}
 	for _, b := range s.metadata {
 		if len(b) != 0 {
@@ -421,7 +477,6 @@ func (s *Server) loginPackets(c *client) error {
 	w.U32(s.eventFlags())
 	c.send(159, w)
 	s.sendMainMenuSkin(c)
-	s.sendVoxelURLs(c)
 	if s.miniGame.Active {
 		if e := s.sendWeaponReleaseUpdate(c); e != nil {
 			return e
@@ -438,20 +493,26 @@ func (s *Server) loginPackets(c *client) error {
 	if e := s.sendFavorites(c); e != nil {
 		return e
 	}
+	// Remaining order mirrors CUserManager::SendLoginPacket: notices
+	// (usermanager.cpp:611), shop (:613), the hard-coded welcome (:619), the
+	// configured welcome (:622), the channel join (:624), surveys (:626),
+	// league (:632), the update-info marker (:635) and the voxel urls (:637).
+	s.sendNotices(c)
 	s.sendShop(c)
-	s.sendLeague(c)
+	c.notice(loginWelcomeText)
+	if s.Config.WelcomeMessage != "" {
+		c.notice(s.Config.WelcomeMessage)
+	}
 	s.joinLobby(c)
 	if e := s.sendClanLogin(c); e != nil {
 		return e
 	}
-	c.send(69, &protocol.Writer{Data: []byte{11}})
-	if s.Config.WelcomeMessage != "" {
-		c.notice(s.Config.WelcomeMessage)
-	}
 	if e := s.sendSurveys(c); e != nil {
 		return e
 	}
-	s.sendNotices(c)
+	s.sendLeague(c)
+	c.send(69, &protocol.Writer{Data: []byte{11}})
+	s.sendVoxelURLs(c)
 	if e := s.grantRewardNotices(c); e != nil {
 		return e
 	}

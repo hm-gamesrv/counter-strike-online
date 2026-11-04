@@ -38,56 +38,16 @@ func TestGMTournamentToggle(t *testing.T) {
 // skipping the user info packet the login sequence already queued.
 func userInfoTournament(t *testing.T, p *testPeer) int {
 	t.Helper()
+	// Every 157 now carries the tournament byte (the reference sets every flag
+	// bit), so wait for the update that actually turns the HUD on instead of
+	// taking the value the login sequence queued.
 	for i := 0; i < 20; i++ {
-		if value, ok := readTournament(t, p.next(157)); ok {
+		if value := parseUserInfoPacket(t, p.next(157).Data).Tournament; value != 0 {
 			return value
 		}
 	}
 	t.Fatal("no 157 update carries the tournament flag")
 	return 0
-}
-
-func readTournament(t *testing.T, v protocol.Packet) (int, bool) {
-	t.Helper()
-	r := &protocol.Reader{Data: v.Data}
-	flags := r.U32()
-	r.U32()
-	if flags&1 != 0 {
-		r.U8()
-		r.U32()
-	}
-	r.CString()
-	r.U32()
-	r.Bytes(8) // exp
-	r.Bytes(8) // cash
-	r.Bytes(8) // points
-	r.U32()
-	r.U32()
-	r.U32()
-	r.U32()
-	for i := 0; i < 16; i++ {
-		r.U32()
-	}
-	r.CString()
-	r.U16()
-	r.U16()
-	r.U16()
-	r.CString()
-	if flags&(1<<12) != 0 {
-		r.U32()
-		r.U32()
-		r.CString()
-		r.U8()
-		r.U8()
-		r.U8()
-	}
-	if flags&(1<<13) == 0 {
-		return 0, false
-	}
-	if r.Err != nil {
-		t.Fatal(r.Err)
-	}
-	return r.U8(), true
 }
 
 func TestGMRequestSnapshotAndGhostRoom(t *testing.T) {

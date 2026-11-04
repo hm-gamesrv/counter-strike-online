@@ -274,7 +274,10 @@ func (s *Server) gmCommand(c *client, text string, args []string) (bool, error) 
 			return true, err
 		}
 		c.character.Tournament = value
+		// 157 is "user id + user info" (packetmanager.cpp:2217); without the id
+		// the client reads the flag word as the character id.
 		w := &protocol.Writer{}
+		w.U32(c.user.ID)
 		userInfo(w, c.character)
 		c.send(157, w)
 		if value != 0 {

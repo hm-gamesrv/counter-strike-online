@@ -11,6 +11,11 @@ import (
 
 const noticeURL = "https://discord.com/invite/EvUAY6D"
 
+// loginWelcomeText is the message box the reference shows on every login; the
+// text is a literal in CUserManager::SendLoginPacket
+// (src/manager/usermanager.cpp:618), not a configuration value.
+const loginWelcomeText = "EN: Welcome to the CSN:S server! The project is non-commercial. Don't trust people trying to sell you a server.\nServer developer Discord: https://discord.gg/EvUAY6D \n"
+
 type noticeDefinition struct {
 	ID          int
 	Type        int
