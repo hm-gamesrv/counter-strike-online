@@ -1,0 +1,6 @@
+{
+  "Replace": {
+    "C:\\Users\\11717\\Desktop\\cso-server\\internal\\server\\review_862_test.go": "C:\\Users\\11717\\Desktop\\cso-server\\code-review\\probes\\review-86212b7\\server_test.go",
+    "C:\\Users\\11717\\Desktop\\cso-server\\internal\\store\\review_862_test.go": "C:\\Users\\11717\\Desktop\\cso-server\\code-review\\probes\\review-86212b7\\store_test.go"
+  }
+}
