@@ -3,6 +3,7 @@
 /.data/
 /.data-upstream/
 /.data-test/
+/.data-test-b/
 /.dist/
 *.exe
 *.test
