@@ -102,7 +102,7 @@ bot 数量/难度夹紧（模式 3/4/5/24 上限、其他模式默认值比对�
 
 ## 五、建议顺序
 
-1. **装饰道具装备切换**：名片（`LobbyBG`）、`zbRespawnEffect`、`CombatInfoItem` 的状态切换；名片会改 `157` 用户信息布局，需要实机确认。
+1. **装饰道具装备切换**：名片（`LobbyBG`）、`zbRespawnEffect`、`CombatInfoItem` 的状态切换；`157` 现在恒定下发全部分段（与基线逐字节相同），名片只改 `UFLAG_LOW_NAMEPLATE` 块里的 id，不再改布局，但客户端侧的显示效果仍需实机确认。
 2. **Studio 房间创建**：接入 Voxel 槽位 HTTP 服务后放开地图 254。
 3. **Bingo/Voxel/GM/房间校验/SSL 实机验收**：开格与发奖、Voxel 列表、GM 封禁与发奖、`Room.ValidateSettings` 开启后的建房流程、TLS 握手。
 4. **验证**：真实 HLDS、多人实机与客户端界面回归。
@@ -114,5 +114,5 @@ bot 数量/难度夹紧（模式 3/4/5/24 上限、其他模式默认值比对�
 - 军团：协议请求、成员与解散规则、仓库转移、军团聊天
 - 小游戏：武器解放、Bingo 基础桌面/开格/洗牌/重置
 - 房间与对局：模式/地图矩阵、playlist、ZS 难度、家族战模式与 superRoom 校验、superRoom 踢人、家族战房间、场景道具消耗、掉落箱奖励、断线重连与会话接管、结算与模式排名（装备加成默认关闭，需在配置里打开 `GameMatch.CalcResults.ItemBonusEnabled`）
-- 装饰：`LobbyBG` 名片、`zbRespawnEffect`、`CombatInfoItem` 的状态切换与持久化；名片按上游在 `157` 中加 `UFLAG_LOW_NAMEPLATE` 块（`U8(0)+U32(nameplateID)`），未持有名片时布局不变
+- 装饰：`LobbyBG` 名片、`zbRespawnEffect`、`CombatInfoItem` 的状态切换与持久化；`157` 的 `UFLAG_LOW_NAMEPLATE` 块（`U8(0)+U32(nameplateID)`）恒定存在，未持有时 id 为 0
 - 其他：主菜单皮肤事件、军团/武器解放/家族战；默认数据回退到上游基线
