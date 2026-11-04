@@ -727,3 +727,29 @@ WSL 里的 30003 实例确认是**原版 C++ 基线**（仓库 `~/repos/hm-games
 - `FuzzItemRequest` 队列 64 → 8192，避免队列溢出触发 nil 连接关闭被误记为缺陷。
 - 长跑 fuzz 三个目标共约 120 万次执行无 panic；54 个事务方法自锁扫描全绿；6 条回滚注入与 4 条幂等重放全部通过。
 - 待办（已记档、不阻塞）：`FuzzItemRequest` 补库存一致性断言；`SettleMatch` 的建表移到启动期；Bot 缺省 -1 的口径；公仓时长往返；家族战名单口径；掉落箱系统回复；商店购买请求 5B 例外写入 §8；GM `/removeitem` 文案。
+
+## 2026-11-05 登录链逐字节对齐基线（关闭 P0-6）
+
+做法：把 WSL 里的原版 C++ 实例（30003）重新拉起，用 `blackbox/trace.py` 加一个载荷 dump 脚本，对同一账号（tester1、空频道、0 个房间）各录一次登录序列，逐包比对 id / 长度 / 载荷，再把 Go 侧改到完全一致。
+
+### 逐字节结果
+
+改完之后两台服务器的登录序列 **60 包逐包相同**（id、顺序、长度全一致），差异只剩两处已批准项：
+
+- 19 条 91 元数据帧的压缩方式（基线 deflate、我们 stored），解压后内容一致——见既有「元数据帧」条目。
+- 1 条 72 商店推荐标题：34 字节 vs 基线 32 字节（"Recommended" vs "Test"）——见「已批准偏离：商店推荐页标题」。
+
+### 具体修正
+
+- **157 全量 user info**：基线每个调用点都传 `GetCharacter(UFLAG_LOW_ALL, UFLAG_HIGH_ALL)`，`CPacketHelper_FullUserInfo::Build`（`packethelper_fulluserinfo.cpp:43`）因此写出**全部分段**，没有数据的段写零。我们此前只置位「实际写出的段」，客户端便停在默认值上。现在 flag 恒为 `0xFFFFFFFF`，分段顺序照抄基线（含 `UFLAG_LOW_UNK23` 写两次的怪癖：一次在 `UNK25` 前、一次在 `UNK30` 后）。tester1 的 157 载荷 **398 字节，与基线逐字节相同**。
+- **登录包序**：按 `CUserManager::SendLoginPacket`（`usermanager.cpp:575`）与 `CChannel::UserJoin`（`channel.cpp:35`）重排——存档配置 76 在封禁 74 之前、公告 67 在商店 72 之前、补上基线硬编码的英文欢迎框（`usermanager.cpp:618`）、见证 69 与 voxel 103 挪到最后。
+- **153 条目标签**：改用基线的字面量 `"test_lobby"`（`packetmanager.cpp:1756`）与 `"TIBE YEBAT'?"`（`:1770`）。客户端从随后的 user info 取名，所以这两个值是占位符；照抄是为了保持字节可比。153 载荷由 314 涨到 **412 字节，与基线相同**。
+- **首次进频道发两次 151**：基线 `CChannel::UserJoin` 与 `CChannelManager::JoinChannel` 各发一次完整房间列表。
+- **`/tournament` 的 157 漏写 userID**：157 的形状是 `U32(用户ID) + user info`（`packetmanager.cpp:2217`），GM 命令这一处漏了 id，客户端会把 flag 字当成角色 id。
+
+### 回归护栏
+
+- 新增 `blackbox/test_login_order.py`：把 60 包的 id 序列固化下来（元数据条数按实际载荷推算）。该用例在 **30003 上同样通过**，锁的是基线行为而不是我们的实现。
+- 新增 `internal/server/userinfo_test.go`：按全 flag 固定布局解析 user info 的测试辅助函数，flag 不再是全 1 时直接失败。此前几个用例各自手写游标，跟着布局走样。
+- `go test ./...` 全绿；30002 上的黑盒套件全绿。
+

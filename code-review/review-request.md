@@ -267,22 +267,22 @@ python blackbox\metadata.py --a 30002 --b 30003     # 32 个 91 类型，解压�
 - 后台扫描（`server.go:241` 的定时器）与登录扫描可能同时对同一账号执行，请检查事务与在线推送的竞态（`s.mu` 覆盖范围）。
 - 到期通知（`UserExpiryNotice` → 67/62）与背包补丁的顺序：现在通知在登录链后段才发，运行期到期没有 67 通知。基线是这样吗？
 
-### P0-6 黑盒对比暴露的剩余差异（`blackbox/`）
+### P0-6 黑盒对比暴露的剩余差异（`blackbox/`）——已关闭（2026-11-05）
 
-两边的数据目录已确认逐文件相同，下面每一条都是代码差异，按此顺序处理：
+两边数据目录逐文件相同，下列差异全部是代码差异。2026-11-05 对着重新拉起的 30003 逐包对比后已全部处理：登录链现在是 **60 包逐包相同**，只剩 `72`（已批准偏离）与元数据帧压缩方式（已记录例外）。
 
-| # | 包 | 我们(30002) | 基线(30003) | 位置 |
-|---|---|---|---|---|
-| 1 | `74`/`76` | 74 → 76 | 76 → 74 | `lobby.go loginPackets`（`sendBanLogin` 与 76 配置块的先后） |
-| 2 | `103` | 索引 43，背包之前 | 索引 59，`69` 之后 | `voxel.go` 两个 sender 的调用点 |
-| 3 | `151` | 1 条 | 2 条 | `rooms.go:258` 的 `roomList` 调用次数 |
-| 4 | `180` | 在 `153`/`151` 之前 | 在它们之后 | `host.go:40` / `lobby.go:726` |
-| 5 | `153` | 314B，label=`tester1` | 412B，label=`test_lobby` | 98B 差里约 3B 来自 label 常量（基线 `SendLobbyJoin` 的固定串），约 95B 来自 `157` 的 user-info 字段策略；只改 label 不会让长度相等 |
-| 6 | `72` | 34B，`Recommended`/空 | 32B，`Test`/`Test2` | **已批准偏离**：基线在 `packetmanager.cpp:2142` 硬编码占位串 `Test`/`Test2`（客户端当作推荐页标题显示），我们发真实标题；除该字符串外整块字节相同 |
-| 7 | `67` | 2 条 | 3 条 | 基线多一条固定 168B 欢迎语，公告相对顺序也不同 |
-| 8 | `157` | 303B，flags `0c4d03eb` | 398B，flags `ffffffff` | `userInfo` 只置位实际写出的可选段，基线置满 |
+| # | 包 | 原差异 | 处理 |
+|---|---|---|---|
+| 1 | `74`/`76` | 我们 74 → 76，基线 76 → 74 | 已改：`loginPackets` 把存档配置 76 放到封禁 74 之前（`usermanager.cpp:583` 先 Option 后 BanList/BanSettings） |
+| 2 | `103` | 我们在背包之前，基线最后 | 已改：`sendVoxelURLs` 挪到 `69` 之后（`usermanager.cpp:637`） |
+| 3 | `151` | 我们 1 条，基线 2 条 | 已改：首次进频道发两次（`channel.cpp:68` + `channelmanager.cpp:207`） |
+| 4 | `180` | 我们在 `153`/`151` 之前 | 已改：`sendLeague` 挪到 `joinLobby` 之后（`usermanager.cpp:632`） |
+| 5 | `153` | 314B，label=`tester1` | 已改：label 用基线字面量 `test_lobby`（`packetmanager.cpp:1756`）；另外 95B 来自 `157` 的字段策略（第 8 条）。现在 412B，与基线相同 |
+| 6 | `72` | 34B 真实标题 vs 32B `Test` | **已批准偏离**，保留（`packetmanager.cpp:2142` 的占位串） |
+| 7 | `67` | 我们 2 条，基线 3 条 | 已改：补上基线硬编码的 168B 英文欢迎框（`usermanager.cpp:618`），公告与商店的相对顺序也按基线调整 |
+| 8 | `157` | 303B，flags `0c4d03eb` | 已改：flag 恒为 `0xFFFFFFFF`，按 `packethelper_fulluserinfo.cpp:43` 写出全部分段。现在 398B，**载荷与基线逐字节相同** |
 
-以上方向以 4308aae 轮的实测为准（旧表有若干行写反，已按实测更正）。第 1～4 条是纯调用顺序，改起来便宜；第 5～8 条涉及字段内容，需要对着基线 `Send*` 逐段核对。第 8 条还请明确：保留现有 flag 策略需要**显式批准为例外**，否则就要补齐所有可选段。
+回归护栏：`blackbox/test_login_order.py` 固化 60 包 id 序列（在 30003 上同样通过），`internal/server/userinfo_test.go` 提供按全 flag 固定布局解析 user info 的测试辅助函数。
 
 ### P1-1 `internal/server/metadata.go:44 zipMetadataFrames`
 
