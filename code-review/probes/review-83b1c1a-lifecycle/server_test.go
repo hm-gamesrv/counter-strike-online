@@ -51,14 +51,14 @@ func TestReview83FamilyBattleStartGate(t *testing.T) {
 		st := familySettings()
 		st.setNumber(8, 8, 1)
 		r := &room{id: 7, host: a, members: []*client{a, d}, settings: st}
-		if !s.familyBattleInit(r, a) || r.clan1 == 0 {
-			t.Fatal("host clan slot missing")
+		if !s.familyBattleInit(r, a) || r.clan1 != 0 || r.clan2 != 0 {
+			t.Fatalf("creation assigned a clan slot: %+v", r)
 		}
 		if !s.familyBattleJoin(r, d) {
 			t.Fatal("same-clan member rejected")
 		}
-		if r.clan2 != 0 {
-			t.Fatalf("same-clan member filled clan2: %+v", r)
+		if r.clan2 == 0 {
+			t.Fatalf("the first joiner did not fill clan2: %+v", r)
 		}
 		a.room, d.room = 7, 7
 		a.ready, d.ready = 0, 2
@@ -106,7 +106,8 @@ func TestReview83FamilyBattleRegroupSeparatesClanmates(t *testing.T) {
 	if _, ok := s.familyBattleSettings(r, &st); !ok {
 		t.Fatal("family battle settings rejected")
 	}
-	s.regroupFamilyBattle(r)
+	// The update path passes the slot value from before the settings update.
+	s.regroupFamilyBattle(r, 0)
 	if d.team != 1 {
 		t.Fatalf("host clanmate kept team %d (host team %d); the reference compares against the old clan slot 0 and moves every other member to the opposite team", d.team, a.team)
 	}
@@ -135,6 +136,12 @@ func TestReview83FamilyBattleRejoinAfterLeave(t *testing.T) {
 			stats: map[int]*matchStat{
 				1: {user: a},
 				2: {user: b},
+			},
+			// The snapshot HostStartGame takes; leaving drops the statistic but
+			// never this entry.
+			roster: map[int]bool{
+				1: true,
+				2: true,
 			},
 		},
 	}

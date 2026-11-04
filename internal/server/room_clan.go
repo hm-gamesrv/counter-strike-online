@@ -33,7 +33,12 @@ func (s *Server) familyBattleInit(r *room, c *client) bool {
 		c.notice("ROOM_OPEN_FAILED_CLAN_NOT_MEMBER")
 		return false
 	}
-	r.clan1 = clanID
+	// CRoomSettings::Reset leaves both clan slots at zero when the room is
+	// created, and the create path only checks that the host belongs to a clan
+	// (src/manager/channelmanager.cpp:1233-1241). Slot two is filled by the first
+	// joiner in OnJoinRoomRequest (:1340-1352), which is what lets a same-clan
+	// room start.
+	r.clan1 = 0
 	r.clan2 = 0
 	return true
 }
@@ -103,26 +108,27 @@ func (s *Server) familyBattleSettings(r *room, st *settings) (string, bool) {
 }
 
 // revertRoomSettings replays the current settings with an empty change mask, the
-// shape the reference sends when it refuses an update.
+// shape the reference sends when it refuses an update: WriteSettings falls back
+// to the room's own flags when all four mask words are zero
+// (src/manager/packetmanager.cpp:2288-2301), and a created room carries
+// ROOM_*_ALL, so the host's dialog gets the complete settings back.
 func (s *Server) revertRoomSettings(r *room, c *client) {
 	w := &protocol.Writer{}
 	w.U8(4)
-	for range 4 {
-		w.U32(0)
-	}
+	r.settings.write(w)
 	c.send(65, w)
 }
 
 // familyBattleParticipant reports whether the user is on the participant list of
-// the running match. The reference keeps m_FamilyBattleUsers; the match statistics
-// are that list here, because every participant gets an entry when the game starts
-// and keeps it through a reconnect.
+// the running match. The reference snapshots m_FamilyBattleUsers when the match
+// starts (src/room/room.cpp:1082-1088) and never removes an entry, so a player
+// who leaves mid-match can come back to the same match; the match statistics are
+// not that list, because leaving drops them.
 func familyBattleParticipant(r *room, userID int) bool {
 	if r.match == nil {
 		return true
 	}
-	_, ok := r.match.stats[userID]
-	return ok
+	return r.match.roster[userID]
 }
 
 // familyBattleTeam picks the side a joining clan belongs to, mirroring the team
@@ -146,8 +152,12 @@ func (s *Server) familyBattleTeam(r *room, clanID int) int {
 
 // regroupFamilyBattle mirrors the team reassignment OnRoomUpdateSettings performs
 // when a room turns Family Battle on: the host's clan keeps the host's team and
-// the opposing clan takes the other side.
-func (s *Server) regroupFamilyBattle(r *room) {
+// the opposing clan takes the other side. clan1Before is the slot value from
+// before the update - the loop compares against the room's current settings
+// while the new ones are already filled in, and UpdateSettings runs afterwards
+// (src/manager/channelmanager.cpp:1761-1793), so on the first switch-on every
+// clanmate of the host is moved to the other side.
+func (s *Server) regroupFamilyBattle(r *room, clan1Before int) {
 	if r.settings.number(70) == 0 || r.host == nil {
 		return
 	}
@@ -160,7 +170,7 @@ func (s *Server) regroupFamilyBattle(r *room) {
 			continue
 		}
 		team := hostTeam
-		if member.character.ClanID != r.clan1 {
+		if member.character.ClanID != clan1Before {
 			if hostTeam == 1 {
 				team = 2
 			} else {
@@ -203,24 +213,35 @@ func (s *Server) familyBattleRecompute(r *room) {
 	}
 }
 
-func (s *Server) familyBattleCanStart(r *room) bool {
-	if r.clan1 == 0 || r.clan2 == 0 {
-		return false
-	}
-	first, second := false, false
+// readyRealPlayers counts the members whose ready flag is set, the equivalent of
+// CRoom::GetNumOfReadyRealPlayers (src/room/room.cpp:133). The host never toggles
+// ready, so in practice this counts everyone except the host.
+func readyRealPlayers(r *room) int {
+	ready := 0
 	for _, member := range r.members {
-		id, err := s.clanIDFor(member)
-		if err != nil {
-			continue
-		}
-		if id == r.clan1 {
-			first = true
-		}
-		if id == r.clan2 {
-			second = true
+		if member.ready != 0 {
+			ready++
 		}
 	}
-	return first && second
+	return ready
+}
+
+// familyBattleStartRefusal mirrors the Family Battle gate in
+// CChannelManager::OnGameStartRequest (src/manager/channelmanager.cpp:1616-1628)
+// and returns the notice to send, or "" when the match may start. The gate needs
+// a filled second clan slot and at least one ready player; Zombie War mode
+// additionally needs maxPlayers-1 players ready.
+func (s *Server) familyBattleStartRefusal(r *room) string {
+	if r.settings.number(70) == 0 {
+		return ""
+	}
+	if r.clan2 == 0 || readyRealPlayers(r) == 0 {
+		return "ROOM_START_FAILED_CLAN_NOT_READY"
+	}
+	if r.settings.number(6) == 32 && readyRealPlayers(r) < r.settings.number(8)-1 {
+		return "The game cannot be started until there are enough players ready for the game.\n(Zombie War Mode can only be started if all 10 players are participating.)"
+	}
+	return ""
 }
 
 func (s *Server) sendClanBattleNotice(userID, kind int, gameName string, mode, roomID int) {

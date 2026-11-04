@@ -39,6 +39,7 @@ type client struct {
 	team           int
 	ready          int
 	playing        bool
+	lobbySeq       int
 	questLogin     bool
 	localIP        net.IP
 	localPorts     [2]int
@@ -46,7 +47,34 @@ type client struct {
 	log            *slog.Logger
 }
 
-func (c *client) ip() string { h, _, _ := net.SplitHostPort(c.conn.RemoteAddr().String()); return h }
+// ip returns the peer address of the connection, or "" for a client that has no
+// socket (test fixtures).
+func (c *client) ip() string {
+	if c.conn == nil {
+		return ""
+	}
+	h, _, _ := net.SplitHostPort(c.conn.RemoteAddr().String())
+	return h
+}
+
+// initNetwork mirrors CUser's constructor (src/user/user.cpp:22-27): until the
+// UDP holepunch arrives (CUser::UpdateHolepunch, :166-183) a user's network
+// config is the TCP peer address with the fixed client/server ports, not the
+// zero value. Room member blocks and the host packets read these fields.
+func (c *client) initNetwork() {
+	c.localPorts = [2]int{
+		27015,
+		27005,
+	}
+	c.externalPorts = [2]int{
+		27015,
+		27005,
+	}
+	if c.conn == nil {
+		return
+	}
+	c.localIP = net.ParseIP(c.ip())
+}
 func (c *client) send(id byte, w *protocol.Writer) {
 	data := append([]byte{}, w.Data...)
 	if c.log != nil {
@@ -119,6 +147,7 @@ type Server struct {
 	rooms        map[int]*room
 	restore      map[int]reconnectSlot
 	nextRoom     int
+	lobbySeq     int
 	started      time.Time
 	tlsConfig    *tls.Config
 }

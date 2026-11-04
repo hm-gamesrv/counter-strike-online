@@ -345,9 +345,49 @@ func (s *Server) refreshHostRoomItems(host *client, st *settings) error {
 	return nil
 }
 
+// applyHostItems mirrors CRoom::CheckForHostItems on a freshly created room
+// (src/room/room.cpp:899-930): superRoom and c4Timer always come from the host's
+// active inventory items, and the big-head event (sd) is rewritten only in the
+// modes that use it.
+func (s *Server) applyHostItems(host *client, st *settings) error {
+	active, err := s.Store.HasActiveItem(host.user.ID, superRoomItemID)
+	if err != nil {
+		return err
+	}
+	st.setNumber(superRoomField, boolInt(active), 1)
+	active, err = s.Store.HasActiveItem(host.user.ID, c4SoundItemID)
+	if err != nil {
+		return err
+	}
+	st.setNumber(c4Field, boolInt(active), 1)
+	switch st.number(6) {
+	case 3, 4, 5, 15, 24:
+		active, err = s.Store.HasActiveItem(host.user.ID, bigHeadItemID)
+		if err != nil {
+			return err
+		}
+		st.setNumber(bigHeadField, boolInt(active), 1)
+	}
+	return nil
+}
+
 // validateRoomSettings enforces the mode/map matrix, playlist and per-mode
-// ranges when Room.ValidateSettings is enabled.
+// ranges when Room.ValidateSettings is enabled, then applies the cleanup the
+// reference performs in CRoomSettings::LoadNewSettings on an accepted update.
 func (s *Server) validateRoomSettings(st *settings, members int) error {
+	return s.checkRoomSettings(st, members, true)
+}
+
+// validateNewRoomSettings is the create-time half of CRoomSettings::CheckSettings:
+// the same matrix and range checks, without the LoadNewSettings cleanup. The
+// reference never runs that cleanup when creating a room, and after
+// LoadDefaultSettings every flag is set, so its "field present" gates would fire
+// for fields the client never sent.
+func (s *Server) validateNewRoomSettings(st *settings, members int) error {
+	return s.checkRoomSettings(st, members, false)
+}
+
+func (s *Server) checkRoomSettings(st *settings, members int, sanitize bool) error {
 	if !s.Config.Room.ValidateSettings {
 		return nil
 	}
@@ -359,6 +399,16 @@ func (s *Server) validateRoomSettings(st *settings, members int) error {
 	capacity := st.number(8)
 	if capacity < members || capacity > mode.MaxPlayers || mode.CreateMinPlayers > 0 && capacity < mode.CreateMinPlayers {
 		return fmt.Errorf("room capacity %d outside mode range", capacity)
+	}
+	if !sanitize {
+		// CheckSettings substitutes the mode defaults for a zero limit before it
+		// validates them (src/room/roomsettings.cpp:2397-2413).
+		if st.number(9) == 0 {
+			st.setNumber(9, mode.Wins, 1)
+		}
+		if st.number(10) == 0 {
+			st.setNumber(10, mode.Kills, 2)
+		}
 	}
 	check := func(name string, value int, limit limitRange) error {
 		if limit.Max == 0 {
@@ -444,6 +494,8 @@ func (s *Server) validateRoomSettings(st *settings, members int) error {
 	if st.number(70) != 0 && !familyBattleAllowed(modeID) {
 		return errors.New("family battle is not available for this mode")
 	}
-	s.sanitizeRoomSettings(st, modeID, mapID)
+	if sanitize {
+		s.sanitizeRoomSettings(st, modeID, mapID)
+	}
 	return nil
 }

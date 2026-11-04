@@ -30,10 +30,22 @@ type settings struct {
 //     then walks a fixed field list, so an unmodeled bit travels as a flag with
 //     no payload on both sides.
 //   - This parser is not its own inverse. Field 45 (the scenario difficulty) is
-//     one byte in and nine bytes out, so re-reading a frame this server wrote
-//     shifts the following fields.
+//     one byte in and nine bytes out, so parseWrittenSettings exists for frames
+//     this server produced.
 //   - A truncated frame is reported through truncated, not as an error.
 func parseSettings(r *protocol.Reader) (settings, error) {
+	return parseSettingsLayout(r, false)
+}
+
+// parseWrittenSettings reads a settings frame this server produced. The only
+// difference from a client request is the Zombie Scenario block: WriteSettings
+// emits nine bytes (difficulty plus unk56/unk57), while a create request carries
+// the difficulty byte alone.
+func parseWrittenSettings(r *protocol.Reader) (settings, error) {
+	return parseSettingsLayout(r, true)
+}
+
+func parseSettingsLayout(r *protocol.Reader, wire bool) (settings, error) {
 	var s settings
 	for i := range s.flags {
 		s.flags[i] = uint32(r.U32())
@@ -83,7 +95,11 @@ parse:
 					// The client writes a single difficulty byte but reads nine
 					// back (difficulty plus the reference's unk56/unk57), so the
 					// stored field is padded to nine bytes below.
-					r.U8()
+					if wire {
+						r.Bytes(9)
+					} else {
+						r.U8()
+					}
 				case 17:
 					r.Bytes(17)
 				case 18:
@@ -244,6 +260,16 @@ func (s *settings) layout() string {
 	return strings.TrimSpace(b.String())
 }
 
+// byteAt returns the leading byte of a field, which is how the room list reads
+// the one-byte values that have a wider wire form (difficulty, mutation list).
+func (s *settings) byteAt(index int) int {
+	b := s.fields[index]
+	if len(b) == 0 {
+		return 0
+	}
+	return int(b[0])
+}
+
 func (s *settings) number(index int) int {
 	b := s.fields[index]
 	switch len(b) {
@@ -349,25 +375,98 @@ func (s *Server) rotateRoomMap(r *room, forced bool) bool {
 }
 
 // writeRoomListEntry writes the per-room block shared by the full room list
-// and the Voxel room list.
+// and the Voxel room list. It mirrors BuildRoomInfo
+// (src/manager/packetmanager.cpp:1791-1976) with RLFLAG_ALL|RLHFLAG_ALL, the
+// flags both SendRoomListFull (:1996) and SendVoxelRoomList (:3252) pass: every
+// field is written, including the ones the client uses to render the room
+// (level limit, weapon limit, random map, playlist, game state) and the studio
+// block for the Voxel map.
 func writeRoomListEntry(w *protocol.Writer, room *room) {
+	st := &room.settings
 	w.U8(0)
 	w.U32(room.id)
 	w.U8(4)
 	w.U8(0)
 	w.U16(0x0e3e)
-	w.U32(1 | 4 | 16 | 32 | 64 | 128)
-	w.U32(0)
-	w.String(room.settings.text(0))
-	if room.settings.text(3) != "" {
-		w.U8(1)
-	} else {
-		w.U8(0)
+	w.U32(0xFFFFFFFF)    // RLFLAG_ALL
+	w.U32(0xFFFFFFFF)    // RLHFLAG_ALL
+	w.String(st.text(0)) // RLFLAG_NAME
+	w.U8(0)              // RLFLAG_UNK
+	password := 0
+	if st.text(3) != "" {
+		password = 1
 	}
-	w.U8(room.settings.number(6))
-	w.U16(room.settings.number(7))
-	w.U8(len(room.members))
-	w.U8(room.settings.number(8))
+	w.U8(password)          // RLFLAG_HASPASSWORD
+	w.U8(st.number(4))      // RLFLAG_LEVELLIMIT
+	w.U8(st.number(6))      // RLFLAG_GAMEMODE
+	w.U16(st.number(7))     // RLFLAG_MAPID
+	w.U8(len(room.members)) // RLFLAG_PLAYERS
+	w.U8(st.number(8))      // RLFLAG_MAXPLAYERS
+	w.U8(st.number(13))     // RLFLAG_WEAPONLIMIT
+	w.U8(st.number(58))     // RLFLAG_SUPERROOM
+	w.U8(0)                 // RLFLAG_UNK2
+	w.U16(0)                // RLFLAG_HOSTNETINFO
+	w.U8(0)                 // RLFLAG_CLANBATTLE
+	w.U8(0)                 // RLFLAG_UNK3
+	w.U8(0)
+	symbol := 0
+	if st.byteAt(39) == 3 {
+		symbol = 2
+	}
+	w.U8(symbol) // RLFLAG_STATUSSYMBOL
+	w.U8(0)      // RLFLAG_UNK4
+	w.U8(0)
+	w.U8(st.number(35))       // RLFLAG_KDRULE
+	w.U16(0)                  // RLFLAG_UNK6
+	w.U8(0)                   // RLFLAG_UNK7
+	w.U8(st.number(20))       // RLFLAG_FRIENDLYFIRE
+	w.U8(0)                   // RLFLAG_UNK9
+	w.U8(st.number(40))       // RLFLAG_RANDOMMAP
+	playlist := st.fields[41] // RLFLAG_MAPPLAYLIST: size and (unk1, mapId) entries
+	if len(playlist) == 0 {
+		playlist = []byte{0}
+	}
+	w.Bytes(playlist)
+	w.U8(0)                                              // RLFLAG_UNK12
+	w.U8(st.number(44))                                  // RLFLAG_SD
+	w.U8(st.byteAt(45))                                  // RLFLAG_ZSDIFFICULTY
+	w.U8(st.number(46))                                  // RLFLAG_LEAGUERULE
+	w.U8(st.number(47))                                  // RLFLAG_MANNERLIMIT
+	zbFlag, zbValues, ok := zbLimitValues(st.fields[49]) // RLFLAG_ZBLIMIT
+	if !ok {
+		zbFlag, zbValues = 0, [4]int{}
+	}
+	w.U8(zbFlag)
+	for _, value := range zbValues {
+		w.U32(value)
+	}
+	w.U8(0)             // RLFLAG_UNK18
+	w.U8(0)             // RLHFLAG_UNK
+	w.U8(st.number(59)) // RLHFLAG_ISZBCOMPETITIVE
+	w.U8(st.number(60)) // RLHFLAG_ZBAUTOHUNTING
+	w.U8(0)             // RLHFLAG_UNK4
+	w.U8(0)             // RLHFLAG_UNK5
+	w.U8(st.number(64)) // RLHFLAG_FIREBOMB
+	w.U8(st.byteAt(65)) // RLHFLAG_MUTATIONRESTRICT
+	w.U8(st.number(66)) // RLHFLAG_MUTATIONLIMIT
+	w.U8(0)             // RLHFLAG_UNK9
+	w.U8(0)             // RLHFLAG_UNK10
+	w.U8(st.number(69)) // RLHFLAG_WEAPONRESTRICT
+	w.U8(st.number(70)) // RLHFLAG_FAMILYBATTLE
+	w.U32(room.clan1)   // RLHFLAG_FAMILYBATTLECLANIDS
+	w.U32(room.clan2)
+	w.U8(st.number(71)) // RLHFLAG_WEAPONBUYCOOLTIME
+	w.U8(st.number(72)) // RLHFLAG_ZBREBALANCE
+	if st.number(7) == 254 {
+		flag, title, image := st.voxelBlock()
+		w.U32(int(flag))
+		if flag&(1<<3) != 0 {
+			w.String(title)
+		}
+		if flag&(1<<8) != 0 {
+			w.String(image)
+		}
+	}
 }
 
 // voxelRoomList handles room sub-request 65/34: the client asks for rooms
@@ -435,7 +534,56 @@ func (r *room) broadcast(id byte, w *protocol.Writer) {
 		r.dedicated.client.send(id, w)
 	}
 }
-func (r *room) joined(c *client) {
+
+// broadcastExcept sends a packet to every member but one, plus the dedicated
+// server socket the reference notifies as well.
+func (r *room) broadcastExcept(skip *client, id byte, w *protocol.Writer) {
+	for _, c := range r.members {
+		if c != skip {
+			c.send(id, w)
+		}
+	}
+	if r.dedicated != nil {
+		r.dedicated.client.send(id, w)
+	}
+}
+
+// sendHost announces the room's host, mirroring CPacketManager::SendRoomSetHost
+// (src/manager/packetmanager.cpp:2808).
+func (r *room) sendHost() {
+	w := &protocol.Writer{}
+	w.U8(5)
+	w.U32(r.host.user.ID)
+	w.U8(1)
+	r.broadcast(65, w)
+}
+
+// sendHostItems mirrors CRoom::CheckForHostItems (src/room/room.cpp:899-930):
+// superRoom, c4Timer and, for the modes that use it, the big-head event each
+// travel as their own single-field settings update.
+func (r *room) sendHostItems() {
+	fields := []int{superRoomField, c4Field}
+	switch r.settings.number(6) {
+	case 3, 4, 5, 15, 24:
+		fields = append(fields, bigHeadField)
+	}
+	for _, field := range fields {
+		var update settings
+		update.flags[field/32] = 1 << uint(field%32)
+		update.fields[field] = r.settings.fields[field]
+		w := &protocol.Writer{}
+		w.U8(4)
+		update.write(w)
+		r.broadcast(65, w)
+	}
+}
+
+// joined sends the CreateAndJoin frame to one user. readyStatus adds the
+// ready-state broadcast the reference emits when a user joins an existing room
+// (CChannelManager::OnJoinRoomRequest: room->SendUserReadyStatus for every
+// member); creating a room sends only the CreateAndJoin frame
+// (CChannelManager::OnNewRoomRequest -> CRoom::SendJoinNewRoom).
+func (r *room) joined(c *client, readyStatus bool) {
 	w := &protocol.Writer{}
 	w.U8(0)
 	w.U8(0)
@@ -449,6 +597,9 @@ func (r *room) joined(c *client) {
 		roomUser(w, u)
 	}
 	c.send(65, w)
+	if !readyStatus {
+		return
+	}
 	for _, u := range r.members {
 		w = &protocol.Writer{}
 		w.U8(3)
@@ -513,16 +664,22 @@ func (s *Server) roomRequest(c *client, r *protocol.Reader) error {
 				return nil
 			}
 		}
+		// CheckSettings validates the request and only then runs
+		// LoadDefaultSettings (src/room/roomsettings.cpp:2323-2511), so the checks
+		// see the flags the client sent, not the ROOM_*_ALL words the defaults set.
+		if err := s.validateNewRoomSettings(&st, 1); err != nil {
+			c.notice("Invalid room settings.")
+			return nil
+		}
 		if !s.roomDefaults(&st, true) {
 			c.notice("Unsupported game mode.")
 			return nil
 		}
-		if err := s.refreshHostRoomItems(c, &st); err != nil {
+		// CRoom's constructor adds the host and calls UpdateHost ->
+		// CheckForHostItems, so the item-backed values are resolved before the
+		// CreateAndJoin frame is built.
+		if err := s.applyHostItems(c, &st); err != nil {
 			return err
-		}
-		if err := s.validateRoomSettings(&st, 1); err != nil {
-			c.notice("Invalid room settings.")
-			return nil
 		}
 		if err := validateRoomFrame(st); err != nil {
 			return err
@@ -534,16 +691,24 @@ func (s *Server) roomRequest(c *client, r *protocol.Reader) error {
 			}
 			s.nextRoom = id + 1
 		}
+		// The clan slots stay at zero: the reference's Reset only zeroes them and
+		// the create path checks clan membership without recording it
+		// (src/manager/channelmanager.cpp:1233-1241). familyClan is kept for the
+		// notice below.
 		currentRoom = &room{id: id, host: c, members: []*client{c}, settings: st}
-		if familyBattle {
-			currentRoom.clan1 = familyClan
-		}
 		s.rooms[id] = currentRoom
 		c.room = id
 		c.team = 2
 		c.ready = 0
 		s.lobbyLeft(c)
-		currentRoom.joined(c)
+		// The room's constructor ran UpdateHost before the CreateAndJoin frame:
+		// CRoom::UpdateHost sends SetHost, then CheckForHostItems sends the
+		// item-backed settings, and only then does OnNewRoomRequest call
+		// SendJoinNewRoom (src/room/room.cpp:94-104, 969-979, 899-930;
+		// src/manager/channelmanager.cpp:1243-1247).
+		currentRoom.sendHost()
+		currentRoom.sendHostItems()
+		currentRoom.joined(c, false)
 		s.refreshRooms()
 		if familyBattle {
 			s.sendClanBattleNotice(c.user.ID, 0, c.character.Name, st.number(6), id)
@@ -611,7 +776,14 @@ func (s *Server) roomRequest(c *client, r *protocol.Reader) error {
 		to.broadcast(65, w)
 		to.members = append(to.members, c)
 		s.lobbyLeft(c)
-		to.joined(c)
+		to.joined(c, true)
+		// OnJoinRoomRequest tells every other member who joined and which team the
+		// user took (src/manager/channelmanager.cpp:1378-1388).
+		w = &protocol.Writer{}
+		w.U8(13)
+		w.U32(c.user.ID)
+		w.U8(team)
+		to.broadcastExcept(c, 65, w)
 		s.refreshRooms()
 		if to.settings.number(70) != 0 {
 			s.sendClanBattleNotice(c.user.ID, 1, c.character.Name, to.settings.number(6), id)
@@ -695,6 +867,9 @@ func (s *Server) roomRequest(c *client, r *protocol.Reader) error {
 			c.notice("Unable to create a room due to incorrect settings")
 			return nil
 		}
+		// The team regroup compares against the settings the room had before this
+		// update, not the ones just computed (channelmanager.cpp:1761-1793).
+		clan1Before := currentRoom.clan1
 		if merged.number(70) != 0 {
 			if notice, ok := s.familyBattleSettings(currentRoom, &merged); !ok {
 				// The reference answers a rejected update with the current settings
@@ -710,18 +885,35 @@ func (s *Server) roomRequest(c *client, r *protocol.Reader) error {
 			currentRoom.clan1 = 0
 			currentRoom.clan2 = 0
 		}
+		// CheckNewSettings validates the request's own flag words, and
+		// LoadNewSettings limits its cleanup to those bits. The room keeps
+		// ROOM_*_ALL after creation, so the merged settings must be narrowed to the
+		// changed fields before the checks run; otherwise every field would look
+		// requested. A Zombie Scenario room always carries its difficulty field,
+		// which is why that bit stays in the mask.
+		roomFlags := previous.flags
+		changed := [4]uint32{}
+		for group := range changed {
+			changed[group] = st.flags[group] | added.flags[group]
+		}
+		if merged.number(6) == 15 {
+			changed[1] |= 1 << 13
+		}
+		merged.flags = changed
 		if err := s.validateRoomSettings(&merged, len(currentRoom.members)); err != nil {
 			c.notice("Invalid room settings.")
 			return nil
 		}
-		if err := validateRoomFrame(merged); err != nil {
-			return err
-		}
 		// A field the client tried to change but the server refused keeps the value
 		// the room already had, exactly as the reference does.
 		merged.restoreRejected(st, previous)
+		merged.restoreRejected(added, previous)
+		merged.flags = roomFlags
+		if err := validateRoomFrame(merged); err != nil {
+			return err
+		}
 		currentRoom.settings = merged
-		s.regroupFamilyBattle(currentRoom)
+		s.regroupFamilyBattle(currentRoom, clan1Before)
 		w := &protocol.Writer{}
 		w.U8(4)
 		// Send the corrected values for the fields the client asked to change;
@@ -887,9 +1079,12 @@ func (s *Server) leaveRoom(c *client) {
 			s.Log.Warn("host item refresh after migration failed", "room", r.id, "error", err)
 		}
 		s.migrateHost(r)
-	}
-	if r.settings.number(70) != 0 {
-		s.familyBattleRecompute(r)
+		if r.settings.number(70) != 0 {
+			// A new host refills the clan slots (src/room/room.cpp:993-1001); a
+			// plain member leaving does not, so the match roster and both slots
+			// stay as they were.
+			s.familyBattleRecompute(r)
+		}
 	}
 	s.refreshRooms()
 }

@@ -144,7 +144,7 @@ func TestRoomDefaultsFromClientTable(t *testing.T) {
 	w := &protocol.Writer{}
 	st.write(w)
 	r := &protocol.Reader{Data: w.Data}
-	parsed, err := parseSettings(r)
+	parsed, err := parseWrittenSettings(r)
 	if err != nil || r.Pos != len(w.Data) || !bytes.Equal(parsed.fields[34], st.fields[34]) || parsed.number(36) != 0 {
 		t.Fatalf("default fields did not round trip: %v", err)
 	}

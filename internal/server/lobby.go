@@ -3,6 +3,7 @@ package server
 import (
 	"database/sql"
 	"errors"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -157,6 +158,12 @@ func (s *Server) joinLobby(c *client) {
 	joined := !c.inLobby
 	if joined {
 		c.inLobby = true
+		// CChannel::UserJoin pushes the user onto the channel's user vector, and
+		// SendLobbyJoin walks that vector in order (src/channel/channel.cpp:57,
+		// src/manager/packetmanager.cpp:1753). The sequence number keeps our map of
+		// clients in the same order.
+		s.lobbySeq++
+		c.lobbySeq = s.lobbySeq
 		w := &protocol.Writer{}
 		w.U8(1)
 		w.U32(c.user.ID)
@@ -168,21 +175,25 @@ func (s *Server) joinLobby(c *client) {
 			}
 		}
 	}
-	w := &protocol.Writer{}
-	w.U8(0)
-	n := 0
+	users := make([]*client, 0, len(s.clients))
 	for u := range s.clients {
 		if u.inLobby {
-			n++
+			users = append(users, u)
 		}
 	}
-	w.U16(n)
-	for u := range s.clients {
-		if u.inLobby {
-			w.U32(u.user.ID)
-			w.String(lobbyJoinLabel)
-			userInfo(w, u.character)
+	sort.Slice(users, func(i, j int) bool {
+		if users[i].lobbySeq != users[j].lobbySeq {
+			return users[i].lobbySeq < users[j].lobbySeq
 		}
+		return users[i].user.ID < users[j].user.ID
+	})
+	w := &protocol.Writer{}
+	w.U8(0)
+	w.U16(len(users))
+	for _, u := range users {
+		w.U32(u.user.ID)
+		w.String(lobbyJoinLabel)
+		userInfo(w, u.character)
 	}
 	c.send(153, w)
 	s.roomList(c)
@@ -402,6 +413,10 @@ func (s *Server) message(c *client, r *protocol.Reader) error {
 	return nil
 }
 func (s *Server) loginPackets(c *client) error {
+	// CUser is constructed before the login chain starts, so the network config
+	// the room packets carry is the TCP peer address and the default ports until a
+	// holepunch overwrites it (src/user/user.cpp:22-27).
+	c.initNetwork()
 	// The sweep still runs so this account starts from current data, but the
 	// login chain initializes the inventory itself further down; pushing a bag
 	// update here would put 154 in front of UserStart 150.

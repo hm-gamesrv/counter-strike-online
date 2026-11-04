@@ -628,10 +628,12 @@ func TestReview83RoomListEntryFields(t *testing.T) {
 	r.U8()
 	r.U8()
 	r.U16()
-	low := r.U32()
-	high := r.U32()
+	// protocol.Reader.U32 returns an unsigned 32-bit value widened to int, so the
+	// reference's -1 (RLFLAG_ALL/RLHFLAG_ALL) arrives as 0xFFFFFFFF.
+	low := uint32(r.U32())
+	high := uint32(r.U32())
 	fields := len(list) - r.Pos
-	if low != -1 || high != -1 {
+	if low != 0xFFFFFFFF || high != 0xFFFFFFFF {
 		t.Fatalf("151 entry flags low=0x%08x high=0x%08x with %d field bytes; reference writes 0xffffffff/0xffffffff and 85 bytes for this room", low, high, fields)
 	}
 	if fields != 85 {

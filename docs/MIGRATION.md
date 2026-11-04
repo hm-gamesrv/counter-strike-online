@@ -753,3 +753,52 @@ WSL 里的 30003 实例确认是**原版 C++ 基线**（仓库 `~/repos/hm-games
 - 新增 `internal/server/userinfo_test.go`：按全 flag 固定布局解析 user info 的测试辅助函数，flag 不再是全 1 时直接失败。此前几个用例各自手写游标，跟着布局走样。
 - `go test ./...` 全绿；30002 上的黑盒套件全绿。
 
+
+## 2026-11-05 处理 83b1c1a 生命周期审查（L4–L6）
+
+同轮还有 L1–L3（家族战名单/开赛门槛/分队）与大厅/房间出站审查的 N1–N8，见相邻小节。
+
+- **结算不再拒绝极端收益（L4）**：`SettleMatch` 原先把 `exp/points > 10,000,000` 当成非法，而这个值是用主机上报的 `kills` 现算的——主机报 100 万杀就整场结算永久失败，且错误冒到 `serveClient` 把房主踢下线，重试仍是同一组数字。基线只把经验截到 30069814（`user.cpp:295`）、points 直接相加，没有“单场收益上限”。现在只保留非负与计数范围校验，溢出仍由 `points BETWEEN 0 AND MaxInt64-?` 的行条件兜住。
+- **`Duration: -1` 是永久而不是休眠（L5）**：基线 `AddItem` 把负时长归 0（`itemmanager.cpp:683`），首份副本以 `status=1,inUse=1` 入库。我们把它当成 `Dormant` 写成 0/0，出货数据里 11 个商店商品与 22 条奖励条目因此“买了却不装备”，武器/职业也不进主机可用列表。现在 -1 只归零时长；装饰类仍按 `ClassName`/category 12 休眠。
+- **接管登录写会话历史（L6）**：基线销毁旧 CUser 时 `DropSession` 先把会话复制进 `UserSessionHistory` 再删行（`userdatabase_sqlite.cpp:452`），且 `sessionDate` 取 `User.lastLogonTime`、`sessionTime` 保留原始登录时刻。我们原来 `StartSession` 直接 DELETE，接管不落历史；`EndSession` 也把 `sessionDate` 写成结束时刻、`sessionTime` 写时长。现在两者共用 `archiveSession`，口径与基线一致（`EndSession` 因此不再需要“当前时间”参数）。
+
+回归护栏：新增 `TestStartSessionArchivesSupersededSession`；`TestSessionLifecycle` 与 `TestCapturedCurrentClientShopPurchase` 按基线口径更新了断言。
+
+
+## 2026-11-05 大厅/房间出站报文逐字节对齐（N1–N8）与家族战口径（L1–L3）
+
+同轮 83b1c1a 的审查报告：`code-review/reports/CODE_REVIEW_83B1C1A_LOBBY.md`、`..._LIFECYCLE.md`。验收方式仍然是拿 30003（原版 C++ 基线）当尺子，同一份数据、同一账号、同一个建房请求，逐字节比。
+
+### 房间设置 65/0 与 65/4（N1、N5）
+
+- 基线 `CRoomSettings::LoadDefaultSettings`（`roomsettings.cpp:1210`）第一件事就是把四个 flag 字置成 `ROOM_*_ALL`（mapId≠254 清 `ROOM_LOWMID_VOXEL`），然后逐字段写默认值，所以建房的 `65/0` 是"全段 + 零值"。我们此前只写出客户端请求里出现过的字段（设置区 60B vs 基线 192B，flags `3077ffc9/04010014/0/0`），客户端于是把等级限制、状态标记、随机图、SD/难度、家族战等 30+ 字段留在自己的默认值上。新增 `loadDefaultSettings` 逐字段镜像基线默认值，创建路径改走它。
+- 更新路径仍只发请求改动的字段（基线 `SendRoomUpdateSettings` 显式传 mask，`packetmanager.cpp:2288-2301`）；房间自身的 flags 保持 ALL，校验/清理只针对"请求 + 服务端派生"的 mask，否则 ALL 会把未请求字段当成请求。
+- 设置被拒时的回滚包同样走 `settings.write`（mask 全 0 → 回退到房间 flags），从 17B 空 mask 变成完整的 193B，房主对话框会真的回滚。
+
+### 房间列表 151 / 65-34（N2）
+
+`BuildRoomInfo(..., RLFLAG_ALL, RLHFLAG_ALL)`（`packetmanager.cpp:1791-1976`）写的是全部字段：等级/武器限制、超级房、随机图、地图轮换、SD、大灾变难度、联赛/礼仪限制、ZBLimit、竞技/自动狩猎、火雷与变异限制、家族战与 clanID、武器购买冷却、ZB 平衡，以及"是否在游戏中"的状态标记（`statusSymbol==3?2:0`）。我们此前只写 6 个字段（flags `0xF5`，条目 19B vs 基线 85B）——房间列表页展示与排序用的正是这些。`writeRoomListEntry` 已按基线顺序重写，map 254 的 Studio 段一并实现。
+
+### 建房/进房的包集合（N3、N4）
+
+- 建房：基线 `UpdateHost` → `CheckForHostItems` 依次发 `65/5`、`65/4 superRoom`、`65/4 c4Timer`（模式 3/4/5/15/24 再加 `65/4 sd`），最后才是 `65/0`（`channelmanager.cpp:1243-1247`、`room.cpp:94-104,969-979,899-930`）。现在顺序一致，且建房不再多发一条 `65/3`。
+- 进房：除进房者外的每个成员再收一条 `65/13 SetUserTeam`（`channelmanager.cpp:1378-1388`）。
+
+### 153 顺序、网络信息、103（N6、N7、N8）
+
+- `153` 大厅列表改成入频道顺序（`CChannel::m_Users` 是 vector），原来是 map 遍历，200 次调用能出现 3 种顺序。
+- 登录时把网络信息初始化为 TCP 对端 IP + 27005/27015（`user.cpp:22-27`）；UDP 打洞后覆盖。原来没打洞前是 0.0.0.0:0。
+- 两个 Voxel URL 都为空时也发 `103`（`U8(20)+""+""`），基线无条件发。
+
+### 家族战口径（L1–L3）
+
+- **参赛名单是开赛快照**：基线在 `HostStartGame` 里把当时房间里的所有人抄进 `m_FamilyBattleUsers`（`room.cpp:1082-1088`），之后只读不删；`OnUserRemoved` 只删统计。我们原来用 `match.stats` 当名单，而 `leaveRoom` 会删统计，于是中途退房的人再也进不回同一局。现在 `gameMatch.roster` 在开赛时拍快照。
+- **clan 槽与开赛门槛**：建房只校验房主有公会，不写 clan 槽（`channelmanager.cpp:1233-1241`）；第二个槽由第一个进房的人填（`:1340-1352`），所以"同族娱乐局"在基线上是能开的。开赛只要求"clan2 非空 + 至少一名玩家已准备"（`:1616-1622`），大灾变（mode 32）另要求 `maxPlayers-1` 人准备。原来的实现在建房时就把房主公会塞进 clan1，并要求"两族都有人"，两个方向都反了。
+- **开启家族战时的分队**：基线先填新设置、再用**旧**设置里的 clan1 分队（`:1761-1793`），首次开启时旧值为 0，因此除房主外的每个有族玩家都被换到对面。现在 `regroupFamilyBattle` 接收更新前的 clan1。
+
+### 回归护栏
+
+- 23 条审查探针（`review-83b1c1a-lobby` 14 条 + `review-83b1c1a-lifecycle` 9 条）全部通过。
+- `blackbox/test_login_order.py` 与 62 例黑盒套件在 30002 上全绿；登录 60 包与基线仍只差 19 条元数据帧的压缩方式与 1 条商店标题（已批准偏离）。
+- `go test ./...` 全绿、`go vet` 干净。
+

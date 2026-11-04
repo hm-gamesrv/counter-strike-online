@@ -225,7 +225,9 @@ func TestLoginRoomUDPAndShutdown(t *testing.T) {
 			joined := b.roomPacket(0)
 			jr := &protocol.Reader{Data: joined.Data}
 			jr.Bytes(13)
-			if _, e := parseSettings(jr); e != nil {
+			// The CreateAndJoin frame carries the server-written settings layout,
+			// including the nine-byte scenario difficulty block.
+			if _, e := parseWrittenSettings(jr); e != nil {
 				t.Fatal(e)
 			}
 			if jr.U8() != 2 {

@@ -137,7 +137,7 @@ func (s *Server) restoreSession(c *client) {
 		u.send(65, w)
 	}
 	r.members = append(r.members, c)
-	r.joined(c)
+	r.joined(c, true)
 	if r.match != nil {
 		w = &protocol.Writer{}
 		w.Bytes([]byte{6, 1, byte(r.match.mode), 0})

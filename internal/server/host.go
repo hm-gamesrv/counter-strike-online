@@ -31,7 +31,11 @@ type gameMatch struct {
 	id                         string
 	mode, mapID, ctWins, tWins int
 	stats                      map[int]*matchStat
-	saveData                   []byte
+	// roster is the Family Battle participant snapshot taken when the match
+	// starts, mirroring CRoom::m_FamilyBattleUsers (src/room/room.cpp:1082).
+	// Entries are never removed, so a player who leaves can rejoin the match.
+	roster   map[int]bool
+	saveData []byte
 }
 
 func (s *Server) startGame(c *client) error {
@@ -52,8 +56,8 @@ func (s *Server) startGame(c *client) error {
 		c.notice("ROOM_JOIN_FAILED_CLOSED")
 		return nil
 	}
-	if r.settings.number(70) != 0 && !s.familyBattleCanStart(r) {
-		c.notice("ROOM_START_FAILED_CLAN_NOT_READY")
+	if notice := s.familyBattleStartRefusal(r); notice != "" {
+		c.notice(notice)
 		return nil
 	}
 	var peer *dedicatedServer
@@ -80,9 +84,17 @@ func (s *Server) startGame(c *client) error {
 		r.dedicated = peer
 		peer.room = r.id
 		peer.client.room = r.id
-		r.joined(peer.client)
+		r.joined(peer.client, false)
 		actor = peer.client
 		startID = peer.port
+	}
+	if r.settings.number(70) != 0 {
+		// Snapshot the participants once the room's player list is final
+		// (src/room/room.cpp:1082-1088); later leaves do not shrink it.
+		r.match.roster = make(map[int]bool, len(r.members))
+		for _, u := range r.members {
+			r.match.roster[u.user.ID] = true
+		}
 	}
 	w = &protocol.Writer{}
 	w.U8(0)

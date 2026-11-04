@@ -79,25 +79,33 @@ func TestFamilyBattleClanSlotsAndNotice(t *testing.T) {
 		members:  []*client{a},
 		settings: familySettings(),
 	}
-	if !s.familyBattleInit(r, a) || r.clan1 == 0 {
-		t.Fatal("host clan was not assigned")
+	// Creation checks membership but leaves both slots empty
+	// (src/manager/channelmanager.cpp:1233-1241).
+	if !s.familyBattleInit(r, a) || r.clan1 != 0 || r.clan2 != 0 {
+		t.Fatalf("creation assigned a clan slot %+v", r)
 	}
-	if !s.familyBattleJoin(r, d) || r.clan2 != 0 {
-		t.Fatal("same-clan member changed the second slot")
+	// The first joiner fills slot two whatever clan it belongs to (:1340-1352),
+	// which is what lets a same-clan room start.
+	if !s.familyBattleJoin(r, d) || r.clan2 == 0 || r.clan2 != d.character.ClanID {
+		t.Fatalf("first joiner did not fill the second slot %+v", r)
 	}
-	if !s.familyBattleJoin(r, b) || r.clan2 == 0 || r.clan1 == r.clan2 {
-		t.Fatalf("second clan %+v", r)
+	if s.familyBattleJoin(r, b) {
+		t.Fatal("a third clan joined")
 	}
 	if s.familyBattleJoin(r, c) {
 		t.Fatal("clanless member joined")
 	}
-	r.members = append(r.members, d, b)
-	if !s.familyBattleCanStart(r) {
-		t.Fatal("both clans should be able to start")
+	r.members = append(r.members, d)
+	if notice := s.familyBattleStartRefusal(r); notice != "ROOM_START_FAILED_CLAN_NOT_READY" {
+		t.Fatalf("a room with no ready player was accepted: %q", notice)
+	}
+	d.ready = 2
+	if notice := s.familyBattleStartRefusal(r); notice != "" {
+		t.Fatalf("ready room refused: %q", notice)
 	}
 	r.members = []*client{a, d}
 	s.familyBattleRecompute(r)
-	if r.clan2 != 0 || s.familyBattleCanStart(r) {
+	if r.clan2 != 0 || s.familyBattleStartRefusal(r) == "" {
 		t.Fatalf("second clan not cleared %+v", r)
 	}
 	s.rooms = map[int]*room{7: r}
