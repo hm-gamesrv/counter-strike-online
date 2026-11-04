@@ -28,7 +28,12 @@ func (s *Store) SettleMatch(matchID string, rewards []MatchReward) error {
 		return e
 	}
 	for _, reward := range rewards {
-		if reward.UserID <= 0 || reward.Exp < 0 || reward.Exp > 10000000 || reward.Points < 0 || reward.Points > 10000000 || reward.Kills < 0 || uint64(reward.Kills) > math.MaxUint32 || reward.Deaths < 0 || uint64(reward.Deaths) > math.MaxUint32 {
+		// No upper bound on the payout: the reference clamps the experience it
+		// stores (user.cpp:295) and adds points as-is, so a host that reports an
+		// extreme counter still settles. Rejecting here failed the whole match
+		// permanently - every participant unpaid and the host disconnected on
+		// each retry - for a value the server computes from host counters.
+		if reward.UserID <= 0 || reward.Exp < 0 || reward.Points < 0 || reward.Kills < 0 || uint64(reward.Kills) > math.MaxUint32 || reward.Deaths < 0 || uint64(reward.Deaths) > math.MaxUint32 {
 			return errors.New("invalid match reward")
 		}
 		result, e := tx.Exec("INSERT OR IGNORE INTO GoMatchSettlement VALUES(?,?,?,?,?)", matchID, reward.UserID, reward.Exp, reward.Points, time.Now().Unix())

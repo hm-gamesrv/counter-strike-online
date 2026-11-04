@@ -85,8 +85,11 @@ func TestCapturedCurrentClientShopPurchase(t *testing.T) {
 	}
 	items, err = db.Inventory(1)
 	// A permanent copy carries no duration, so it is inserted rather than folded
-	// into the timed copy: bag = default, timed weapon, dormant permer.
-	if err != nil || len(items) != 3 || items[2].InUse != 0 || items[2].Expiry != 0 || items[2].Status != 0 {
-		t.Fatal("permanent catalog item lost dormant state", items, err)
+	// into the timed copy: bag = default, timed weapon, selected permer. The
+	// reference clamps the negative duration to zero and marks the first copy
+	// as selected (itemmanager.cpp:683,669), so the new row is 1/1 like any
+	// other first copy.
+	if err != nil || len(items) != 3 || items[2].InUse != 1 || items[2].Expiry != 0 || items[2].Status != 1 {
+		t.Fatal("permanent catalog item was not stored as selected", items, err)
 	}
 }

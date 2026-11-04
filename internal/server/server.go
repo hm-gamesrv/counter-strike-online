@@ -316,7 +316,7 @@ func (s *Server) serveClient(ctx context.Context, c *client) {
 			if s.users[c.user.ID] == c {
 				delete(s.users, c.user.ID)
 				s.lobbyLeft(c)
-				if err := s.Store.EndSession(c.user.ID, int(time.Now().Unix()/60)); err != nil && s.Log != nil {
+				if err := s.Store.EndSession(c.user.ID); err != nil && s.Log != nil {
 					s.Log.Warn("session history update failed", "user", c.user.ID, "error", err)
 				}
 			}

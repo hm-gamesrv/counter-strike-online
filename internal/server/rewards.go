@@ -85,8 +85,12 @@ func (s *Server) prepareGrants(items []store.Reward) ([]store.Reward, error) {
 			return nil, fmt.Errorf("unknown reward item %d", item.ID)
 		}
 		if item.Duration == -1 {
+			// The reference clamps a negative duration to zero in AddItem
+			// (src/manager/itemmanager.cpp:683) and then stores the first copy as
+			// selected (itemStatus=1, itemInUse=1). "-1" therefore means
+			// "permanent", not "dormant": keeping it dormant left purchased
+			// weapons and classes asleep until the player equipped them by hand.
 			item.Duration = 0
-			item.Dormant = true
 		}
 		item.Exclusive = definition.Category >= 1 && definition.Category <= 6 || definition.Category == 11
 		item.Unselected = definition.Category == 9 && definition.UseType >= 0 && definition.UseType <= 2 || definition.Category == 8 && (definition.UseType == 0 || definition.UseType == 2)
