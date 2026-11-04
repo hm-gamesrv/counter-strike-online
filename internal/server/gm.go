@@ -514,6 +514,9 @@ func (s *Server) gmGrantReward(id int, p pendingReward) error {
 	if err = s.sendInventoryItems(target, changed); err != nil {
 		return err
 	}
+	if err = s.refreshAfterGrant(target); err != nil {
+		return err
+	}
 	if w := rewardNotice(p.Label, p.NoticeItems, p.Grant); len(w.Data) <= protocol.MaxPayload {
 		target.send(67, w)
 	}

@@ -802,3 +802,15 @@ WSL 里的 30003 实例确认是**原版 C++ 基线**（仓库 `~/repos/hm-games
 - `blackbox/test_login_order.py` 与 62 例黑盒套件在 30002 上全绿；登录 60 包与基线仍只差 19 条元数据帧的压缩方式与 1 条商店标题（已批准偏离）。
 - `go test ./...` 全绿、`go vet` 干净。
 
+
+## 2026-11-05 补处理 86212b7 审查（2 P1 + 1 P2）
+
+这份报告当时归档后没有响应，属于流程漏项，本轮补上（响应文件见 `code-review/reports-responses/2026-11-04T15-24-55-86212b7/`）。
+
+- **154 补丁必须是整行**：购买/发放返回的受影响行原来只填了改动过的列（堆叠分支只有 Slot/ID/Count，延期分支漏 Status/Paint/Lock），而 154 的每条非墓碑记录带的是完整道具字段，客户端会把它们当成未使用、无涂装、无锁。新增 `readInventorySlot`，在同一事务里把刚写的行整行读回，三个分支（堆叠合并、延期、新插入）都改用它。
+- **重复事件不再推进局内计数**：`RecordQuestProgressOnce` 命中重复 eventKey 时提交并返回成功，调用方仍无条件累加 `questMatchUnits`，于是持久化进度不变、里程碑通知却多打一次。拆出 `RecordQuestProgressApplied` 多返回一个 `applied`，通知只在首次应用时推进（原签名保留为包装）。
+- **在线发奖后刷新角色**：`grantCatalogReward`（场景掉落箱走这里）与 GM `/givereward` 只发了 154 与 67，没有重读角色、没有 157，货币/经验/等级的客户端显示会停在旧值。新增 `refreshAfterGrant`，两条路径都在库存补丁之后重读 `c.character` 并补发 157（与 `finishRewardClaim`、商店成功路径一致）。
+- **未做**：报告提到的"局内通知计数未进重连快照"仍成立，已记档；派生状态、基线无等价概念。
+
+回归：三条探针（`review-86212b7`）由全失败转为全过；`TestHostDropBoxGrantsReward` 的断言改为 157 → 67；`go test ./...` 全绿。
+

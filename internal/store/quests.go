@@ -24,51 +24,60 @@ func (s *Store) RecordQuestProgress(id, quest, task, goal, delta, rewardID int, 
 }
 
 func (s *Store) RecordQuestProgressOnce(id, quest, task, goal, delta, rewardID int, payload []byte, eventKey string) (QuestProgress, error) {
+	p, _, err := s.RecordQuestProgressApplied(id, quest, task, goal, delta, rewardID, payload, eventKey)
+	return p, err
+}
+
+// RecordQuestProgressApplied also reports whether this call changed the stored
+// progress. A repeated event key commits nothing, and callers that keep derived
+// state (the per-match notice counter) must not advance it in that case.
+func (s *Store) RecordQuestProgressApplied(id, quest, task, goal, delta, rewardID int, payload []byte, eventKey string) (QuestProgress, bool, error) {
 	var p QuestProgress
 	if id < 1 || quest < 1 || task < 1 || goal < 1 || goal > 1000000000 || delta < 0 || delta > 1000000000 || rewardID < 0 || len(payload) > 1048576 || len(payload) > 0 && rewardID == 0 || len(eventKey) > 200 {
-		return p, errors.New("invalid quest progress")
+		return p, false, errors.New("invalid quest progress")
 	}
 	tx, err := s.DB.Begin()
 	if err != nil {
-		return p, err
+		return p, false, err
 	}
 	defer tx.Rollback()
 	if _, err = tx.Exec("INSERT OR IGNORE INTO GoQuestTaskProgress(userID,questID,taskID,goal) VALUES(?,?,?,?)", id, quest, task, goal); err != nil {
-		return p, err
+		return p, false, err
 	}
 	var rowID int
 	if err = tx.QueryRow("SELECT rowid,units,goal,token FROM GoQuestTaskProgress WHERE userID=? AND questID=? AND taskID=?", id, quest, task).Scan(&rowID, &p.Units, &p.Goal, &p.Token); err != nil {
-		return p, err
+		return p, false, err
 	}
 	if p.Goal != goal {
-		return p, errors.New("quest goal changed; use a new task ID")
+		return p, false, errors.New("quest goal changed; use a new task ID")
 	}
 	if p.Units < 0 || p.Units > p.Goal {
-		return p, errors.New("invalid stored quest progress")
+		return p, false, errors.New("invalid stored quest progress")
 	}
 	if eventKey != "" {
 		result, err := tx.Exec("INSERT OR IGNORE INTO GoQuestEvent VALUES(?,?,?,?)", id, quest, task, eventKey)
 		if err != nil {
-			return p, err
+			return p, false, err
 		}
 		if n, err := result.RowsAffected(); err != nil {
-			return p, err
+			return p, false, err
 		} else if n == 0 {
-			return p, tx.Commit()
+			// The event was already applied; nothing changed, so report that.
+			return p, false, tx.Commit()
 		}
 	}
 	p.Units += min(delta, p.Goal-p.Units)
 	if p.Units == p.Goal && p.Token == 0 && len(payload) > 0 {
 		if p.Token, err = newRewardToken(tx, id); err != nil {
-			return p, err
+			return p, false, err
 		}
 		// Negative source slots identify server tasks, never inventory entries.
 		if _, err = tx.Exec("INSERT INTO GoRewardClaim(userID,token,rewardID,sourceSlot,payload) VALUES(?,?,?,?,?)", id, p.Token, rewardID, -rowID, payload); err != nil {
-			return p, err
+			return p, false, err
 		}
 	}
 	if _, err = tx.Exec("UPDATE GoQuestTaskProgress SET units=?,token=? WHERE userID=? AND questID=? AND taskID=?", p.Units, p.Token, id, quest, task); err != nil {
-		return p, err
+		return p, false, err
 	}
-	return p, tx.Commit()
+	return p, true, tx.Commit()
 }

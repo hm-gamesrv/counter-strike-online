@@ -188,6 +188,11 @@ func TestHostDropBoxGrantsReward(t *testing.T) {
 	if msg := <-target.queue; msg.id != 154 {
 		t.Fatalf("missing drop box inventory update, got %d", msg.id)
 	}
+	// The reference republishes the character after a reward changes currency
+	// (itemmanager.cpp:1915-1932), so the user info update precedes the notice.
+	if msg := <-target.queue; msg.id != 157 {
+		t.Fatalf("missing reward user info update, got %d", msg.id)
+	}
 	if msg := <-target.queue; msg.id != 67 {
 		t.Fatalf("missing drop box reward notice, got %d", msg.id)
 	}

@@ -305,13 +305,16 @@ func (s *Server) applyQuestEvent(c *client, m *gameMatch, stat *matchStat, e que
 				s.Log.Warn("quest reward unavailable; completion will be retained", "quest", task.QuestID, "task", task.TaskID, "error", err)
 			}
 		}
-		if _, err := s.Store.RecordQuestProgressOnce(c.user.ID, task.QuestID, task.TaskID, task.Goal, delta, task.RewardID, payload, e.Key); err != nil {
+		_, applied, err := s.Store.RecordQuestProgressApplied(c.user.ID, task.QuestID, task.TaskID, task.Goal, delta, task.RewardID, payload, e.Key)
+		if err != nil {
 			return err
 		}
 		// The reference notifies when the match-local progress lands exactly on a
 		// multiple of the notice goal, not when it crosses a boundary; a 15-point
 		// condition with a 30-point notice goal therefore speaks every other kill.
-		if task.Notice.Goal > 0 {
+		// A retried event key changes nothing in the database, so it must not move
+		// the match-local counter either.
+		if applied && task.Notice.Goal > 0 {
 			temp := questMatchUnits(stat, task, delta)
 			if temp%task.Notice.Goal == 0 {
 				c.chatNotice(questNotice(task.Notice.UserMsg, temp, task.Goal))

@@ -64,9 +64,30 @@ func (s *Server) grantCatalogReward(c *client, rewardID int) error {
 	if err = s.sendInventoryItems(c, changed); err != nil {
 		return err
 	}
+	if err = s.refreshAfterGrant(c); err != nil {
+		return err
+	}
 	if w := rewardNotice(p.Label, p.NoticeItems, p.Grant); len(w.Data) <= protocol.MaxPayload {
 		c.send(67, w)
 	}
+	return nil
+}
+
+// refreshAfterGrant republishes the character fields a reward can change
+// (experience, points, honor points, level, password boxes). The reference's
+// UpdateExp / UpdatePoints / UpdateHonorPoints each send the user info back
+// (src/manager/itemmanager.cpp:1915-1932), so every online award path owes the
+// client that packet; a reward notice is not a substitute.
+func (s *Server) refreshAfterGrant(c *client) error {
+	character, err := s.Store.Character(c.user.ID)
+	if err != nil {
+		return err
+	}
+	c.character = character
+	w := &protocol.Writer{}
+	w.U32(c.user.ID)
+	userInfo(w, c.character)
+	c.send(157, w)
 	return nil
 }
 

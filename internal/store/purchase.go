@@ -144,11 +144,13 @@ func grantItemsForPurchase(tx *sql.Tx, id int, items []Reward, limit, defaultSlo
 				if _, e = tx.Exec("UPDATE UserInventory SET count=count+? WHERE userID=? AND slot=?", i.Count, id, existingSlot); e != nil {
 					return nil, e
 				}
-				touched = append(touched, Item{
-					Slot:  existingSlot,
-					ID:    i.ID,
-					Count: existingCount + i.Count,
-				})
+				// The 154 record carries every field of the row, so report the
+				// persisted row rather than a partially filled copy.
+				row, err := readInventorySlot(tx, id, existingSlot)
+				if err != nil {
+					return nil, err
+				}
+				touched = append(touched, row)
 				continue
 			}
 			if !errors.Is(err, sql.ErrNoRows) {
@@ -177,14 +179,11 @@ func grantItemsForPurchase(tx *sql.Tx, id int, items []Reward, limit, defaultSlo
 				if _, e = tx.Exec("UPDATE UserInventory SET expiryDate=? WHERE userID=? AND slot=?", expiry, id, extendSlot); e != nil {
 					return nil, e
 				}
-				touched = append(touched, Item{
-					Slot:   extendSlot,
-					ID:     i.ID,
-					Count:  1,
-					Obtain: extendObtain,
-					Expiry: expiry,
-					InUse:  extendInUse,
-				})
+				row, err := readInventorySlot(tx, id, extendSlot)
+				if err != nil {
+					return nil, err
+				}
+				touched = append(touched, row)
 				continue
 			}
 			if !errors.Is(err, sql.ErrNoRows) {
@@ -215,15 +214,11 @@ func grantItemsForPurchase(tx *sql.Tx, id int, items []Reward, limit, defaultSlo
 		if e != nil {
 			return nil, e
 		}
-		touched = append(touched, Item{
-			Slot:   slot,
-			ID:     i.ID,
-			Count:  i.Count,
-			Status: status,
-			InUse:  inUse,
-			Obtain: now,
-			Expiry: expiry,
-		})
+		row, err := readInventorySlot(tx, id, slot)
+		if err != nil {
+			return nil, err
+		}
+		touched = append(touched, row)
 		slot++
 		count++
 	}

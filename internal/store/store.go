@@ -309,6 +309,26 @@ func (s *Store) Inventory(id int) ([]Item, error) {
 
 type inventoryQuerier interface {
 	Query(string, ...any) (*sql.Rows, error)
+	QueryRow(string, ...any) *sql.Row
+}
+
+// readInventorySlot reads back one stored row exactly as persisted. Unlike
+// readInventory it applies no live filter: callers that just changed a row need
+// the whole row, because the 154 patch carries every field of the record it
+// names, not only the columns the write touched.
+func readInventorySlot(q inventoryQuerier, id, slot int) (Item, error) {
+	var i Item
+	var paints string
+	row := q.QueryRow("SELECT slot,itemID,count,status,inUse,obtainDate,expiryDate,enhancementLevel,enhancementExp,enhanceValue,paintID,partSlot1,partSlot2,lockStatus,paintIDList FROM UserInventory WHERE userID=? AND slot=?", id, slot)
+	if e := row.Scan(&i.Slot, &i.ID, &i.Count, &i.Status, &i.InUse, &i.Obtain, &i.Expiry, &i.Level, &i.Exp, &i.Value, &i.Paint, &i.Part1, &i.Part2, &i.Lock, &paints); e != nil {
+		return i, e
+	}
+	for _, v := range strings.Split(paints, ",") {
+		if n, _ := strconv.Atoi(v); n != 0 {
+			i.Paints = append(i.Paints, n)
+		}
+	}
+	return i, nil
 }
 
 // liveItemSQL is the shared definition of a usable inventory row: permanent,
